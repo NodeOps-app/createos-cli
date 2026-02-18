@@ -10,7 +10,7 @@ func NewSkillsCommand() *cli.Command {
 		Name:  "skills",
 		Usage: "Manage skills",
 		Subcommands: []*cli.Command{
-			newListCommand(),
+			newPurchasedCommand(),
 		},
 	}
 }

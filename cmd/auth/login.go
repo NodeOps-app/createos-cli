@@ -3,6 +3,8 @@ package auth
 import (
 	"fmt"
 
+	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 )
 
@@ -21,15 +23,25 @@ func NewLoginCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			token := c.String("token")
 
-			if token != "" {
-				fmt.Println("Logging in with token...")
-				// TODO: Implement token-based authentication
-			} else {
-				fmt.Println("Starting interactive login...")
-				// TODO: Implement interactive login
+			if token == "" {
+				var err error
+				token, err = pterm.DefaultInteractiveTextInput.
+					WithMask("*").
+					Show("Enter your API token")
+				if err != nil {
+					return fmt.Errorf("failed to read token: %w", err)
+				}
 			}
 
-			fmt.Println("Login successful!")
+			if token == "" {
+				return fmt.Errorf("token cannot be empty")
+			}
+
+			if err := config.SaveToken(token); err != nil {
+				return fmt.Errorf("failed to save token: %w", err)
+			}
+
+			pterm.Success.Println("Login successful! Token saved to ~/.createos/.token")
 			return nil
 		},
 	}

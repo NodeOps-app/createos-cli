@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 
+	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/urfave/cli/v2"
 )
 
@@ -12,10 +13,15 @@ func NewLogoutCommand() *cli.Command {
 		Name:  "logout",
 		Usage: "Sign out from CreateOS",
 		Action: func(c *cli.Context) error {
-			fmt.Println("Logging out from current session...")
-			// TODO: Implement logout logic
+			if !config.IsLoggedIn() {
+				return fmt.Errorf("you are not logged in")
+			}
 
-			fmt.Println("Logout successful!")
+			if err := config.DeleteToken(); err != nil {
+				return fmt.Errorf("failed to logout: %w", err)
+			}
+
+			fmt.Println("Logout successful! Token removed from ~/.createos/.token")
 			return nil
 		},
 	}
