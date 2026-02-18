@@ -10,8 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const asciiLogo = `
- ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
+const asciiLogo = ` ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
 ██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██╔════╝
 ██║     ██████╔╝█████╗  ███████║   ██║   █████╗  ██║   ██║███████╗
 ██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══╝  ██║   ██║╚════██║
@@ -20,15 +19,15 @@ const asciiLogo = `
 
 var (
 	dividerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	logoStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
-	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	normalStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	hintStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	labelStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	logoStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).PaddingLeft(2)
+	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).PaddingLeft(2)
+	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).PaddingLeft(2)
+	normalStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).PaddingLeft(2)
+	hintStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingLeft(2)
+	labelStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingLeft(2)
 	valueStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	successStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	successStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).PaddingLeft(2)
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).PaddingLeft(2)
 )
 
 type view int
@@ -207,8 +206,10 @@ func header(subtitle string) string {
 	for _, line := range strings.Split(asciiLogo, "\n") {
 		s += logoStyle.Render(line) + "\n"
 	}
+	s += hintStyle.Render("Your intelligent infrastructure CLI") + "\n"
 	s += dividerStyle.Render(strings.Repeat("─", 70)) + "\n"
 	if subtitle != "" {
+		// s += "\n"
 		s += titleStyle.Render(subtitle) + "\n"
 		s += dividerStyle.Render(strings.Repeat("─", 70)) + "\n"
 	}
@@ -219,12 +220,12 @@ func (m skillsListModel) listViewRender() string {
 	s := header("Your Purchased Skills")
 	for i, item := range m.items {
 		if m.cursor == i {
-			s += selectedStyle.Render("  ▸ "+item.Skill.Name) + "\n"
+			s += selectedStyle.Render("▸ "+item.Skill.Name) + "\n"
 		} else {
-			s += normalStyle.Render("    "+item.Skill.Name) + "\n"
+			s += normalStyle.Render(item.Skill.Name) + "\n"
 		}
 	}
-	s += "\n" + hintStyle.Render("  ↑/↓ navigate   enter select   q quit")
+	s += "\n" + hintStyle.Render("↑/↓ navigate   enter select   q quit")
 	return s
 }
 
@@ -241,23 +242,30 @@ func (m skillsListModel) detailViewRender() string {
 		categories = strings.Join(skill.Categories, ", ")
 	}
 
-	s := header(skill.Name)
-	s += labelStyle.Render("  Categories  ") + valueStyle.Render(categories) + "\n"
-	s += labelStyle.Render("  Created     ") + valueStyle.Render(skill.CreatedAt.Format("January 2, 2006")) + "\n\n"
-	s += labelStyle.Render("  Overview") + "\n"
-	s += normalStyle.Render("  "+wordWrap(overview, 60)) + "\n"
+	s := header("")
+	s += hintStyle.Render("Selected skill: ") + selectedStyle.Render(skill.Name) + "\n"
+	s += dividerStyle.Render(strings.Repeat("─", 70)) + "\n"
+	s += "\n"
+	s += labelStyle.Render("Categories  ") + valueStyle.Render(categories) + "\n"
+	s += labelStyle.Render("Created     ") + valueStyle.Render(skill.CreatedAt.Format("January 2, 2006")) + "\n"
+	s += "\n"
+	s += labelStyle.Render("Overview") + "\n"
+	for _, line := range strings.Split(wordWrap(overview, 60), "\n") {
+		s += normalStyle.Render(line) + "\n"
+	}
+	s += "\n"
 
 	if m.installing {
-		s += "\n" + hintStyle.Render("  Installing...")
+		s += hintStyle.Render("Installing...") + "\n"
 	} else if m.statusMsg != "" {
 		if m.statusErr {
-			s += "\n" + errorStyle.Render("  "+m.statusMsg)
+			s += errorStyle.Render(m.statusMsg) + "\n"
 		} else {
-			s += "\n" + successStyle.Render("  ✓ "+m.statusMsg)
+			s += successStyle.Render("✓ "+m.statusMsg) + "\n"
 		}
 	}
 
-	s += "\n" + hintStyle.Render("  i install   esc back   q quit")
+	s += "\n" + hintStyle.Render("i install   esc back   q quit")
 	return s
 }
 
@@ -273,18 +281,19 @@ func (m skillsListModel) installMenuRender() string {
 	}
 
 	s := header("Install " + skill.Name)
-	s += labelStyle.Render("  Where do you want to install?") + "\n\n"
+	s += "\n"
+	s += labelStyle.Render("Where do you want to install?") + "\n\n"
 
 	for i, sc := range scopes {
 		installed := installer.IsScopeInstalled(skill.UniqueName, sc.scope)
 		suffix := ""
 		if installed {
-			suffix = hintStyle.Render("  (installed)")
+			suffix = hintStyle.Render("(installed)")
 		}
 		if m.installCursor == i {
-			s += selectedStyle.Render("  ▸ "+sc.label) + suffix + "\n"
+			s += selectedStyle.Render("▸ "+sc.label) + suffix + "\n"
 		} else {
-			s += normalStyle.Render("    "+sc.label) + suffix + "\n"
+			s += normalStyle.Render(sc.label) + suffix + "\n"
 		}
 	}
 
@@ -293,7 +302,7 @@ func (m skillsListModel) installMenuRender() string {
 	if installer.IsScopeInstalled(skill.UniqueName, scope) {
 		action = "enter delete"
 	}
-	s += "\n" + hintStyle.Render(fmt.Sprintf("  ↑/↓ navigate   %s   esc back", action))
+	s += "\n" + hintStyle.Render(fmt.Sprintf("↑/↓ navigate   %s   esc back", action))
 	return s
 }
 
@@ -305,8 +314,9 @@ func (m skillsListModel) confirmUninstallRender() string {
 	}
 
 	s := header("Uninstall " + skill.Name)
-	s += normalStyle.Render("  Remove ") + errorStyle.Render(scopeLabel) + normalStyle.Render(" installation of ") + selectedStyle.Render(skill.Name) + normalStyle.Render("?") + "\n\n"
-	s += hintStyle.Render("  y confirm   n cancel")
+	s += "\n"
+	s += normalStyle.Render("Remove ") + errorStyle.Render(scopeLabel) + normalStyle.Render(" installation of ") + selectedStyle.Render(skill.Name) + normalStyle.Render("?") + "\n\n"
+	s += hintStyle.Render("y confirm   n cancel")
 	return s
 }
 

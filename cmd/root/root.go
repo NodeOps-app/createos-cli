@@ -51,10 +51,13 @@ func NewApp() *cli.App {
 			intro.Show()
 
 			fmt.Println("Available Commands:")
-			fmt.Println("  login          Authenticate with CreateOS")
-			fmt.Println("  logout         Sign out from CreateOS")
-			fmt.Println("  whoami         Show the currently authenticated user")
-			fmt.Println("  skills purchased    List all purchased skills")
+			if config.IsLoggedIn() {
+				fmt.Println("  logout         Sign out from CreateOS")
+				fmt.Println("  whoami         Show the currently authenticated user")
+				fmt.Println("  skills         Manage skills")
+			} else {
+				fmt.Println("  login          Authenticate with CreateOS")
+			}
 			fmt.Println()
 			fmt.Println("Run 'createos <command> --help' for more information on a command.")
 
