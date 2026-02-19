@@ -4,7 +4,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const DefaultBaseURL = "https://api.createos.io"
+const DefaultBaseURL = "https://api-createos.nodeops.network"
 
 type ApiClient struct {
 	Client *resty.Client
