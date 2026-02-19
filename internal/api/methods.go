@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type Skill struct {
 	UserId     string    `json:"userId"`
 	Name       string    `json:"name"`
 	UniqueName string    `json:"uniqueName"`
+	UseCases   string    `json:"useCases"`
 	Overview   string    `json:"overview"`
 	Status     string    `json:"status"`
 	Categories []string  `json:"categories"`
@@ -77,4 +79,58 @@ func (c *ApiClient) GetSkillDownloadUrl(purchasedId string) (string, error) {
 	}
 
 	return result.Data.DownloadUrl, nil
+}
+
+type PaginatedResponse[T any] struct {
+	Data struct {
+		Skills []T `json:"data"`
+	} `json:"data"`
+	Pagination Pagination `json:"pagination"`
+}
+
+type Pagination struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+}
+
+func (c *ApiClient) ListAvailableSkillsForPurchase(searchText string, offset int, limit int) ([]Skill, Pagination, error) {
+	queryParams := map[string]string{
+		"limit":  strconv.Itoa(limit),
+		"offset": strconv.Itoa(offset),
+	}
+	if searchText != "" {
+		queryParams["name"] = searchText
+	}
+	var result PaginatedResponse[Skill]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetQueryParams(queryParams).
+		Get("/v1/skills/available")
+	if err != nil {
+		return nil, Pagination{}, err
+	}
+	if resp.IsError() {
+		return nil, Pagination{}, fmt.Errorf("API error %d: %s", resp.StatusCode(), resp.String())
+	}
+	return result.Data.Skills, result.Pagination, nil
+}
+
+type PurchaseSkillResponse struct {
+	Id string `json:"id"`
+}
+
+func (c *ApiClient) PurchaseSkill(skillId string) (string, error) {
+	var result Response[PurchaseSkillResponse]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Post("/v1/skills/" + skillId + "/purchase")
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("API error %d: %s", resp.StatusCode(), resp.String())
+	}
+	return result.Data.Id, nil
 }

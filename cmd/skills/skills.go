@@ -11,6 +11,7 @@ func NewSkillsCommand() *cli.Command {
 		Usage: "Manage skills",
 		Subcommands: []*cli.Command{
 			newPurchasedCommand(),
+			newCatalog(),
 		},
 	}
 }
