@@ -17,7 +17,7 @@ func NewWhoamiCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
 			if !ok {
-				return fmt.Errorf("not logged in, run 'createos login' first")
+				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
 			u, err := client.GetUser()
@@ -43,15 +43,12 @@ func NewWhoamiCommand() *cli.Command {
 			pterm.Printfln("  %s  %s", pterm.Gray("ID           "), u.ID)
 			pterm.Printfln("  %s  %s", pterm.Gray("Member since "), memberSince)
 			fmt.Println()
+			pterm.Println(pterm.Gray("  Tip: To see your projects, run:"))
+			pterm.Println(pterm.Gray("    createos projects list"))
+			fmt.Println()
 
 			return nil
 		},
 	}
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return "-"
-	}
-	return *s
-}

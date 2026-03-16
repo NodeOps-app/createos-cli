@@ -15,7 +15,7 @@ func newCatalog() *cli.Command {
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
 			if !ok {
-				return fmt.Errorf("not logged in, run 'createos login' first")
+				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
 			const pageSize = 20

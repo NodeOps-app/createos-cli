@@ -4,10 +4,13 @@ import (
 	"fmt"
 
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
+	"github.com/NodeOps-app/createos-cli/cmd/projects"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
+	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/intro"
+	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 	"github.com/urfave/cli/v2"
 )
 
@@ -16,7 +19,7 @@ func NewApp() *cli.App {
 	app := &cli.App{
 		Name:    "createos",
 		Usage:   "CreateOS CLI - Manage your infrastructure",
-		Version: "1.0.0",
+		Version: version.Version,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "debug",
@@ -53,11 +56,13 @@ func NewApp() *cli.App {
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
 				fmt.Println("  logout         Sign out from CreateOS")
-				fmt.Println("  whoami         Show the currently authenticated user")
+				fmt.Println("  projects       Manage projects")
 				fmt.Println("  skills         Manage skills")
+				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
+			fmt.Println("  version        Print the current version")
 			fmt.Println()
 			fmt.Println("Run 'createos <command> --help' for more information on a command.")
 
@@ -68,6 +73,8 @@ func NewApp() *cli.App {
 			auth.NewLogoutCommand(),
 			auth.NewWhoamiCommand(),
 			skills.NewSkillsCommand(),
+			projects.NewProjectsCommand(),
+			versioncmd.NewVersionCommand(),
 		},
 	}
 

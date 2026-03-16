@@ -2,8 +2,8 @@ package intro
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 	"github.com/pterm/pterm"
 )
 
@@ -19,15 +19,8 @@ func Show() {
 	style := pterm.NewStyle(pterm.FgCyan)
 	style.Println(asciiLogo)
 
-	typewriterPrint("  Your intelligent infrastructure CLI", 30*time.Millisecond)
+	style2 := pterm.NewStyle(pterm.FgGray)
+	style2.Println("  Your intelligent infrastructure CLI (version: " + version.Version + ")")
 	fmt.Println()
 	fmt.Println()
-}
-
-func typewriterPrint(text string, delay time.Duration) {
-	style := pterm.NewStyle(pterm.FgGray)
-	for _, ch := range text {
-		style.Print(string(ch))
-		time.Sleep(delay)
-	}
 }

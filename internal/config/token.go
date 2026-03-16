@@ -59,7 +59,7 @@ func LoadToken() (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", errors.New("not logged in, run 'createos login' first")
+			return "", errors.New("you're not signed in — run 'createos login' to get started")
 		}
 		return "", err
 	}

@@ -15,7 +15,7 @@ func newPurchasedCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
 			if !ok {
-				return fmt.Errorf("not logged in, run 'createos login' first")
+				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
 			items, err := client.ListMyPurchasedSkills()
@@ -24,7 +24,7 @@ func newPurchasedCommand() *cli.Command {
 			}
 
 			if len(items) == 0 {
-				fmt.Println("No purchased skills found.")
+				fmt.Println("You haven't purchased any skills yet. Browse the catalog with 'createos skills catalog'.")
 				return nil
 			}
 
