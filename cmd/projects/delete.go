@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newDeleteCommand() *cli.Command {
@@ -18,6 +19,12 @@ func newDeleteCommand() *cli.Command {
 		Description: "Permanently deletes a project. This action cannot be undone.\n\n" +
 			"   To find your project ID, run:\n" +
 			"     createos projects list",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "Skip confirmation prompt (required in non-interactive mode)",
+			},
+		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() == 0 {
 				return fmt.Errorf("please provide a project ID\n\n  To see your projects and their IDs, run:\n    createos projects list")
@@ -30,17 +37,22 @@ func newDeleteCommand() *cli.Command {
 
 			id := c.Args().First()
 
-			confirm, err := pterm.DefaultInteractiveConfirm.
-				WithDefaultText(fmt.Sprintf("Are you sure you want to permanently delete project %q? This cannot be undone", id)).
-				WithDefaultValue(false).
-				Show()
-			if err != nil {
-				return fmt.Errorf("could not read confirmation: %w", err)
+			if !terminal.IsInteractive() && !c.Bool("force") {
+				return fmt.Errorf("non-interactive mode: use --force flag to confirm deletion\n\n  Example:\n    createos projects delete %s --force", id)
 			}
 
-			if !confirm {
-				fmt.Println("Cancelled. Your project was not deleted.")
-				return nil
+			if terminal.IsInteractive() && !c.Bool("force") {
+				confirm, err := pterm.DefaultInteractiveConfirm.
+					WithDefaultText(fmt.Sprintf("Are you sure you want to permanently delete project %q? This cannot be undone", id)).
+					WithDefaultValue(false).
+					Show()
+				if err != nil {
+					return fmt.Errorf("could not read confirmation: %w", err)
+				}
+				if !confirm {
+					fmt.Println("Cancelled. Your project was not deleted.")
+					return nil
+				}
 			}
 
 			if err := client.DeleteProject(id); err != nil {
