@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
+	"github.com/NodeOps-app/createos-cli/cmd/completion"
 	"github.com/NodeOps-app/createos-cli/cmd/deployments"
 	"github.com/NodeOps-app/createos-cli/cmd/domains"
 	"github.com/NodeOps-app/createos-cli/cmd/environments"
@@ -27,9 +28,10 @@ import (
 // NewApp creates and configures the root CLI application.
 func NewApp() *cli.App {
 	app := &cli.App{
-		Name:    "createos",
-		Usage:   "CreateOS CLI - Manage your infrastructure",
-		Version: version.Version,
+		Name:                 "createos",
+		Usage:                "CreateOS CLI - Manage your infrastructure",
+		Version:              version.Version,
+		EnableBashCompletion: true,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "debug",
@@ -46,7 +48,7 @@ func NewApp() *cli.App {
 		},
 		Before: func(c *cli.Context) error {
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" {
 				return nil
 			}
 
@@ -115,6 +117,7 @@ func NewApp() *cli.App {
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
+			fmt.Println("  completion      Generate shell completion script")
 			fmt.Println("  version        Print the current version")
 			fmt.Println()
 			fmt.Println("Run 'createos <command> --help' for more information on a command.")
@@ -124,6 +127,7 @@ func NewApp() *cli.App {
 		Commands: []*cli.Command{
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
+			completion.NewCompletionCommand(),
 			deployments.NewDeploymentsCommand(),
 			domains.NewDomainsCommand(),
 			environments.NewEnvironmentsCommand(),

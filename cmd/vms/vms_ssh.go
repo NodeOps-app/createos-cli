@@ -2,6 +2,9 @@ package vms
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
@@ -43,20 +47,65 @@ func findPublicKeys() map[string]string {
 	return keys
 }
 
-// selectPublicKey prompts the user to pick a local SSH public key, or skip.
-// Returns the selected key content, or "" if skipped.
-func selectPublicKey() (string, error) {
-	keys := findPublicKeys()
-	if len(keys) == 0 {
-		return "", nil
+// generateTempSSHKeypair creates a temporary ed25519 keypair, writes the private key
+// to a temp file, and returns the public key string, the private key path, and a
+// cleanup func that removes the temp file.
+func generateTempSSHKeypair() (publicKey string, privateKeyPath string, cleanup func(), err error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("could not generate keypair: %w", err)
 	}
 
-	const skipOption = "None (skip)"
-	options := make([]string, 0, len(keys)+1)
+	// Marshal public key to authorized_keys format.
+	sshPub, err := gossh.NewPublicKey(pub)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("could not encode public key: %w", err)
+	}
+	pubKeyStr := strings.TrimSpace(string(gossh.MarshalAuthorizedKey(sshPub)))
+
+	// Marshal private key to OpenSSH PEM format.
+	privPEM, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("could not encode private key: %w", err)
+	}
+	privBytes := pem.EncodeToMemory(privPEM)
+
+	// Write private key to a temp file with restricted permissions.
+	f, err := os.CreateTemp("", "createos-vm-*.pem")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("could not create temp key file: %w", err)
+	}
+	if err := os.Chmod(f.Name(), 0600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", "", nil, fmt.Errorf("could not set key file permissions: %w", err)
+	}
+	if _, err := f.Write(privBytes); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", "", nil, fmt.Errorf("could not write private key: %w", err)
+	}
+	_ = f.Close()
+
+	cleanup = func() { _ = os.Remove(f.Name()) }
+	return pubKeyStr, f.Name(), cleanup, nil
+}
+
+const (
+	optionTempKey = "Generate a temporary key (auto-deleted on exit)"
+	optionSkip    = "None (skip)"
+)
+
+// selectPublicKey prompts the user to pick a local SSH public key, generate a temp
+// key, or skip. Returns the public key content and an optional private key path
+// (non-empty only for generated temp keys).
+func selectPublicKey() (publicKey string, privateKeyPath string, err error) {
+	keys := findPublicKeys()
+
+	options := make([]string, 0, len(keys)+2)
 	nameByOption := make(map[string]string, len(keys))
 
 	for name, content := range keys {
-		// Show filename + key comment (last field) for readability.
 		parts := strings.Fields(content)
 		label := name
 		if len(parts) >= 3 {
@@ -65,19 +114,28 @@ func selectPublicKey() (string, error) {
 		options = append(options, label)
 		nameByOption[label] = content
 	}
-	options = append(options, skipOption)
+	options = append(options, optionTempKey, optionSkip)
 
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).
 		WithDefaultText("Select an SSH public key to use for this session").
 		Show()
 	if err != nil {
-		return "", fmt.Errorf("could not read selection: %w", err)
+		return "", "", fmt.Errorf("could not read selection: %w", err)
 	}
-	if selected == skipOption {
-		return "", nil
+
+	switch selected {
+	case optionSkip:
+		return "", "", nil
+	case optionTempKey:
+		pub, privPath, _, genErr := generateTempSSHKeypair()
+		if genErr != nil {
+			return "", "", genErr
+		}
+		return pub, privPath, nil
+	default:
+		return nameByOption[selected], "", nil
 	}
-	return nameByOption[selected], nil
 }
 
 func newVMSSHCommand() *cli.Command {
@@ -122,11 +180,16 @@ func newVMSSHCommand() *cli.Command {
 				return fmt.Errorf("VM does not have an IP address yet — try again in a moment\n\n  Check status with: createos vms get %s", id)
 			}
 
-			// Ask user to pick a local SSH public key for this session.
-			localKey, err := selectPublicKey()
+			localKey, privateKeyPath, err := selectPublicKey()
 			if err != nil {
 				return err
 			}
+
+			// Clean up temp private key file on exit if one was generated.
+			if privateKeyPath != "" {
+				defer os.Remove(privateKeyPath) //nolint:errcheck
+			}
+
 			originalKeys := vm.Inputs.SSHKeys
 			if originalKeys == nil {
 				originalKeys = []string{}
@@ -137,7 +200,6 @@ func newVMSSHCommand() *cli.Command {
 			}
 
 			if localKey != "" {
-				// Check if key is already present.
 				alreadyPresent := false
 				for _, k := range originalKeys {
 					if strings.TrimSpace(k) == localKey {
@@ -149,10 +211,9 @@ func newVMSSHCommand() *cli.Command {
 				if !alreadyPresent {
 					updatedKeys := append(originalKeys, localKey) //nolint:gocritic
 					if err := client.UpdateVMDeployment(id, updatedKeys, firewallRules); err != nil {
-						pterm.Warning.Println("Could not add your SSH key to the VM — you may need to add it manually.")
+						pterm.Warning.Printf("Could not add your SSH key to the VM: %v\n", err)
 					} else {
 						pterm.Info.Println("Your SSH public key has been added to the VM.")
-						// Restore original keys on exit.
 						defer func() {
 							if err := client.UpdateVMDeployment(id, originalKeys, firewallRules); err != nil {
 								pterm.Warning.Printf("Could not remove your SSH key from VM %q: %v\n", id, err)
@@ -165,7 +226,13 @@ func newVMSSHCommand() *cli.Command {
 			}
 
 			target := user + "@" + vm.Extra.IPAddress
-			cmd := exec.CommandContext(context.Background(), "ssh", "-o", "StrictHostKeyChecking=accept-new", target) //nolint:gosec // target is user@<api-provided-ip>, intentional subprocess
+			sshArgs := []string{"-o", "StrictHostKeyChecking=accept-new"}
+			if privateKeyPath != "" {
+				sshArgs = append(sshArgs, "-i", privateKeyPath)
+			}
+			sshArgs = append(sshArgs, target)
+
+			cmd := exec.CommandContext(context.Background(), "ssh", sshArgs...) //nolint:gosec
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
