@@ -1,0 +1,69 @@
+package vms
+
+import (
+	"fmt"
+
+	"github.com/pterm/pterm"
+	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
+)
+
+func newVMTerminateCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "terminate",
+		Usage:     "Permanently destroy a VM terminal instance",
+		ArgsUsage: "<vm-id>",
+		Description: "Permanently destroys a VM and all its data. This action cannot be undone.\n\n" +
+			"   To find your VM ID, run:\n" +
+			"     createos vms list",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "Skip confirmation prompt (required in non-interactive mode)",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			if c.NArg() == 0 {
+				return fmt.Errorf("please provide a VM ID\n\n  To see your VMs and their IDs, run:\n    createos vms list")
+			}
+
+			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
+			if !ok {
+				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
+			}
+
+			id := c.Args().First()
+
+			if !terminal.IsInteractive() && !c.Bool("force") {
+				return fmt.Errorf("non-interactive mode: use --force flag to confirm termination\n\n  Example:\n    createos vms terminate %s --force", id)
+			}
+
+			if terminal.IsInteractive() && !c.Bool("force") {
+				pterm.Warning.Println("This will permanently destroy the VM and all its data.")
+				confirm, err := pterm.DefaultInteractiveConfirm.
+					WithDefaultText(fmt.Sprintf("Are you sure you want to permanently destroy VM %q? This cannot be undone", id)).
+					WithDefaultValue(false).
+					Show()
+				if err != nil {
+					return fmt.Errorf("could not read confirmation: %w", err)
+				}
+				if !confirm {
+					fmt.Println("Cancelled. Your VM was not terminated.")
+					return nil
+				}
+			}
+
+			if err := client.TerminateVMDeployment(id); err != nil {
+				return err
+			}
+
+			pterm.Success.Printf("VM %q has been terminated.\n", id)
+			fmt.Println()
+			pterm.Println(pterm.Gray("  Tip: To see your remaining VMs, run:"))
+			pterm.Println(pterm.Gray("    createos vms list"))
+			return nil
+		},
+	}
+}

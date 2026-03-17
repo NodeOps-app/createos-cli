@@ -16,6 +16,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/users"
 	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
+	"github.com/NodeOps-app/createos-cli/cmd/vms"
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/intro"
@@ -109,6 +110,7 @@ func NewApp() *cli.App {
 				fmt.Println("  projects       Manage projects")
 				fmt.Println("  skills         Manage skills")
 				fmt.Println("  users          Manage your user account")
+				fmt.Println("  vms            Manage VM terminal instances")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
@@ -129,6 +131,7 @@ func NewApp() *cli.App {
 			projects.NewProjectsCommand(),
 			skills.NewSkillsCommand(),
 			users.NewUsersCommand(),
+			vms.NewVMsCommand(),
 			auth.NewWhoamiCommand(),
 			versioncmd.NewVersionCommand(),
 		},
