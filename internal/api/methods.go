@@ -169,13 +169,18 @@ func (c *ApiClient) ListAvailableSkillsForPurchase(searchText string, offset int
 }
 
 // Deployment represents a project deployment
+type DeploymentExtra struct {
+	Endpoint string `json:"endpoint"`
+}
+
 type Deployment struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"projectId"`
-	Status        string    `json:"status"`
-	VersionNumber int       `json:"versionNumber"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID            string          `json:"id"`
+	ProjectID     string          `json:"projectId"`
+	Status        string          `json:"status"`
+	VersionNumber int             `json:"versionNumber"`
+	Extra         DeploymentExtra `json:"extra"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
 }
 
 func (c *ApiClient) ListDeployments(projectID string) ([]Deployment, error) {
@@ -348,19 +353,24 @@ func (c *ApiClient) PurchaseSkill(skillId string) (string, error) {
 }
 
 // Environment represents a project environment
+type EnvironmentExtra struct {
+	Endpoint      string   `json:"endpoint"`
+	CustomDomains []string `json:"customDomains"`
+}
+
 type Environment struct {
-	ID                   string         `json:"id"`
-	DisplayName          string         `json:"displayName"`
-	UniqueName           string         `json:"uniqueName"`
-	Description          *string        `json:"description"`
-	ProjectID            string         `json:"projectId"`
-	Branch               *string        `json:"branch"`
-	ProjectDeploymentID  *string        `json:"projectDeploymentId"`
-	IsAutoPromoteEnabled bool           `json:"isAutoPromoteEnabled"`
-	Status               string         `json:"status"`
-	CreatedAt            time.Time      `json:"createdAt"`
-	UpdatedAt            time.Time      `json:"updatedAt"`
-	Extra                map[string]any `json:"extra"`
+	ID                   string           `json:"id"`
+	DisplayName          string           `json:"displayName"`
+	UniqueName           string           `json:"uniqueName"`
+	Description          *string          `json:"description"`
+	ProjectID            string           `json:"projectId"`
+	Branch               *string          `json:"branch"`
+	ProjectDeploymentID  *string          `json:"projectDeploymentId"`
+	IsAutoPromoteEnabled bool             `json:"isAutoPromoteEnabled"`
+	Status               string           `json:"status"`
+	CreatedAt            time.Time        `json:"createdAt"`
+	UpdatedAt            time.Time        `json:"updatedAt"`
+	Extra                EnvironmentExtra `json:"extra"`
 }
 
 func (c *ApiClient) ListEnvironments(projectID string) ([]Environment, error) {

@@ -2,6 +2,7 @@ package projects
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/pterm/pterm"
@@ -35,7 +36,7 @@ func newEnvironmentsListCommand() *cli.Command {
 			}
 
 			tableData := pterm.TableData{
-				{"ID", "Name", "Unique Name", "Branch", "Status", "Created At"},
+				{"ID", "Name", "Branch", "Status", "URL", "Domains", "Created At"},
 			}
 			for _, env := range environments {
 				branch := "-"
@@ -43,12 +44,19 @@ func newEnvironmentsListCommand() *cli.Command {
 					branch = *env.Branch
 				}
 
+				url := env.Extra.Endpoint
+				domains := "-"
+				if len(env.Extra.CustomDomains) > 0 {
+					domains = strings.Join(env.Extra.CustomDomains, ", ")
+				}
+
 				tableData = append(tableData, []string{
 					env.ID,
 					env.DisplayName,
-					env.UniqueName,
 					branch,
 					env.Status,
+					url,
+					domains,
 					env.CreatedAt.Format("2006-01-02 15:04:05"),
 				})
 			}
