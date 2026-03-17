@@ -7,7 +7,7 @@ import (
 )
 
 // APIError is a structured error returned by the CreateOS API.
-type APIError struct {
+type APIError struct { //nolint:revive
 	StatusCode int
 	Message    string
 }
@@ -30,7 +30,7 @@ func (e *APIError) Hint() string {
 	}
 }
 
-// parseAPIError extracts a human-readable message from an API error response body.
+// ParseAPIError extracts a human-readable message from an API error response body.
 func ParseAPIError(statusCode int, body []byte) *APIError {
 	var envelope struct {
 		Data json.RawMessage `json:"data"`
@@ -61,6 +61,7 @@ type User struct {
 	UpdatedAt        string  `json:"updatedAt"`
 }
 
+// Response wraps a single-item API response envelope.
 type Response[T any] struct {
 	Status string `json:"status"`
 	Data   T      `json:"data"`

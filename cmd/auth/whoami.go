@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 // NewWhoamiCommand creates the whoami command
@@ -15,7 +16,7 @@ func NewWhoamiCommand() *cli.Command {
 		Name:  "whoami",
 		Usage: "Show the currently authenticated user",
 		Action: func(c *cli.Context) error {
-			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
+			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
@@ -51,4 +52,3 @@ func NewWhoamiCommand() *cli.Command {
 		},
 	}
 }
-

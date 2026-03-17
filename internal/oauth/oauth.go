@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -39,11 +40,16 @@ type PKCEPair struct {
 
 // FetchServerMetadata fetches OAuth server metadata from {baseURL}/.well-known/openid-configuration
 func FetchServerMetadata(baseURL string) (*ServerMetadata, error) {
-	resp, err := http.Get(strings.TrimRight(baseURL, "/") + "/.well-known/openid-configuration")
+	metaURL := strings.TrimRight(baseURL, "/") + "/.well-known/openid-configuration"
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, metaURL, nil) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("could not build metadata request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach authorization server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("authorization server returned status %d", resp.StatusCode)
 	}
@@ -97,11 +103,16 @@ func ExchangeCode(tokenEndpoint, clientID, code, redirectURI, verifier string) (
 	form.Set("client_id", clientID)
 	form.Set("code_verifier", verifier)
 
-	resp, err := http.PostForm(tokenEndpoint, form)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode())) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("could not build token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token exchange failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, string(b))
@@ -120,11 +131,16 @@ func RefreshTokens(tokenEndpoint, clientID, refreshToken string) (*TokenResponse
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", clientID)
 
-	resp, err := http.PostForm(tokenEndpoint, form)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode())) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("could not build refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token refresh failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("token refresh returned status %d: %s", resp.StatusCode, string(b))
@@ -147,15 +163,16 @@ func StartCallbackServer(port int) (code string, state string, err error) {
 
 	mux := http.NewServeMux()
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("localhost:%d", port),
-		Handler: mux,
+		Addr:              fmt.Sprintf("localhost:%d", port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		errParam := q.Get("error")
 		if errParam != "" {
-			fmt.Fprintf(w, "<html><body><h2>Login failed: %s</h2><p>You can close this tab.</p></body></html>", errParam)
+			fmt.Fprintf(w, "<html><body><h2>Login failed: %s</h2><p>You can close this tab.</p></body></html>", html.EscapeString(errParam)) //nolint:errcheck
 			codeCh <- struct {
 				code  string
 				state string
@@ -163,7 +180,7 @@ func StartCallbackServer(port int) (code string, state string, err error) {
 			}{"", "", fmt.Errorf("authorization error: %s", errParam)}
 			return
 		}
-		fmt.Fprint(w, "<html><body><h2>Login successful!</h2><p>You can close this tab and return to the terminal.</p></body></html>")
+		fmt.Fprint(w, "<html><body><h2>Login successful!</h2><p>You can close this tab and return to the terminal.</p></body></html>") //nolint:errcheck
 		codeCh <- struct {
 			code  string
 			state string
@@ -210,7 +227,7 @@ func OpenBrowser(rawURL string) error {
 
 // FindFreePort finds a free TCP port on localhost
 func FindFreePort() (int, error) {
-	ln, err := net.Listen("tcp", "localhost:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "localhost:0")
 	if err != nil {
 		return 0, fmt.Errorf("could not find a free port: %w", err)
 	}

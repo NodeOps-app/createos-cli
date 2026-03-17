@@ -3,9 +3,10 @@ package projects
 import (
 	"fmt"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 func newListCommand() *cli.Command {
@@ -13,7 +14,7 @@ func newListCommand() *cli.Command {
 		Name:  "list",
 		Usage: "List all projects",
 		Action: func(c *cli.Context) error {
-			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
+			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}

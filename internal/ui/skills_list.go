@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/installer"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/installer"
 )
 
 const asciiLogo = ` ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
@@ -51,7 +52,7 @@ type skillsListModel struct {
 	items         []api.PurchasedSkillItem
 	cursor        int
 	currentView   view
-	client        *api.ApiClient
+	client        *api.APIClient
 	installing    bool
 	statusMsg     string
 	statusErr     bool
@@ -59,7 +60,7 @@ type skillsListModel struct {
 	pendingScope  installer.InstallScope
 }
 
-func newSkillsListModel(items []api.PurchasedSkillItem, client *api.ApiClient) skillsListModel {
+func newSkillsListModel(items []api.PurchasedSkillItem, client *api.APIClient) skillsListModel {
 	return skillsListModel{items: items, currentView: listView, client: client}
 }
 
@@ -179,7 +180,7 @@ func (m skillsListModel) uninstallCmd(item api.PurchasedSkillItem, scope install
 
 func (m skillsListModel) installCmd(item api.PurchasedSkillItem, scope installer.InstallScope) tea.Cmd {
 	return func() tea.Msg {
-		url, err := m.client.GetSkillDownloadUrl(item.Id)
+		url, err := m.client.GetSkillDownloadURL(item.ID)
 		if err != nil {
 			return installResultMsg{err: err}
 		}
@@ -340,7 +341,7 @@ func wordWrap(text string, width int) string {
 }
 
 // RunSkillsList renders the interactive skills list
-func RunSkillsList(items []api.PurchasedSkillItem, client *api.ApiClient) error {
+func RunSkillsList(items []api.PurchasedSkillItem, client *api.APIClient) error {
 	p := tea.NewProgram(newSkillsListModel(items, client), tea.WithAltScreen())
 	_, err := p.Run()
 	return err

@@ -1,3 +1,4 @@
+// Package api provides the HTTP client and API methods.
 package api
 
 import (
@@ -8,14 +9,16 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// DefaultBaseURL is the default CreateOS API base URL.
 const DefaultBaseURL = "https://api-createos.nodeops.network"
 
-type ApiClient struct {
+// APIClient wraps a resty.Client configured for the CreateOS API.
+type APIClient struct { //nolint:revive
 	Client *resty.Client
 }
 
 // NewClient creates a resty client with the token, base URL and debug flag set
-func NewClient(token, apiURL string, debug bool) ApiClient {
+func NewClient(token, apiURL string, debug bool) APIClient {
 	if apiURL == "" {
 		apiURL = DefaultBaseURL
 	}
@@ -33,12 +36,12 @@ func NewClient(token, apiURL string, debug bool) ApiClient {
 		})
 	}
 
-	return ApiClient{Client: client}
+	return APIClient{Client: client}
 }
 
 // NewClientWithAccessToken creates a resty client authenticated with an OAuth access token.
 // Uses X-Access-Token header instead of x-api-key.
-func NewClientWithAccessToken(accessToken, apiURL string, debug bool) ApiClient {
+func NewClientWithAccessToken(accessToken, apiURL string, debug bool) APIClient {
 	if apiURL == "" {
 		apiURL = DefaultBaseURL
 	}
@@ -56,7 +59,7 @@ func NewClientWithAccessToken(accessToken, apiURL string, debug bool) ApiClient 
 		})
 	}
 
-	return ApiClient{Client: client}
+	return APIClient{Client: client}
 }
 
 // maskToken returns a redacted version like "skp_Ex6v••••••••3fae"

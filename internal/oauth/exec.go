@@ -1,7 +1,11 @@
+// Package oauth implements the OAuth 2.0 authorization code flow with PKCE.
 package oauth
 
-import "os/exec"
+import (
+	"context"
+	"os/exec"
+)
 
 func runCmd(name string, args ...string) error {
-	return exec.Command(name, args...).Start()
+	return exec.CommandContext(context.Background(), name, args...).Start() //nolint:gosec
 }

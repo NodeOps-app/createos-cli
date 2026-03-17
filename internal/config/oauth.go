@@ -1,3 +1,4 @@
+// Package config manages local configuration and credential storage.
 package config
 
 import (
@@ -46,7 +47,7 @@ func SaveOAuthSession(session OAuthSession) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(session)
+	data, err := json.Marshal(session) //nolint:gosec
 	if err != nil {
 		return err
 	}
@@ -59,7 +60,7 @@ func LoadOAuthSession() (*OAuthSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

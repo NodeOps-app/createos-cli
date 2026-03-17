@@ -3,9 +3,10 @@ package projects
 import (
 	"fmt"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 func newDeploymentWakeupCommand() *cli.Command {
@@ -21,7 +22,7 @@ func newDeploymentWakeupCommand() *cli.Command {
 				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos projects deployments wakeup <project-id> <deployment-id>")
 			}
 
-			client, ok := c.App.Metadata[api.ClientKey].(*api.ApiClient)
+			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}

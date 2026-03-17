@@ -1,8 +1,11 @@
+// Package root wires together the CLI application.
 package root
 
 import (
 	"fmt"
 	"time"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
@@ -15,7 +18,6 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/intro"
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
-	"github.com/urfave/cli/v2"
 )
 
 // NewApp creates and configures the root CLI application
@@ -91,7 +93,7 @@ func NewApp() *cli.App {
 			c.App.Metadata[api.ClientKey] = &client
 			return nil
 		},
-		Action: func(c *cli.Context) error {
+		Action: func(_ *cli.Context) error {
 			intro.Show()
 
 			fmt.Println("Available Commands:")

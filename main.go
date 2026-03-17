@@ -1,12 +1,14 @@
+// Package main is the entry point for the CreateOS CLI.
 package main
 
 import (
 	"errors"
 	"os"
 
+	"github.com/pterm/pterm"
+
 	"github.com/NodeOps-app/createos-cli/cmd/root"
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/pterm/pterm"
 )
 
 func main() {

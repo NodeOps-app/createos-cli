@@ -1,10 +1,12 @@
+// Package intro displays the CLI banner.
 package intro
 
 import (
 	"fmt"
 
-	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 	"github.com/pterm/pterm"
+
+	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 )
 
 const asciiLogo = ` ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗

@@ -1,0 +1,50 @@
+name: image-build-push
+
+on:
+  push:
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  image-build-push:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install asdf & tools
+        uses: asdf-vm/actions/install@v4
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.asdf/installs/golang
+            ~/.asdf/plugins/golang
+            ~/.asdf/installs/golang/*/packages/pkg/mod
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-${{ hashFiles('**/go.sum') }}
+
+      - name: Run golangci-lint
+        run: |
+          set -x
+          golangci-lint cache status
+          golangci-lint run --timeout=10m
+
+      - name: Test
+        run: |
+          set -x
+          go test -tags dev ./...
+
+      - name: Build
+        run: |
+          set -x
+          CGO_ENABLED=0	go build -trimpath -ldflags="-s -w -extldflags '-static'" -o nodeops main.go
+          ldd createos || true

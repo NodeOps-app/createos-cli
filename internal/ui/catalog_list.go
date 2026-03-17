@@ -1,3 +1,4 @@
+// Package ui provides interactive terminal UI components.
 package ui
 
 import (
@@ -5,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 type catalogView int
@@ -29,39 +31,39 @@ type catalogPageLoadedMsg struct {
 
 type catalogPurchaseResultMsg struct {
 	err         error
-	purchasedId string
+	purchasedID string
 }
 
 type catalogListModel struct {
 	skills                []api.Skill
 	cursor                int
 	currentView           catalogView
-	client                *api.ApiClient
-	pagination             api.Pagination
-	pageNumber             int
-	searchText             string
-	purchasing             bool
-	statusMsg              string
-	statusErr              bool
-	confirmPurchaseCursor  int
-	purchasedId            string
-	purchasedIdsBySkillId  map[string]string
-	wantOpenPurchasedList  bool
-	searching              bool // true while a search/page load is in flight
+	client                *api.APIClient
+	pagination            api.Pagination
+	pageNumber            int
+	searchText            string
+	purchasing            bool
+	statusMsg             string
+	statusErr             bool
+	confirmPurchaseCursor int
+	purchasedID           string
+	purchasedIDsBySkillID map[string]string
+	wantOpenPurchasedList bool
+	searching             bool // true while a search/page load is in flight
 }
 
-func newCatalogListModel(skills []api.Skill, pagination api.Pagination, pageNumber int, searchText string, purchasedIdsBySkillId map[string]string, client *api.ApiClient) catalogListModel {
-	if purchasedIdsBySkillId == nil {
-		purchasedIdsBySkillId = make(map[string]string)
+func newCatalogListModel(skills []api.Skill, pagination api.Pagination, pageNumber int, searchText string, purchasedIDsBySkillID map[string]string, client *api.APIClient) catalogListModel {
+	if purchasedIDsBySkillID == nil {
+		purchasedIDsBySkillID = make(map[string]string)
 	}
 	return catalogListModel{
 		skills:                skills,
 		pagination:            pagination,
 		pageNumber:            pageNumber,
-		searchText:             searchText,
-		client:                 client,
-		currentView:            catalogListView,
-		purchasedIdsBySkillId:  purchasedIdsBySkillId,
+		searchText:            searchText,
+		client:                client,
+		currentView:           catalogListView,
+		purchasedIDsBySkillID: purchasedIDsBySkillID,
 	}
 }
 
@@ -69,7 +71,7 @@ func (m catalogListModel) Init() tea.Cmd {
 	return nil
 }
 
-func loadCatalogPage(client *api.ApiClient, searchText string, pageNumber int) tea.Msg {
+func loadCatalogPage(client *api.APIClient, searchText string, pageNumber int) tea.Msg {
 	offset := pageNumber * catalogPageSize
 	skills, pagination, err := client.ListAvailableSkillsForPurchase(searchText, offset, catalogPageSize)
 	return catalogPageLoadedMsg{skills: skills, pagination: pagination, pageNumber: pageNumber, err: err}
@@ -89,7 +91,7 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pagination = msg.pagination
 		m.pageNumber = msg.pageNumber
 		m.cursor = 0
-		m.purchasedId = ""
+		m.purchasedID = ""
 		if len(m.skills) == 0 {
 			m.statusMsg = "No skills on this page."
 		}
@@ -127,8 +129,8 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.skills) > 0 {
 					m.currentView = catalogDetailView
 					m.statusMsg = ""
-					if id := m.purchasedIdsBySkillId[m.skills[m.cursor].Id]; id != "" {
-						m.purchasedId = id
+					if id := m.purchasedIDsBySkillID[m.skills[m.cursor].ID]; id != "" {
+						m.purchasedID = id
 					}
 				}
 			case "n":
@@ -179,9 +181,9 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc", "backspace":
 				m.currentView = catalogListView
 				m.statusMsg = ""
-				m.purchasedId = ""
+				m.purchasedID = ""
 			case "p":
-				if !m.purchasing && len(m.skills) > 0 && m.purchasedId == "" {
+				if !m.purchasing && len(m.skills) > 0 && m.purchasedID == "" {
 					m.confirmPurchaseCursor = 0
 					m.currentView = catalogConfirmPurchaseView
 				}
@@ -206,7 +208,7 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.purchasing = true
 					m.currentView = catalogDetailView
 					skill := m.skills[m.cursor]
-					return m, m.purchaseCmd(skill.Id)
+					return m, m.purchaseCmd(skill.ID)
 				}
 				if m.confirmPurchaseCursor == 1 {
 					m.currentView = catalogDetailView
@@ -225,13 +227,13 @@ func (m catalogListModel) hasPrevPage() bool {
 	return m.pageNumber > 0
 }
 
-func (m catalogListModel) purchaseCmd(skillId string) tea.Cmd {
+func (m catalogListModel) purchaseCmd(skillID string) tea.Cmd {
 	return func() tea.Msg {
-		purchasedId, err := m.client.PurchaseSkill(skillId)
+		purchasedID, err := m.client.PurchaseSkill(skillID)
 		if err != nil {
 			return catalogPurchaseResultMsg{err: err}
 		}
-		return catalogPurchaseResultMsg{purchasedId: purchasedId}
+		return catalogPurchaseResultMsg{purchasedID: purchasedID}
 	}
 }
 
@@ -349,7 +351,7 @@ func (m catalogListModel) catalogDetailRender() string {
 		}
 	}
 	var hint string
-	if m.purchasedId != "" {
+	if m.purchasedID != "" {
 		hint = "esc back   q quit"
 	} else {
 		hint = "p purchase   esc back   q quit"
@@ -389,8 +391,8 @@ func (m catalogListModel) catalogConfirmPurchaseRender() string {
 }
 
 // RunCatalogList runs the catalog TUI. On successful purchase, opens the purchased skills list.
-func RunCatalogList(skills []api.Skill, pagination api.Pagination, pageNumber int, searchText string, purchasedIdsBySkillId map[string]string, client *api.ApiClient) error {
-	p := tea.NewProgram(newCatalogListModel(skills, pagination, pageNumber, searchText, purchasedIdsBySkillId, client), tea.WithAltScreen())
+func RunCatalogList(skills []api.Skill, pagination api.Pagination, pageNumber int, searchText string, purchasedIDsBySkillID map[string]string, client *api.APIClient) error {
+	p := tea.NewProgram(newCatalogListModel(skills, pagination, pageNumber, searchText, purchasedIDsBySkillID, client), tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		return err

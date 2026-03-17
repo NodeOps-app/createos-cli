@@ -17,7 +17,8 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-func (c *ApiClient) ListProjects() ([]Project, error) {
+// ListProjects returns all projects for the authenticated user.
+func (c *APIClient) ListProjects() ([]Project, error) {
 	var result PaginatedResponse[Project]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -31,7 +32,8 @@ func (c *ApiClient) ListProjects() ([]Project, error) {
 	return result.Data.Items, nil
 }
 
-func (c *ApiClient) GetProject(id string) (*Project, error) {
+// GetProject returns a single project by ID.
+func (c *APIClient) GetProject(id string) (*Project, error) {
 	var result Response[Project]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -45,7 +47,8 @@ func (c *ApiClient) GetProject(id string) (*Project, error) {
 	return &result.Data, nil
 }
 
-func (c *ApiClient) DeleteProject(id string) error {
+// DeleteProject permanently deletes a project by ID.
+func (c *APIClient) DeleteProject(id string) error {
 	resp, err := c.Client.R().
 		Delete("/v1/projects/" + id)
 	if err != nil {
@@ -57,7 +60,8 @@ func (c *ApiClient) DeleteProject(id string) error {
 	return nil
 }
 
-func (c *ApiClient) GetUser() (*User, error) {
+// GetUser returns the currently authenticated user.
+func (c *APIClient) GetUser() (*User, error) {
 	var result Response[User]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -73,9 +77,10 @@ func (c *ApiClient) GetUser() (*User, error) {
 	return &result.Data, nil
 }
 
+// Skill represents a skill available in the catalog.
 type Skill struct {
-	Id         string    `json:"id"`
-	UserId     string    `json:"userId"`
+	ID         string    `json:"id"`
+	UserID     string    `json:"userId"`
 	Name       string    `json:"name"`
 	UniqueName string    `json:"uniqueName"`
 	UseCases   string    `json:"useCases"`
@@ -87,16 +92,18 @@ type Skill struct {
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
+// PurchasedSkillItem represents a skill that has been purchased by the user.
 type PurchasedSkillItem struct {
-	Id              string    `json:"id"`
-	SkillId         string    `json:"skillId"`
-	UserId          string    `json:"userId"`
+	ID              string    `json:"id"`
+	SkillID         string    `json:"skillId"`
+	UserID          string    `json:"userId"`
 	PurchasedAmount float64   `json:"purchasedAmount"`
 	CreatedAt       time.Time `json:"createdAt"`
 	Skill           Skill     `json:"skill,omitempty"`
 }
 
-func (c *ApiClient) ListMyPurchasedSkills() ([]PurchasedSkillItem, error) {
+// ListMyPurchasedSkills returns all skills purchased by the authenticated user.
+func (c *APIClient) ListMyPurchasedSkills() ([]PurchasedSkillItem, error) {
 	var result Response[[]PurchasedSkillItem]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -112,15 +119,17 @@ func (c *ApiClient) ListMyPurchasedSkills() ([]PurchasedSkillItem, error) {
 	return result.Data, nil
 }
 
-type GetDownloadUrl struct {
-	DownloadUrl string `json:"downloadUri"`
+// GetDownloadURL holds the download URI response for a purchased skill.
+type GetDownloadURL struct {
+	DownloadURL string `json:"downloadUri"`
 }
 
-func (c *ApiClient) GetSkillDownloadUrl(purchasedId string) (string, error) {
-	var result Response[GetDownloadUrl]
+// GetSkillDownloadURL returns the download URL for a purchased skill by its purchase ID.
+func (c *APIClient) GetSkillDownloadURL(purchasedID string) (string, error) {
+	var result Response[GetDownloadURL]
 	resp, err := c.Client.R().
 		SetResult(&result).
-		Get("/v1/skills/purchased/" + purchasedId + "/download")
+		Get("/v1/skills/purchased/" + purchasedID + "/download")
 	if err != nil {
 		return "", err
 	}
@@ -129,9 +138,10 @@ func (c *ApiClient) GetSkillDownloadUrl(purchasedId string) (string, error) {
 		return "", ParseAPIError(resp.StatusCode(), resp.Body())
 	}
 
-	return result.Data.DownloadUrl, nil
+	return result.Data.DownloadURL, nil
 }
 
+// PaginatedResponse wraps a paginated list API response envelope.
 type PaginatedResponse[T any] struct {
 	Data struct {
 		Items []T `json:"data"`
@@ -139,6 +149,7 @@ type PaginatedResponse[T any] struct {
 	Pagination Pagination `json:"pagination"`
 }
 
+// Pagination holds metadata about a paginated response.
 type Pagination struct {
 	Total  int `json:"total"`
 	Limit  int `json:"limit"`
@@ -146,7 +157,8 @@ type Pagination struct {
 	Count  int `json:"count"`
 }
 
-func (c *ApiClient) ListAvailableSkillsForPurchase(searchText string, offset int, limit int) ([]Skill, Pagination, error) {
+// ListAvailableSkillsForPurchase returns a paginated list of skills available for purchase.
+func (c *APIClient) ListAvailableSkillsForPurchase(searchText string, offset int, limit int) ([]Skill, Pagination, error) {
 	queryParams := map[string]string{
 		"limit":  strconv.Itoa(limit),
 		"offset": strconv.Itoa(offset),
@@ -168,11 +180,12 @@ func (c *ApiClient) ListAvailableSkillsForPurchase(searchText string, offset int
 	return result.Data.Items, result.Pagination, nil
 }
 
-// Deployment represents a project deployment
+// DeploymentExtra holds extra deployment metadata.
 type DeploymentExtra struct {
 	Endpoint string `json:"endpoint"`
 }
 
+// Deployment represents a project deployment.
 type Deployment struct {
 	ID            string          `json:"id"`
 	ProjectID     string          `json:"projectId"`
@@ -183,7 +196,8 @@ type Deployment struct {
 	UpdatedAt     time.Time       `json:"updatedAt"`
 }
 
-func (c *ApiClient) ListDeployments(projectID string) ([]Deployment, error) {
+// ListDeployments returns all deployments for a project.
+func (c *APIClient) ListDeployments(projectID string) ([]Deployment, error) {
 	var result PaginatedResponse[Deployment]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -197,7 +211,8 @@ func (c *ApiClient) ListDeployments(projectID string) ([]Deployment, error) {
 	return result.Data.Items, nil
 }
 
-func (c *ApiClient) GetDeploymentLogs(projectID, deploymentID string) (string, error) {
+// GetDeploymentLogs returns the runtime logs for a deployment.
+func (c *APIClient) GetDeploymentLogs(projectID, deploymentID string) (string, error) {
 	var result Response[string]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -211,6 +226,7 @@ func (c *ApiClient) GetDeploymentLogs(projectID, deploymentID string) (string, e
 	return result.Data, nil
 }
 
+// BuildLogEntry represents a single build log line.
 type BuildLogEntry struct {
 	Log        string `json:"log"`
 	Stage      string `json:"stage"`
@@ -218,7 +234,8 @@ type BuildLogEntry struct {
 	Timestamp  string `json:"ts"`
 }
 
-func (c *ApiClient) GetDeploymentBuildLogs(projectID, deploymentID string) ([]BuildLogEntry, error) {
+// GetDeploymentBuildLogs returns the build logs for a deployment.
+func (c *APIClient) GetDeploymentBuildLogs(projectID, deploymentID string) ([]BuildLogEntry, error) {
 	var result Response[[]BuildLogEntry]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -232,7 +249,8 @@ func (c *ApiClient) GetDeploymentBuildLogs(projectID, deploymentID string) ([]Bu
 	return result.Data, nil
 }
 
-func (c *ApiClient) RetriggerDeployment(projectID, deploymentID string) error {
+// RetriggerDeployment triggers a new deployment run.
+func (c *APIClient) RetriggerDeployment(projectID, deploymentID string) error {
 	resp, err := c.Client.R().
 		Post("/v1/projects/" + projectID + "/deployments/" + deploymentID + "/retrigger")
 	if err != nil {
@@ -244,7 +262,8 @@ func (c *ApiClient) RetriggerDeployment(projectID, deploymentID string) error {
 	return nil
 }
 
-func (c *ApiClient) CancelDeployment(projectID, deploymentID string) error {
+// CancelDeployment cancels a running deployment.
+func (c *APIClient) CancelDeployment(projectID, deploymentID string) error {
 	resp, err := c.Client.R().
 		Post("/v1/projects/" + projectID + "/deployments/" + deploymentID + "/cancel")
 	if err != nil {
@@ -256,7 +275,8 @@ func (c *ApiClient) CancelDeployment(projectID, deploymentID string) error {
 	return nil
 }
 
-func (c *ApiClient) WakeupDeployment(projectID, deploymentID string) error {
+// WakeupDeployment wakes up a sleeping deployment.
+func (c *APIClient) WakeupDeployment(projectID, deploymentID string) error {
 	resp, err := c.Client.R().
 		Post("/v1/projects/" + projectID + "/deployments/" + deploymentID + "/wakeup")
 	if err != nil {
@@ -279,7 +299,8 @@ type Domain struct {
 	UpdatedAt string  `json:"updatedAt"`
 }
 
-func (c *ApiClient) ListDomains(projectID string) ([]Domain, error) {
+// ListDomains returns all custom domains for a project.
+func (c *APIClient) ListDomains(projectID string) ([]Domain, error) {
 	var result Response[[]Domain]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -293,7 +314,8 @@ func (c *ApiClient) ListDomains(projectID string) ([]Domain, error) {
 	return result.Data, nil
 }
 
-func (c *ApiClient) AddDomain(projectID, name string) (string, error) {
+// AddDomain adds a custom domain to a project and returns the new domain ID.
+func (c *APIClient) AddDomain(projectID, name string) (string, error) {
 	var result Response[struct {
 		ID string `json:"id"`
 	}]
@@ -310,7 +332,8 @@ func (c *ApiClient) AddDomain(projectID, name string) (string, error) {
 	return result.Data.ID, nil
 }
 
-func (c *ApiClient) DeleteDomain(projectID, domainID string) error {
+// DeleteDomain removes a custom domain from a project.
+func (c *APIClient) DeleteDomain(projectID, domainID string) error {
 	resp, err := c.Client.R().
 		Delete("/v1/projects/" + projectID + "/domains/" + domainID)
 	if err != nil {
@@ -322,7 +345,8 @@ func (c *ApiClient) DeleteDomain(projectID, domainID string) error {
 	return nil
 }
 
-func (c *ApiClient) RefreshDomain(projectID, domainID string) error {
+// RefreshDomain refreshes the DNS status for a custom domain.
+func (c *APIClient) RefreshDomain(projectID, domainID string) error {
 	resp, err := c.Client.R().
 		Post("/v1/projects/" + projectID + "/domains/" + domainID + "/refresh")
 	if err != nil {
@@ -334,30 +358,33 @@ func (c *ApiClient) RefreshDomain(projectID, domainID string) error {
 	return nil
 }
 
+// PurchaseSkillResponse holds the response after purchasing a skill.
 type PurchaseSkillResponse struct {
-	Id string `json:"id"`
+	ID string `json:"id"`
 }
 
-func (c *ApiClient) PurchaseSkill(skillId string) (string, error) {
+// PurchaseSkill purchases a skill by skill ID and returns the purchase ID.
+func (c *APIClient) PurchaseSkill(skillID string) (string, error) {
 	var result Response[PurchaseSkillResponse]
 	resp, err := c.Client.R().
 		SetResult(&result).
-		Post("/v1/skills/" + skillId + "/purchase")
+		Post("/v1/skills/" + skillID + "/purchase")
 	if err != nil {
 		return "", err
 	}
 	if resp.IsError() {
 		return "", ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return result.Data.Id, nil
+	return result.Data.ID, nil
 }
 
-// Environment represents a project environment
+// EnvironmentExtra holds extra environment metadata.
 type EnvironmentExtra struct {
 	Endpoint      string   `json:"endpoint"`
 	CustomDomains []string `json:"customDomains"`
 }
 
+// Environment represents a project environment.
 type Environment struct {
 	ID                   string           `json:"id"`
 	DisplayName          string           `json:"displayName"`
@@ -373,7 +400,8 @@ type Environment struct {
 	Extra                EnvironmentExtra `json:"extra"`
 }
 
-func (c *ApiClient) ListEnvironments(projectID string) ([]Environment, error) {
+// ListEnvironments returns all environments for a project.
+func (c *APIClient) ListEnvironments(projectID string) ([]Environment, error) {
 	var result Response[[]Environment]
 	resp, err := c.Client.R().
 		SetResult(&result).
@@ -387,7 +415,8 @@ func (c *ApiClient) ListEnvironments(projectID string) ([]Environment, error) {
 	return result.Data, nil
 }
 
-func (c *ApiClient) DeleteEnvironment(projectID, environmentID string) error {
+// DeleteEnvironment deletes an environment from a project.
+func (c *APIClient) DeleteEnvironment(projectID, environmentID string) error {
 	resp, err := c.Client.R().
 		Delete("/v1/projects/" + projectID + "/environments/" + environmentID)
 	if err != nil {

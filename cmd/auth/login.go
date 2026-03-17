@@ -1,13 +1,15 @@
+// Package auth provides authentication commands.
 package auth
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/NodeOps-app/createos-cli/internal/config"
-	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/config"
+	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 )
 
 const (

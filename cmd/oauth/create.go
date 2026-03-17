@@ -3,9 +3,10 @@ package oauth
 import (
 	"fmt"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 func newCreateCommand() *cli.Command {

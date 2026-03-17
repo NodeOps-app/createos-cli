@@ -3,9 +3,10 @@ package auth
 import (
 	"fmt"
 
-	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/config"
 )
 
 // NewLogoutCommand creates the logout command
@@ -13,7 +14,7 @@ func NewLogoutCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "logout",
 		Usage: "Sign out from CreateOS",
-		Action: func(c *cli.Context) error {
+		Action: func(_ *cli.Context) error {
 			if !config.IsLoggedIn() {
 				return fmt.Errorf("you're not signed in")
 			}

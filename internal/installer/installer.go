@@ -1,3 +1,4 @@
+// Package installer handles skill installation.
 package installer
 
 import (
@@ -11,12 +12,14 @@ import (
 	"strings"
 )
 
-// InstallScope represents local (project) or global install
+// InstallScope represents the scope of a skill install (local or global).
 type InstallScope int
 
 const (
-	ScopeLocal  InstallScope = iota // installs into all 3 project dirs
-	ScopeGlobal                     // installs into all 3 global dirs
+	// ScopeLocal installs the skill into all 3 project-level directories.
+	ScopeLocal InstallScope = iota
+	// ScopeGlobal installs the skill into all 3 global home directories.
+	ScopeGlobal
 )
 
 // scopeDirs returns all target dirs for a given scope
@@ -58,7 +61,7 @@ func IsScopeInstalled(uniqueName string, scope InstallScope) bool {
 	return false
 }
 
-// InstallScope downloads zip and extracts into all dirs for the given scope
+// InstallToScope downloads the zip from downloadURL and extracts it into all directories for the given scope.
 func InstallToScope(downloadURL, uniqueName string, scope InstallScope) ([]string, error) {
 	dirs, err := scopeDirs(uniqueName, scope)
 	if err != nil {
@@ -66,11 +69,11 @@ func InstallToScope(downloadURL, uniqueName string, scope InstallScope) ([]strin
 	}
 
 	// Download once
-	resp, err := http.Get(downloadURL)
+	resp, err := http.Get(downloadURL) //nolint:gosec,noctx
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
@@ -117,7 +120,7 @@ func unzip(data []byte, destDir string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0750); err != nil {
 		return err
 	}
 
@@ -129,28 +132,34 @@ func unzip(data []byte, destDir string) error {
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(target, f.Mode())
+			if err := os.MkdirAll(target, f.Mode()); err != nil {
+				return err
+			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0750); err != nil {
 			return err
 		}
 
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()) //nolint:gosec
 		if err != nil {
 			return err
 		}
 
 		rc, err := f.Open()
 		if err != nil {
-			out.Close()
+			_ = out.Close()
 			return err
 		}
 
-		_, err = io.Copy(out, rc)
-		rc.Close()
-		out.Close()
+		_, err = io.Copy(out, rc) //nolint:gosec
+		if closeErr := rc.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+		if closeErr := out.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			return err
 		}

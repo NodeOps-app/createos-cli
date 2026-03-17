@@ -1,3 +1,4 @@
+// Package oauth provides OAuth client management commands.
 package oauth
 
 import "github.com/urfave/cli/v2"

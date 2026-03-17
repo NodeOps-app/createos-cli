@@ -1,4 +1,4 @@
-.PHONY: build clean install run test help
+.PHONY: build clean install run test lint lint-fix fmt deps help
 
 # Binary name
 BINARY_NAME=createos
@@ -63,7 +63,12 @@ fmt:
 # Run linter
 lint:
 	@echo "Running linter..."
-	golangci-lint run
+	golangci-lint run ./...
+
+# Run linter and auto-fix issues
+lint-fix:
+	@echo "Running linter with auto-fix..."
+	golangci-lint run --fix ./...
 
 # Show help
 help:
@@ -77,4 +82,5 @@ help:
 	@echo "  deps       - Download and tidy dependencies"
 	@echo "  fmt        - Format code"
 	@echo "  lint       - Run linter"
+	@echo "  lint-fix   - Run linter and auto-fix issues"
 	@echo "  help       - Show this help message"
