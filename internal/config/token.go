@@ -81,12 +81,17 @@ func DeleteToken() error {
 	return err
 }
 
-// IsLoggedIn returns true if a token file exists
-func IsLoggedIn() bool {
+// tokenFileExists returns true if the API key token file exists
+func tokenFileExists() bool {
 	path, err := tokenPath()
 	if err != nil {
 		return false
 	}
 	_, err = os.Stat(path)
 	return err == nil
+}
+
+// IsLoggedIn returns true if the user is signed in via API key or OAuth
+func IsLoggedIn() bool {
+	return tokenFileExists() || HasOAuthSession()
 }

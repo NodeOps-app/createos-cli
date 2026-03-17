@@ -346,3 +346,45 @@ func (c *ApiClient) PurchaseSkill(skillId string) (string, error) {
 	}
 	return result.Data.Id, nil
 }
+
+// Environment represents a project environment
+type Environment struct {
+	ID                   string         `json:"id"`
+	DisplayName          string         `json:"displayName"`
+	UniqueName           string         `json:"uniqueName"`
+	Description          *string        `json:"description"`
+	ProjectID            string         `json:"projectId"`
+	Branch               *string        `json:"branch"`
+	ProjectDeploymentID  *string        `json:"projectDeploymentId"`
+	IsAutoPromoteEnabled bool           `json:"isAutoPromoteEnabled"`
+	Status               string         `json:"status"`
+	CreatedAt            time.Time      `json:"createdAt"`
+	UpdatedAt            time.Time      `json:"updatedAt"`
+	Extra                map[string]any `json:"extra"`
+}
+
+func (c *ApiClient) ListEnvironments(projectID string) ([]Environment, error) {
+	var result Response[[]Environment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/" + projectID + "/environments")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data, nil
+}
+
+func (c *ApiClient) DeleteEnvironment(projectID, environmentID string) error {
+	resp, err := c.Client.R().
+		Delete("/v1/projects/" + projectID + "/environments/" + environmentID)
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}

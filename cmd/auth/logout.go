@@ -21,6 +21,9 @@ func NewLogoutCommand() *cli.Command {
 			if err := config.DeleteToken(); err != nil {
 				return fmt.Errorf("could not sign you out: %w", err)
 			}
+			if err := config.DeleteOAuthSession(); err != nil {
+				return fmt.Errorf("could not clear your session: %w", err)
+			}
 
 			fmt.Println("You've been signed out successfully.")
 			fmt.Println()

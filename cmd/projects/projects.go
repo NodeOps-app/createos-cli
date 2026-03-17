@@ -13,6 +13,7 @@ func NewProjectsCommand() *cli.Command {
 			newDeleteCommand(),
 			newDeploymentsCommand(),
 			newDomainsCommand(),
+			newEnvironmentsCommand(),
 			newGetCommand(),
 			newListCommand(),
 		},

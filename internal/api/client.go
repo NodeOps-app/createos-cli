@@ -36,6 +36,29 @@ func NewClient(token, apiURL string, debug bool) ApiClient {
 	return ApiClient{Client: client}
 }
 
+// NewClientWithAccessToken creates a resty client authenticated with an OAuth access token.
+// Uses X-Access-Token header instead of x-api-key.
+func NewClientWithAccessToken(accessToken, apiURL string, debug bool) ApiClient {
+	if apiURL == "" {
+		apiURL = DefaultBaseURL
+	}
+
+	client := resty.New().
+		SetBaseURL(apiURL).
+		SetHeader("X-Access-Token", accessToken).
+		SetHeader("Content-Type", "application/json")
+
+	if debug {
+		client.SetDebug(true)
+		client.SetLogger(&maskingLogger{
+			token:  accessToken,
+			masked: maskToken(accessToken),
+		})
+	}
+
+	return ApiClient{Client: client}
+}
+
 // maskToken returns a redacted version like "skp_Ex6v••••••••3fae"
 func maskToken(token string) string {
 	if len(token) <= 8 {

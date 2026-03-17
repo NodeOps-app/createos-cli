@@ -2,17 +2,23 @@ package root
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
+	"github.com/NodeOps-app/createos-cli/cmd/oauth"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
+	"github.com/NodeOps-app/createos-cli/cmd/users"
 	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/intro"
+	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 	"github.com/urfave/cli/v2"
 )
+
+const oauthClientID = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
 
 // NewApp creates and configures the root CLI application
 func NewApp() *cli.App {
@@ -35,17 +41,54 @@ func NewApp() *cli.App {
 			},
 		},
 		Before: func(c *cli.Context) error {
-			// skip client init for login/logout — no token needed
 			cmd := c.Args().First()
-			if cmd == "login" || cmd == "logout" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" {
 				return nil
 			}
 
+			// Try OAuth session first
+			if config.HasOAuthSession() {
+				session, err := config.LoadOAuthSession()
+				if err != nil {
+					return fmt.Errorf("could not load your session: %w", err)
+				}
+				if session != nil {
+					// Auto-refresh if expired
+					if config.IsTokenExpired(session) {
+						tokenEndpoint := session.TokenEndpoint
+						if tokenEndpoint == "" {
+							tokenEndpoint = "https://id.nodeops.network/oauth2/token"
+						}
+						refreshed, err := internaloauth.RefreshTokens(
+							tokenEndpoint,
+							oauthClientID,
+							session.RefreshToken,
+						)
+						if err != nil {
+							return fmt.Errorf("your session has expired and could not be renewed — run 'createos login' to sign in again")
+						}
+						session.AccessToken = refreshed.AccessToken
+						if refreshed.RefreshToken != "" {
+							session.RefreshToken = refreshed.RefreshToken
+						}
+						if refreshed.ExpiresIn > 0 {
+							session.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn)
+						}
+						if err := config.SaveOAuthSession(*session); err != nil {
+							return fmt.Errorf("could not save refreshed session: %w", err)
+						}
+					}
+					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"))
+					c.App.Metadata[api.ClientKey] = &client
+					return nil
+				}
+			}
+
+			// Fall back to API key
 			token, err := config.LoadToken()
 			if err != nil {
 				return err
 			}
-
 			client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
 			c.App.Metadata[api.ClientKey] = &client
 			return nil
@@ -56,8 +99,10 @@ func NewApp() *cli.App {
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
 				fmt.Println("  logout         Sign out from CreateOS")
+				fmt.Println("  oauth          Manage OAuth clients")
 				fmt.Println("  projects       Manage projects")
 				fmt.Println("  skills         Manage skills")
+				fmt.Println("  users          Manage your user account")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
@@ -71,9 +116,11 @@ func NewApp() *cli.App {
 		Commands: []*cli.Command{
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
+			oauth.NewOAuthCommand(),
 			auth.NewWhoamiCommand(),
 			skills.NewSkillsCommand(),
 			projects.NewProjectsCommand(),
+			users.NewUsersCommand(),
 			versioncmd.NewVersionCommand(),
 		},
 	}

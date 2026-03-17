@@ -1,0 +1,13 @@
+package users
+
+import "github.com/urfave/cli/v2"
+
+func NewUsersCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "users",
+		Usage: "Manage your user account",
+		Subcommands: []*cli.Command{
+			newOAuthConsentsCommand(),
+		},
+	}
+}

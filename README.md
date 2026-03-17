@@ -1,6 +1,16 @@
 # CreateOS CLI
 
-The official command-line interface for [CreateOS](https://createos.io) — manage your projects and skills from the terminal.
+```
+ ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
+██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██╔════╝
+██║     ██████╔╝█████╗  ███████║   ██║   █████╗  ██║   ██║███████╗
+██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══╝  ██║   ██║╚════██║
+╚██████╗██║  ██║███████╗██║  ██║   ██║   ███████╗╚██████╔╝███████║
+ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  ╚═╝   ╚══════╝ ╚═════╝ ╚══════╝
+  Your intelligent infrastructure CLI
+```
+
+The official command-line interface for [CreateOS](https://createos.nodeops.network?utm_source=createos-cli) — manage your projects and skills from the terminal.
 
 ## Installation
 
@@ -22,7 +32,7 @@ go build -o createos .
 
 **1. Sign in**
 
-Get your API token from your [CreateOS dashboard](https://createos.io/settings/tokens), then run:
+Get your API token from your [CreateOS dashboard](https://createos.nodeops.network/profile), then run:
 
 ```bash
 createos login
@@ -42,23 +52,19 @@ createos --help
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `createos login` | Sign in with your API token |
-| `createos logout` | Sign out |
-| `createos whoami` | Show your account info |
-| `createos projects list` | List all your projects |
-| `createos projects get <id>` | Show details for a project |
-| `createos projects delete <id>` | Delete a project |
-| `createos skills catalog` | Browse available skills |
-| `createos skills purchased` | List your purchased skills |
+| Command           | Description                 |
+| ----------------- | --------------------------- |
+| `createos login`  | Sign in with your API token |
+| `createos logout` | Sign out                    |
+| `createos whoami` | Show your account info      |
+| `many more :)`    |                             |
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
+| Flag          | Description                                           |
+| ------------- | ----------------------------------------------------- |
 | `--debug, -d` | Print HTTP request/response details (token is masked) |
-| `--api-url` | Override the API base URL |
+| `--api-url`   | Override the API base URL                             |
 
 ## Security
 
