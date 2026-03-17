@@ -10,6 +10,12 @@ import (
 
 const oauthFile = ".oauth"
 
+// OAuthClientID is the pre-registered public OAuth client ID for the CreateOS CLI
+const OAuthClientID = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
+
+// OAuthIssuerURL is the OAuth identity server base URL
+const OAuthIssuerURL = "https://id.nodeops.network"
+
 // OAuthSession holds the OAuth tokens
 type OAuthSession struct {
 	AccessToken   string `json:"access_token"`

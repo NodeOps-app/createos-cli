@@ -18,8 +18,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const oauthClientID = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
-
 // NewApp creates and configures the root CLI application
 func NewApp() *cli.App {
 	app := &cli.App{
@@ -57,11 +55,11 @@ func NewApp() *cli.App {
 					if config.IsTokenExpired(session) {
 						tokenEndpoint := session.TokenEndpoint
 						if tokenEndpoint == "" {
-							tokenEndpoint = "https://id.nodeops.network/oauth2/token"
+							tokenEndpoint = config.OAuthIssuerURL + "/oauth2/token"
 						}
 						refreshed, err := internaloauth.RefreshTokens(
 							tokenEndpoint,
-							oauthClientID,
+							config.OAuthClientID,
 							session.RefreshToken,
 						)
 						if err != nil {

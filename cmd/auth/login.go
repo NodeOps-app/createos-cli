@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	oauthClientID       = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
-	oauthIssuerURL      = "https://id.nodeops.network"
 	oauthCallbackPort = 65341
 	oauthCallbackURI  = "http://localhost:65341/callback"
 )
@@ -81,7 +79,7 @@ func loginWithBrowser() error {
 
 	// 2. Fetch OAuth server metadata
 	pterm.Info.Println("Fetching authorization server info...")
-	meta, err := internaloauth.FetchServerMetadata(oauthIssuerURL)
+	meta, err := internaloauth.FetchServerMetadata(config.OAuthIssuerURL)
 	if err != nil {
 		return fmt.Errorf("could not reach authorization server: %w", err)
 	}
@@ -101,7 +99,7 @@ func loginWithBrowser() error {
 	// 5. Build authorization URL
 	authURL := internaloauth.BuildAuthURL(
 		meta.AuthorizationEndpoint,
-		oauthClientID,
+		config.OAuthClientID,
 		redirectURI,
 		state,
 		pkce.Challenge,
@@ -135,7 +133,7 @@ func loginWithBrowser() error {
 	pterm.Info.Println("Completing sign in...")
 	tokenResp, err := internaloauth.ExchangeCode(
 		meta.TokenEndpoint,
-		oauthClientID,
+		config.OAuthClientID,
 		code,
 		redirectURI,
 		pkce.Verifier,
