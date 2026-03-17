@@ -1,10 +1,10 @@
-package projects
+package domains
 
 import (
 	"github.com/urfave/cli/v2"
 )
 
-func newDomainsCommand() *cli.Command {
+func NewDomainsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "domains",
 		Usage: "Manage custom domains for a project",

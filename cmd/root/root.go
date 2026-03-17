@@ -8,6 +8,9 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
+	"github.com/NodeOps-app/createos-cli/cmd/deployments"
+	"github.com/NodeOps-app/createos-cli/cmd/domains"
+	"github.com/NodeOps-app/createos-cli/cmd/environments"
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
@@ -20,7 +23,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 )
 
-// NewApp creates and configures the root CLI application
+// NewApp creates and configures the root CLI application.
 func NewApp() *cli.App {
 	app := &cli.App{
 		Name:    "createos",
@@ -98,6 +101,9 @@ func NewApp() *cli.App {
 
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
+				fmt.Println("  deployments    Manage project deployments")
+				fmt.Println("  domains        Manage custom domains")
+				fmt.Println("  environments   Manage project environments")
 				fmt.Println("  logout         Sign out from CreateOS")
 				fmt.Println("  oauth          Manage OAuth clients")
 				fmt.Println("  projects       Manage projects")
@@ -116,11 +122,14 @@ func NewApp() *cli.App {
 		Commands: []*cli.Command{
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
+			deployments.NewDeploymentsCommand(),
+			domains.NewDomainsCommand(),
+			environments.NewEnvironmentsCommand(),
 			oauth.NewOAuthCommand(),
-			auth.NewWhoamiCommand(),
-			skills.NewSkillsCommand(),
 			projects.NewProjectsCommand(),
+			skills.NewSkillsCommand(),
 			users.NewUsersCommand(),
+			auth.NewWhoamiCommand(),
 			versioncmd.NewVersionCommand(),
 		},
 	}

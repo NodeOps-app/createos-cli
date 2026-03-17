@@ -1,10 +1,10 @@
-package projects
+package deployments
 
 import (
 	"github.com/urfave/cli/v2"
 )
 
-func newDeploymentsCommand() *cli.Command {
+func NewDeploymentsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "deployments",
 		Usage: "Manage deployments for a project",

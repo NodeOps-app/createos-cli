@@ -1,8 +1,8 @@
-package projects
+package environments
 
 import "github.com/urfave/cli/v2"
 
-func newEnvironmentsCommand() *cli.Command {
+func NewEnvironmentsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "environments",
 		Usage: "Manage environments for a project",

@@ -1,4 +1,4 @@
-package projects
+package domains
 
 import (
 	"fmt"
