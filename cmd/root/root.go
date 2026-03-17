@@ -13,6 +13,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/domains"
 	"github.com/NodeOps-app/createos-cli/cmd/environments"
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
+	"github.com/NodeOps-app/createos-cli/cmd/ask"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/users"
@@ -48,7 +49,7 @@ func NewApp() *cli.App {
 		},
 		Before: func(c *cli.Context) error {
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" {
 				return nil
 			}
 
@@ -118,6 +119,7 @@ func NewApp() *cli.App {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
 			fmt.Println("  completion      Generate shell completion script")
+			fmt.Println("  ask             Ask the AI assistant to help manage your infrastructure")
 			fmt.Println("  version        Print the current version")
 			fmt.Println()
 			fmt.Println("Run 'createos <command> --help' for more information on a command.")
@@ -129,6 +131,7 @@ func NewApp() *cli.App {
 			auth.NewLogoutCommand(),
 			completion.NewCompletionCommand(),
 			deployments.NewDeploymentsCommand(),
+			ask.NewAskCommand(),
 			domains.NewDomainsCommand(),
 			environments.NewEnvironmentsCommand(),
 			oauth.NewOAuthCommand(),

@@ -103,9 +103,9 @@ type VMDeployment struct {
 
 // vmResourceInputs is the resource spec for VM creation/resize.
 type vmResourceInputs struct {
-	CPU      int64 `json:"cpuInMillicores"`
+	CPU       int64 `json:"cpuInMillicores"`
 	MemoryMiB int64 `json:"memoryInMB"`
-	DiskMiB  int64 `json:"storageInMB"`
+	DiskMiB   int64 `json:"storageInMB"`
 }
 
 // vmCreateInputs is the product-specific inputs for vm-terminal.
@@ -113,13 +113,13 @@ type vmCreateInputs struct {
 	Zone          string           `json:"ZONE"`
 	Provider      string           `json:"PROVIDER"`
 	SSHKeys       []string         `json:"SSH_KEYS"`
-	FirewallRules []VMFirewallRule  `json:"FIREWALL_RULES"`
+	FirewallRules []VMFirewallRule `json:"FIREWALL_RULES"`
 }
 
 // vmUpdateInputs is the mutable inputs for PUT /v1/product-deployments/:id.
 type vmUpdateInputs struct {
 	SSHKeys       []string         `json:"SSH_KEYS"`
-	FirewallRules []VMFirewallRule  `json:"FIREWALL_RULES"`
+	FirewallRules []VMFirewallRule `json:"FIREWALL_RULES"`
 }
 
 // updateVMRequest is the request body for PUT /v1/product-deployments/:id.

@@ -10,5 +10,5 @@ import (
 // IsInteractive returns true when stdout is a real TTY (i.e. a human is
 // watching). Returns false in CI pipelines, scripts, or when output is piped.
 func IsInteractive() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // uintptr->int safe on all supported platforms for fd values
 }
