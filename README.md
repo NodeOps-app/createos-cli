@@ -26,11 +26,27 @@ go build -o createos .
 
 **1. Sign in**
 
-Get your API token from your [CreateOS dashboard](https://createos.nodeops.network/profile), then run:
+Choose one of the following methods:
+
+**Option A — Browser login (OAuth, recommended)**
 
 ```bash
 createos login
 ```
+
+This opens your browser to complete sign in. Your session is saved automatically.
+
+**Option B — API token**
+
+Get your API token from your [CreateOS dashboard](https://createos.nodeops.network/profile), then run:
+
+```bash
+createos login --token <your-api-token>
+```
+
+Or run `createos login` interactively and select "Sign in with API token" when prompted.
+
+> In CI or non-interactive environments, you must use the `--token` flag.
 
 **2. Confirm your account**
 
@@ -77,8 +93,8 @@ createos --help
 
 | Command                          | Description                       |
 | -------------------------------- | --------------------------------- |
-| `createos environments list`     | List environment variables        |
-| `createos environments delete`   | Delete an environment variable    |
+| `createos environments list`     | List environments for a project   |
+| `createos environments delete`   | Delete an environment             |
 
 ### Domains
 
@@ -140,9 +156,6 @@ createos --help
 ## Security
 
 - Your API token is stored at `~/.createos/.token` with `600` permissions (readable only by you).
+- OAuth session tokens are stored at `~/.createos/.oauth` with `600` permissions (readable only by you).
 - Debug mode masks your token in output — only the first 6 and last 4 characters are shown.
 - Never share your token or commit it to version control.
-
-## License
-
-MIT
