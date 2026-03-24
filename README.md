@@ -14,12 +14,6 @@ The official command-line interface for [CreateOS](https://createos.nodeops.netw
 
 ## Installation
 
-### Download binary
-
-Download the latest release for your platform from the [Releases](../../releases) page and place it somewhere on your `$PATH`.
-
-### Build from source
-
 Requires Go 1.21+.
 
 ```bash
@@ -52,12 +46,89 @@ createos --help
 
 ## Commands
 
-| Command           | Description                 |
-| ----------------- | --------------------------- |
-| `createos login`  | Sign in with your API token |
-| `createos logout` | Sign out                    |
-| `createos whoami` | Show your account info      |
-| `many more :)`    |                             |
+### Authentication
+
+| Command              | Description                        |
+| -------------------- | ---------------------------------- |
+| `createos login`     | Sign in with your API token        |
+| `createos logout`    | Sign out                           |
+| `createos whoami`    | Show the currently authenticated user |
+
+### Projects
+
+| Command                   | Description              |
+| ------------------------- | ------------------------ |
+| `createos projects list`  | List all projects        |
+| `createos projects get`   | Get a project by ID      |
+| `createos projects delete`| Delete a project         |
+
+### Deployments
+
+| Command                             | Description                          |
+| ----------------------------------- | ------------------------------------ |
+| `createos deployments list`         | List deployments for a project       |
+| `createos deployments logs`         | Stream runtime logs for a deployment |
+| `createos deployments build-logs`   | Stream build logs for a deployment   |
+| `createos deployments retrigger`    | Retrigger a deployment               |
+| `createos deployments wakeup`       | Wake up a sleeping deployment        |
+| `createos deployments delete`       | Delete a deployment                  |
+
+### Environments
+
+| Command                          | Description                       |
+| -------------------------------- | --------------------------------- |
+| `createos environments list`     | List environment variables        |
+| `createos environments delete`   | Delete an environment variable    |
+
+### Domains
+
+| Command                      | Description                        |
+| ---------------------------- | ---------------------------------- |
+| `createos domains list`      | List custom domains for a project  |
+| `createos domains add`       | Add a custom domain                |
+| `createos domains refresh`   | Refresh domain DNS verification    |
+| `createos domains delete`    | Remove a custom domain             |
+
+### VMs
+
+| Command                  | Description                          |
+| ------------------------ | ------------------------------------ |
+| `createos vms list`      | List VM instances                    |
+| `createos vms get`       | Get details of a VM                  |
+| `createos vms deploy`    | Deploy a new VM                      |
+| `createos vms ssh`       | Connect to a VM via SSH              |
+| `createos vms reboot`    | Reboot a VM                          |
+| `createos vms resize`    | Resize a VM to a different plan      |
+| `createos vms terminate` | Terminate a VM                       |
+
+### Skills
+
+| Command                    | Description                  |
+| -------------------------- | ---------------------------- |
+| `createos skills catalog`  | Browse the skills catalog    |
+| `createos skills purchased`| List your purchased skills   |
+
+### OAuth
+
+| Command                          | Description                        |
+| -------------------------------- | ---------------------------------- |
+| `createos oauth clients list`    | List OAuth clients                 |
+| `createos oauth clients create`  | Create a new OAuth client          |
+
+### Users
+
+| Command                                 | Description                        |
+| --------------------------------------- | ---------------------------------- |
+| `createos users oauth-consents list`    | List OAuth consents                |
+| `createos users oauth-consents revoke`  | Revoke an OAuth consent            |
+
+### Other
+
+| Command                       | Description                                  |
+| ----------------------------- | -------------------------------------------- |
+| `createos ask`                | Ask the AI assistant to help manage your infrastructure |
+| `createos completion`         | Generate shell completion script (bash/zsh/fish/powershell) |
+| `createos version`            | Print the current version                    |
 
 ## Options
 
