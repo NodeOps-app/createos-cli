@@ -427,3 +427,145 @@ func (c *APIClient) DeleteEnvironment(projectID, environmentID string) error {
 	}
 	return nil
 }
+
+// GetEnvironmentVariables returns the environment variables for a project environment.
+func (c *APIClient) GetEnvironmentVariables(projectID, environmentID string) (map[string]string, error) {
+	var result Response[map[string]string]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/" + projectID + "/environments/" + environmentID + "/environment-variables")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data, nil
+}
+
+// UpdateEnvironmentVariables sets the environment variables for a project environment.
+func (c *APIClient) UpdateEnvironmentVariables(projectID, environmentID string, vars map[string]string) error {
+	resp, err := c.Client.R().
+		SetBody(map[string]any{"environmentVariables": vars}).
+		Put("/v1/projects/" + projectID + "/environments/" + environmentID + "/environment-variables")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
+// ResourceSettings represents the resource allocation for an environment.
+type ResourceSettings struct {
+	Replicas int `json:"replicas"`
+	CPU      int `json:"cpu"`
+	Memory   int `json:"memory"`
+}
+
+// ScaleRequest is the request body for updating environment resources.
+type ScaleRequest = ResourceSettings
+
+// GetEnvironmentResources returns the resource settings for an environment.
+func (c *APIClient) GetEnvironmentResources(projectID, environmentID string) (*ResourceSettings, error) {
+	var result Response[ResourceSettings]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/" + projectID + "/environments/" + environmentID + "/resources")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// UpdateEnvironmentResources updates the resource allocation for an environment.
+func (c *APIClient) UpdateEnvironmentResources(projectID, environmentID string, req ScaleRequest) error {
+	resp, err := c.Client.R().
+		SetBody(req).
+		Put("/v1/projects/" + projectID + "/environments/" + environmentID + "/resources")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
+// ProjectTemplate represents a published project template.
+type ProjectTemplate struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	Type        string    `json:"type"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// ListPublishedTemplates returns all published project templates.
+func (c *APIClient) ListPublishedTemplates() ([]ProjectTemplate, error) {
+	var result PaginatedResponse[ProjectTemplate]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/project-templates/published")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.Items, nil
+}
+
+// GetTemplate returns a project template by ID.
+func (c *APIClient) GetTemplate(id string) (*ProjectTemplate, error) {
+	var result Response[ProjectTemplate]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/project-templates/" + id)
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// GetTemplateDownloadURL returns the download URL for a project template.
+func (c *APIClient) GetTemplateDownloadURL(id string) (string, error) {
+	var result Response[struct {
+		DownloadURL string `json:"downloadUri"`
+	}]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/project-templates/" + id + "/download")
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.DownloadURL, nil
+}
+
+// CreateDeployment creates a new deployment for a project.
+func (c *APIClient) CreateDeployment(projectID string, body map[string]any) (*Deployment, error) {
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetBody(body).
+		Post("/v1/projects/" + projectID + "/deployments")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}

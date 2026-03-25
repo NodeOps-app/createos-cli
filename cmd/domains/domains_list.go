@@ -34,7 +34,7 @@ func newDomainsListCommand() *cli.Command {
 				fmt.Println("No custom domains added yet.")
 				fmt.Println()
 				pterm.Println(pterm.Gray("  Tip: To add a domain, run:"))
-				pterm.Println(pterm.Gray("    createos projects domains add " + projectID + " <your-domain.com>"))
+				pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 				return nil
 			}
 
@@ -42,11 +42,12 @@ func newDomainsListCommand() *cli.Command {
 				{"ID", "Domain", "Status", "Message"},
 			}
 			for _, d := range domains {
+				icon := domainIcon(d.Status)
 				msg := ""
 				if d.Message != nil {
 					msg = *d.Message
 				}
-				tableData = append(tableData, []string{d.ID, d.Name, d.Status, msg})
+				tableData = append(tableData, []string{d.ID, d.Name, icon + " " + d.Status, msg})
 			}
 
 			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
@@ -54,8 +55,19 @@ func newDomainsListCommand() *cli.Command {
 			}
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To add a new domain, run:"))
-			pterm.Println(pterm.Gray("    createos projects domains add " + projectID + " <your-domain.com>"))
+			pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 			return nil
 		},
+	}
+}
+
+func domainIcon(status string) string {
+	switch status {
+	case "verified", "active":
+		return pterm.Green("✓")
+	case "pending":
+		return pterm.Yellow("⏳")
+	default:
+		return pterm.Red("✗")
 	}
 }

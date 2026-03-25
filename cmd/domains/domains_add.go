@@ -16,10 +16,10 @@ func newDomainsAddCommand() *cli.Command {
 		ArgsUsage: "<project-id> <domain>",
 		Description: "Adds a custom domain to your project.\n\n" +
 			"   After adding, point your DNS to the provided records, then run:\n" +
-			"     createos projects domains refresh <project-id> <domain-id>",
+			"     createos domains refresh <project-id> <domain-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and domain name\n\n  Example:\n    createos projects domains add <project-id> myapp.com")
+				return fmt.Errorf("please provide a project ID and domain name\n\n  Example:\n    createos domains add <project-id> myapp.com")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -37,8 +37,20 @@ func newDomainsAddCommand() *cli.Command {
 
 			pterm.Success.Printf("Domain %q added successfully.\n", name)
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Next step: point your DNS records to CreateOS, then verify with:"))
-			pterm.Println(pterm.Gray("    createos projects domains refresh " + projectID + " " + id))
+
+			// Show DNS setup instructions
+			fmt.Println("  Configure your DNS with the following record:")
+			fmt.Println()
+			tableData := pterm.TableData{
+				{"Type", "Name", "Value"},
+				{"CNAME", name, projectID + ".nodeops.app"},
+			}
+			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+				return err
+			}
+			fmt.Println()
+			pterm.Println(pterm.Gray("  After updating DNS, verify with:"))
+			pterm.Println(pterm.Gray("    createos domains refresh " + projectID + " " + id))
 			return nil
 		},
 	}

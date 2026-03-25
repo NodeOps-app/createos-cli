@@ -16,10 +16,10 @@ func newDomainsDeleteCommand() *cli.Command {
 		ArgsUsage: "<project-id> <domain-id>",
 		Description: "Permanently removes a custom domain from your project.\n\n" +
 			"   To find your domain ID, run:\n" +
-			"     createos projects domains list <project-id>",
+			"     createos domains list <project-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and domain ID\n\n  Example:\n    createos projects domains delete <project-id> <domain-id>")
+				return fmt.Errorf("please provide a project ID and domain ID\n\n  Example:\n    createos domains delete <project-id> <domain-id>")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -50,7 +50,7 @@ func newDomainsDeleteCommand() *cli.Command {
 			pterm.Success.Println("Domain is being removed.")
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To see your remaining domains, run:"))
-			pterm.Println(pterm.Gray("    createos projects domains list " + projectID))
+			pterm.Println(pterm.Gray("    createos domains list " + projectID))
 			return nil
 		},
 	}

@@ -14,6 +14,7 @@ func NewDomainsCommand() *cli.Command {
 			newDomainsListCommand(),
 			newDomainsAddCommand(),
 			newDomainsRefreshCommand(),
+			newDomainsVerifyCommand(),
 			newDomainsDeleteCommand(),
 		},
 	}
