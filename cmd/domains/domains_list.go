@@ -7,24 +7,24 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newDomainsListCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "list",
 		Usage:     "List all custom domains for a project",
-		ArgsUsage: "<project-id>",
+		ArgsUsage: "[project-id]",
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a project ID\n\n  To see your projects and their IDs, run:\n    createos projects list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().First()
+			projectID, err := cmdutil.ResolveProjectID(c.Args().First())
+			if err != nil {
+				return err
+			}
 			domains, err := client.ListDomains(projectID)
 			if err != nil {
 				return err

@@ -65,7 +65,7 @@ func NewApp() *cli.App {
 			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
 
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" || cmd == "init" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" {
 				return nil
 			}
 

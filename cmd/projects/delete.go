@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -15,7 +16,7 @@ func newDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Usage:     "Delete a project",
-		ArgsUsage: "<project-id>",
+		ArgsUsage: "[project-id]",
 		Description: "Permanently deletes a project. This action cannot be undone.\n\n" +
 			"   To find your project ID, run:\n" +
 			"     createos projects list",
@@ -26,16 +27,15 @@ func newDeleteCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a project ID\n\n  To see your projects and their IDs, run:\n    createos projects list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := cmdutil.ResolveProjectID(c.Args().First())
+			if err != nil {
+				return err
+			}
 
 			if !terminal.IsInteractive() && !c.Bool("force") {
 				return fmt.Errorf("non-interactive mode: use --force flag to confirm deletion\n\n  Example:\n    createos projects delete %s --force", id)

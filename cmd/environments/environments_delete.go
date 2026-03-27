@@ -7,28 +7,27 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newEnvironmentsDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Usage:     "Delete an environment",
-		ArgsUsage: "<project-id> <environment-id>",
+		ArgsUsage: "[project-id] <environment-id>",
 		Description: "Permanently deletes an environment from your project.\n\n" +
 			"   To find your environment ID, run:\n" +
 			"     createos projects environments list <project-id>",
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and environment ID\n\n  Example:\n    createos projects environments delete <project-id> <environment-id>")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().Get(0)
-			environmentID := c.Args().Get(1)
+			projectID, environmentID, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "an environment ID")
+			if err != nil {
+				return err
+			}
 
 			confirm, err := pterm.DefaultInteractiveConfirm.
 				WithDefaultText(fmt.Sprintf("Are you sure you want to permanently delete environment %q?", environmentID)).
