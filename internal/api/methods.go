@@ -195,14 +195,14 @@ type DeploymentSource struct {
 
 // Deployment represents a project deployment.
 type Deployment struct {
-	ID            string              `json:"id"`
-	ProjectID     string              `json:"projectId"`
-	Status        string              `json:"status"`
-	VersionNumber int                 `json:"versionNumber"`
-	Source        *DeploymentSource   `json:"source"`
-	Extra         DeploymentExtra     `json:"extra"`
-	CreatedAt     time.Time           `json:"createdAt"`
-	UpdatedAt     time.Time           `json:"updatedAt"`
+	ID            string            `json:"id"`
+	ProjectID     string            `json:"projectId"`
+	Status        string            `json:"status"`
+	VersionNumber int               `json:"versionNumber"`
+	Source        *DeploymentSource `json:"source"`
+	Extra         DeploymentExtra   `json:"extra"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
 }
 
 // ListDeployments returns all deployments for a project.
@@ -297,7 +297,6 @@ func (c *APIClient) WakeupDeployment(projectID, deploymentID string) error {
 	return nil
 }
 
-// Domain represents a project custom domain
 // DomainTXTRecord holds a TXT record for domain verification.
 type DomainTXTRecord struct {
 	Name  string `json:"name"`
@@ -310,16 +309,17 @@ type DomainDNSRecords struct {
 	ARecords   []string          `json:"a_records"`
 }
 
+// Domain represents a project custom domain.
 type Domain struct {
-	ID            string           `json:"id"`
-	Name          string           `json:"name"`
-	ProjectID     string           `json:"projectId"`
-	EnvironmentID *string          `json:"environmentId"`
-	Status        string           `json:"status"`
-	Message       *string          `json:"message"`
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	ProjectID     string            `json:"projectId"`
+	EnvironmentID *string           `json:"environmentId"`
+	Status        string            `json:"status"`
+	Message       *string           `json:"message"`
 	Records       *DomainDNSRecords `json:"records"`
-	CreatedAt     string           `json:"createdAt"`
-	UpdatedAt     string           `json:"updatedAt"`
+	CreatedAt     string            `json:"createdAt"`
+	UpdatedAt     string            `json:"updatedAt"`
 }
 
 // ListDomains returns all custom domains for a project.
@@ -555,26 +555,32 @@ func (c *APIClient) UpdateEnvironmentResources(projectID, environmentID string, 
 type ProjectTemplate struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	Type        string    `json:"type"`
+	Description string    `json:"description"`
 	Status      string    `json:"status"`
+	Categories  []string  `json:"categories"`
+	Amount      float64   `json:"amount"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+// listTemplatesData is the shape of data returned by GET /v1/project-templates.
+type listTemplatesData struct {
+	Templates []ProjectTemplate `json:"templates"`
+}
+
 // ListPublishedTemplates returns all published project templates.
 func (c *APIClient) ListPublishedTemplates() ([]ProjectTemplate, error) {
-	var result PaginatedResponse[ProjectTemplate]
+	var result Response[listTemplatesData]
 	resp, err := c.Client.R().
 		SetResult(&result).
-		Get("/v1/project-templates/published")
+		Get("/v1/project-templates")
 	if err != nil {
 		return nil, err
 	}
 	if resp.IsError() {
 		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return result.Data.Items, nil
+	return result.Data.Templates, nil
 }
 
 // GetTemplate returns a project template by ID.
@@ -592,21 +598,66 @@ func (c *APIClient) GetTemplate(id string) (*ProjectTemplate, error) {
 	return &result.Data, nil
 }
 
-// GetTemplateDownloadURL returns the download URL for a project template.
-func (c *APIClient) GetTemplateDownloadURL(id string) (string, error) {
+// TemplatePurchase represents a user's purchase of a project template.
+type TemplatePurchase struct {
+	ID                string    `json:"id"`
+	ProjectTemplateID string    `json:"projectTemplateId"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+// listPurchasesData is the shape of data returned by GET /v1/project-templates/purchases.
+type listPurchasesData struct {
+	Purchases []TemplatePurchase `json:"purchases"`
+}
+
+// BuyTemplate purchases a template and returns the purchase ID.
+func (c *APIClient) BuyTemplate(templateID string) (string, error) {
 	var result Response[struct {
-		DownloadURL string `json:"downloadUri"`
+		ID string `json:"id"`
 	}]
 	resp, err := c.Client.R().
 		SetResult(&result).
-		Get("/v1/project-templates/" + id + "/download")
+		Post("/v1/project-templates/" + templateID + "/buy")
 	if err != nil {
 		return "", err
 	}
 	if resp.IsError() {
 		return "", ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return result.Data.DownloadURL, nil
+	return result.Data.ID, nil
+}
+
+// ListTemplatePurchases returns all of the user's template purchases.
+func (c *APIClient) ListTemplatePurchases() ([]TemplatePurchase, error) {
+	var result Response[listPurchasesData]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetQueryParam("limit", "50").
+		Get("/v1/project-templates/purchases")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.Purchases, nil
+}
+
+// GetTemplatePurchaseDownloadURL returns a signed download URL for a purchase.
+func (c *APIClient) GetTemplatePurchaseDownloadURL(purchaseID string) (string, error) {
+	var result Response[struct {
+		DownloadURI string `json:"downloadUri"`
+	}]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/project-templates/purchases/" + purchaseID + "/download")
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.DownloadURI, nil
 }
 
 // CreateDeployment creates a new deployment for a project.

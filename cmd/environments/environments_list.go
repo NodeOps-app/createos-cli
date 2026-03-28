@@ -66,8 +66,6 @@ func newEnvironmentsListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To delete an environment, run:"))
-			pterm.Println(pterm.Gray("    createos projects environments delete " + projectID + " <environment-id>"))
 			return nil
 		},
 	}

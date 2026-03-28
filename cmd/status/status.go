@@ -170,7 +170,6 @@ func statusIcon(status string) string {
 	}
 }
 
-
 func deployStatusIcon(status string) string {
 	switch status {
 	case "successful", "running", "active", "deployed":

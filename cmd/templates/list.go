@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -39,20 +40,21 @@ func newTemplatesListCommand() *cli.Command {
 			}
 
 			tableData := pterm.TableData{
-				{"ID", "Name", "Type", "Description"},
+				{"ID", "Name", "Categories", "Description"},
 			}
 			for _, t := range templates {
-				desc := ""
-				if t.Description != nil {
-					desc = *t.Description
-					if len(desc) > 60 {
-						desc = desc[:57] + "..."
-					}
+				desc := t.Description
+				if len(desc) > 60 {
+					desc = desc[:57] + "..."
+				}
+				categories := "-"
+				if len(t.Categories) > 0 {
+					categories = strings.Join(t.Categories, ", ")
 				}
 				tableData = append(tableData, []string{
 					t.ID,
 					t.Name,
-					t.Type,
+					categories,
 					desc,
 				})
 			}
@@ -61,8 +63,6 @@ func newTemplatesListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To use a template, run:"))
-			pterm.Println(pterm.Gray("    createos templates use <template-id>"))
 			return nil
 		},
 	}

@@ -14,24 +14,24 @@ func newVMResizeCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "resize",
 		Usage:     "Resize a VM terminal instance",
-		ArgsUsage: "<vm-id>",
+		ArgsUsage: "[vm-id]",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.IntFlag{
 				Name:  "size",
 				Usage: "New VM size index from the available sizes list (1-based)",
 			},
 		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a VM ID\n\n  To see your VMs and their IDs, run:\n    createos vms list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := resolveVM(c, client)
+			if err != nil {
+				return err
+			}
 
 			vm, err := client.GetVMDeployment(id)
 			if err != nil {
@@ -82,8 +82,6 @@ func newVMResizeCommand() *cli.Command {
 			}
 
 			pterm.Success.Printf("Resize request submitted for VM %q.\n", id)
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Check status with: createos vms get " + id))
 			return nil
 		},
 	}

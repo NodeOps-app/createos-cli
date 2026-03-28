@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -16,18 +17,22 @@ func newTemplatesInfoCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "info",
 		Usage:     "Show details about a template",
-		ArgsUsage: "<template-id>",
+		ArgsUsage: "[template-id]",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "template", Usage: "Template ID"},
+		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a template ID\n\n  To see available templates, run:\n    createos templates list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			tmpl, err := client.GetTemplate(c.Args().First())
+			id, err := resolveTemplate(c, client)
+			if err != nil {
+				return err
+			}
+
+			tmpl, err := client.GetTemplate(id)
 			if err != nil {
 				return err
 			}
@@ -43,12 +48,16 @@ func newTemplatesInfoCommand() *cli.Command {
 			cyan.Printf("  Name:        ")
 			fmt.Println(tmpl.Name)
 
-			cyan.Printf("  Type:        ")
-			fmt.Println(tmpl.Type)
+			cyan.Printf("  Categories:  ")
+			if len(tmpl.Categories) > 0 {
+				fmt.Println(strings.Join(tmpl.Categories, ", "))
+			} else {
+				fmt.Println("-")
+			}
 
 			cyan.Printf("  Description: ")
-			if tmpl.Description != nil {
-				fmt.Println(*tmpl.Description)
+			if tmpl.Description != "" {
+				fmt.Println(tmpl.Description)
 			} else {
 				fmt.Println("-")
 			}
@@ -60,8 +69,6 @@ func newTemplatesInfoCommand() *cli.Command {
 			fmt.Println(tmpl.CreatedAt.Format("2006-01-02 15:04:05"))
 
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Use this template:"))
-			pterm.Println(pterm.Gray("    createos templates use " + tmpl.ID))
 			return nil
 		},
 	}

@@ -19,10 +19,9 @@ func newDomainsVerifyCommand() *cli.Command {
 		Usage:     "Check DNS propagation and wait for domain verification",
 		ArgsUsage: "[project-id] <domain-id>",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "no-wait",
-				Usage: "Check once and exit instead of polling",
-			},
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "domain", Usage: "Domain ID"},
+			&cli.BoolFlag{Name: "no-wait", Usage: "Check once and exit instead of polling"},
 		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -30,7 +29,7 @@ func newDomainsVerifyCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
+			projectID, domainID, err := resolveDomain(c, client)
 			if err != nil {
 				return err
 			}

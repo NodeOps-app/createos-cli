@@ -11,34 +11,82 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newTemplatesUseCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "use",
 		Usage:     "Download and scaffold a project from a template",
-		ArgsUsage: "<template-id>",
+		ArgsUsage: "[template-id]",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "template", Usage: "Template ID"},
 			&cli.StringFlag{Name: "dir", Usage: "Target directory (defaults to template name)"},
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Skip purchase confirmation (required in non-interactive mode)"},
 		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a template ID\n\n  To see available templates, run:\n    createos templates list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			templateID := c.Args().First()
+			templateID, err := resolveTemplate(c, client)
+			if err != nil {
+				return err
+			}
 
 			tmpl, err := client.GetTemplate(templateID)
 			if err != nil {
 				return err
 			}
 
-			downloadURL, err := client.GetTemplateDownloadURL(templateID)
+			// Check if already owned
+			purchases, err := client.ListTemplatePurchases()
+			if err != nil {
+				return fmt.Errorf("could not retrieve your purchases: %w", err)
+			}
+
+			var purchaseID string
+			for _, p := range purchases {
+				if p.ProjectTemplateID == templateID {
+					purchaseID = p.ID
+					break
+				}
+			}
+
+			// Not owned yet — confirm before purchasing
+			if purchaseID == "" {
+				if !c.Bool("yes") {
+					if !terminal.IsInteractive() {
+						return fmt.Errorf("use --yes to confirm purchase in non-interactive mode\n\n  Example:\n    createos templates use --template %s --yes", templateID)
+					}
+					var confirmText string
+					if tmpl.Amount > 0 {
+						confirmText = fmt.Sprintf("Purchase %q for %.2f credits?", tmpl.Name, tmpl.Amount)
+					} else {
+						confirmText = fmt.Sprintf("Download %q (free)?", tmpl.Name)
+					}
+					confirm, err := pterm.DefaultInteractiveConfirm.
+						WithDefaultText(confirmText).
+						WithDefaultValue(true).
+						Show()
+					if err != nil {
+						return fmt.Errorf("could not read confirmation: %w", err)
+					}
+					if !confirm {
+						fmt.Println("Cancelled.")
+						return nil
+					}
+				}
+
+				newPurchaseID, err := client.BuyTemplate(templateID)
+				if err != nil {
+					return err
+				}
+				purchaseID = newPurchaseID
+			}
+
+			downloadURL, err := client.GetTemplatePurchaseDownloadURL(purchaseID)
 			if err != nil {
 				return err
 			}
@@ -48,7 +96,6 @@ func newTemplatesUseCommand() *cli.Command {
 				dir = tmpl.Name
 			}
 
-			// Create target directory
 			absDir, err := filepath.Abs(dir)
 			if err != nil {
 				return err
@@ -58,7 +105,6 @@ func newTemplatesUseCommand() *cli.Command {
 				return fmt.Errorf("could not create directory %s: %w", dir, err)
 			}
 
-			// Download the template
 			resp, err := http.Get(downloadURL) //nolint:gosec,noctx
 			if err != nil {
 				return fmt.Errorf("could not download template: %w", err)
@@ -71,17 +117,11 @@ func newTemplatesUseCommand() *cli.Command {
 
 			zipPath := filepath.Join(absDir, "template.zip")
 			if err := downloadToFile(zipPath, resp.Body); err != nil {
-				// Clean up partial file on failure
 				os.Remove(zipPath) //nolint:errcheck
 				return err
 			}
 
-			pterm.Success.Printf("Template %q downloaded to %s\n", tmpl.Name, dir)
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Next steps:"))
-			pterm.Println(pterm.Gray(fmt.Sprintf("    cd %s", dir)))
-			pterm.Println(pterm.Gray("    unzip template.zip && rm template.zip"))
-			pterm.Println(pterm.Gray("    createos init"))
+			pterm.Success.Printf("Template %q downloaded to %s/template.zip\n", tmpl.Name, dir)
 			return nil
 		},
 	}

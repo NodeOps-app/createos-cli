@@ -26,9 +26,6 @@ func newVMListCommand() *cli.Command {
 
 			if len(vms) == 0 {
 				fmt.Println("You don't have any VM instances yet.")
-				fmt.Println()
-				pterm.Println(pterm.Gray("  To deploy a new VM, run:"))
-				pterm.Println(pterm.Gray("    createos vms deploy"))
 				return nil
 			}
 
@@ -58,7 +55,6 @@ func newVMListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  To connect to a VM, run: createos vms ssh <vm-id>"))
 			return nil
 		},
 	}

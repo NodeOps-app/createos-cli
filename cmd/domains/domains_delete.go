@@ -14,16 +14,17 @@ func newDomainsDeleteCommand() *cli.Command {
 		Name:      "delete",
 		Usage:     "Remove a custom domain from a project",
 		ArgsUsage: "[project-id] <domain-id>",
-		Description: "Permanently removes a custom domain from your project.\n\n" +
-			"   To find your domain ID, run:\n" +
-			"     createos domains list <project-id>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "domain", Usage: "Domain ID"},
+		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
+			projectID, domainID, err := resolveDomain(c, client)
 			if err != nil {
 				return err
 			}

@@ -15,6 +15,9 @@ func newDomainsAddCommand() *cli.Command {
 		Name:      "add",
 		Usage:     "Add a custom domain to a project",
 		ArgsUsage: "[project-id] <domain>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "environment", Usage: "Environment ID to link the domain to"},
+		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
@@ -26,7 +29,7 @@ func newDomainsAddCommand() *cli.Command {
 				return err
 			}
 
-			environmentID, err := pickEnvironment(client, projectID)
+			environmentID, err := resolveEnvironmentForDomain(c, client, projectID)
 			if err != nil {
 				return err
 			}

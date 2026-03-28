@@ -13,18 +13,21 @@ func newVMGetCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "get",
 		Usage:     "Get details for a VM instance",
-		ArgsUsage: "<vm-id>",
+		ArgsUsage: "[vm-id]",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
+		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a VM ID\n\n  To see your VMs and their IDs, run:\n    createos vms list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := resolveVM(c, client)
+			if err != nil {
+				return err
+			}
+
 			vm, err := client.GetVMDeployment(id)
 			if err != nil {
 				return err
@@ -52,6 +55,9 @@ func newVMGetCommand() *cli.Command {
 				fmt.Println("-")
 			}
 
+			cyan.Printf("SSH Keys:    ")
+			fmt.Println(len(vm.Inputs.SSHKeys))
+
 			cyan.Printf("Created At:  ")
 			fmt.Println(vm.CreatedAt.Format("2006-01-02 15:04:05"))
 
@@ -59,12 +65,6 @@ func newVMGetCommand() *cli.Command {
 			fmt.Println(vm.UpdatedAt.Format("2006-01-02 15:04:05"))
 
 			fmt.Println()
-			if vm.Status == "deployed" && vm.Extra.IPAddress != "" {
-				pterm.Println(pterm.Gray("  To connect via SSH: createos vms ssh " + vm.ID))
-			} else if vm.Status == "deploying" {
-				pterm.Println(pterm.Gray("  Your VM is still deploying. Check status with: createos vms get " + vm.ID))
-			}
-
 			return nil
 		},
 	}

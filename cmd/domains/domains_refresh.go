@@ -23,7 +23,7 @@ func newDomainsRefreshCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
+			projectID, domainID, err := resolveDomain(c, client)
 			if err != nil {
 				return err
 			}

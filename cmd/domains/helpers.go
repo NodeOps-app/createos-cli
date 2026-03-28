@@ -4,16 +4,28 @@ import (
 	"fmt"
 
 	"github.com/pterm/pterm"
+	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
-// resolveDomain resolves projectID and domainID from args or interactively.
-func resolveDomain(args []string, client *api.APIClient) (string, string, error) {
+// resolveDomain resolves projectID and domainID from flags, args, or interactively.
+func resolveDomain(c *cli.Context, client *api.APIClient) (string, string, error) {
+	args := c.Args().Slice()
+
+	// --domain flag takes priority
+	if domainID := c.String("domain"); domainID != "" {
+		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
+		if err != nil {
+			return "", "", err
+		}
+		return projectID, domainID, nil
+	}
+
 	switch len(args) {
 	case 0:
-		projectID, err := cmdutil.ResolveProjectID("")
+		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 		if err != nil {
 			return "", "", err
 		}
@@ -23,7 +35,7 @@ func resolveDomain(args []string, client *api.APIClient) (string, string, error)
 		}
 		return projectID, domainID, nil
 	case 1:
-		projectID, err := cmdutil.ResolveProjectID("")
+		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 		if err != nil {
 			return "", "", err
 		}
@@ -63,6 +75,14 @@ func pickDomain(client *api.APIClient, projectID string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no domain selected")
+}
+
+// resolveEnvironmentForDomain returns an environment ID from flag or interactive select.
+func resolveEnvironmentForDomain(c *cli.Context, client *api.APIClient, projectID string) (string, error) {
+	if envID := c.String("environment"); envID != "" {
+		return envID, nil
+	}
+	return pickEnvironment(client, projectID)
 }
 
 // pickEnvironment shows a required interactive environment selector.
