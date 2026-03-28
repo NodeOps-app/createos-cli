@@ -137,7 +137,7 @@ Examples:
 				}
 			}
 
-			settings := api.HttpCronjobSettings{
+			settings := api.HTTPCronjobSettings{
 				Path:   path,
 				Method: method,
 			}

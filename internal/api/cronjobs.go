@@ -44,8 +44,8 @@ type CreateCronjobRequest struct {
 	Settings      json.RawMessage `json:"settings,omitempty"`
 }
 
-// HttpCronjobSettings holds the settings for an HTTP-type cron job.
-type HttpCronjobSettings struct {
+// HTTPCronjobSettings holds the settings for an HTTP-type cron job.
+type HTTPCronjobSettings struct {
 	Path             string            `json:"path"`
 	Method           string            `json:"method"`
 	Headers          map[string]string `json:"headers,omitempty"`

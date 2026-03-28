@@ -52,7 +52,7 @@ Examples:
 			method := c.String("method")
 
 			// Decode existing settings for defaults in both TTY and non-TTY.
-			var currentSettings api.HttpCronjobSettings
+			var currentSettings api.HTTPCronjobSettings
 			if existing.Settings != nil {
 				_ = json.Unmarshal(*existing.Settings, &currentSettings)
 			}
@@ -121,7 +121,7 @@ Examples:
 				}
 			}
 
-			settings := api.HttpCronjobSettings{
+			settings := api.HTTPCronjobSettings{
 				Path:   path,
 				Method: method,
 			}
