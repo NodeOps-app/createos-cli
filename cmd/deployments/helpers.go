@@ -55,7 +55,11 @@ func pickDeployment(client *api.APIClient, projectID string) (string, error) {
 
 	options := make([]string, len(deployments))
 	for i, d := range deployments {
-		label := fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, d.ID[:8])
+		id := d.ID
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		label := fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id)
 		if d.Source != nil && d.Source.Commit != "" {
 			commit := d.Source.Commit
 			if len(commit) > 7 {
@@ -65,7 +69,7 @@ func pickDeployment(client *api.APIClient, projectID string) (string, error) {
 			if len(msg) > 50 {
 				msg = msg[:50] + "…"
 			}
-			label = fmt.Sprintf("%s  %s  %s  %s %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, d.ID[:8], commit, msg)
+			label = fmt.Sprintf("%s  %s  %s  %s %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id, commit, msg)
 		}
 		options[i] = label
 	}

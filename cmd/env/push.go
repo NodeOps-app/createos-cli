@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pterm/pterm"
@@ -35,6 +36,10 @@ func newEnvPushCommand() *cli.Command {
 			filePath := c.String("file")
 			if filePath == "" {
 				filePath = ".env." + env.UniqueName
+			}
+
+			if filepath.IsAbs(filePath) || strings.Contains(filePath, "..") {
+				return fmt.Errorf("--file must be a relative path without '..' (got %q)", filePath)
 			}
 
 			data, err := os.ReadFile(filePath) //nolint:gosec

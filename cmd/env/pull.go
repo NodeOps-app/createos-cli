@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -36,6 +37,10 @@ func newEnvPullCommand() *cli.Command {
 			filePath := c.String("file")
 			if filePath == "" {
 				filePath = ".env." + env.UniqueName
+			}
+
+			if filepath.IsAbs(filePath) || strings.Contains(filePath, "..") {
+				return fmt.Errorf("--file must be a relative path without '..' (got %q)", filePath)
 			}
 
 			// Check if file exists

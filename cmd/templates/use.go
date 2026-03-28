@@ -93,7 +93,10 @@ func newTemplatesUseCommand() *cli.Command {
 
 			dir := c.String("dir")
 			if dir == "" {
-				dir = tmpl.Name
+				dir = filepath.Base(tmpl.Name)
+				if dir == "." || dir == ".." {
+					return fmt.Errorf("template name %q is not safe as a directory name — use --dir to specify output directory", tmpl.Name)
+				}
 			}
 
 			absDir, err := filepath.Abs(dir)

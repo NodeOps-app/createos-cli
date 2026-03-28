@@ -91,7 +91,11 @@ func NewOpenCommand() *cli.Command {
 				} else {
 					options := make([]string, len(deploymentsWithURL))
 					for i, d := range deploymentsWithURL {
-						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, d.ID[:8])
+						id := d.ID
+						if len(id) > 8 {
+							id = id[:8]
+						}
+						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id)
 					}
 					selected, err := pterm.DefaultInteractiveSelect.
 						WithOptions(options).

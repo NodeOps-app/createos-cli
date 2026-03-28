@@ -3,6 +3,7 @@ package root
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -64,6 +65,14 @@ func NewApp() *cli.App {
 		Before: func(c *cli.Context) error {
 			// Store the output format in metadata
 			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
+
+			apiURL := c.String("api-url")
+			if apiURL != "" && apiURL != api.DefaultBaseURL {
+				parsed, err := url.Parse(apiURL)
+				if err != nil || (parsed.Scheme != "https" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1") {
+					return fmt.Errorf("--api-url must use HTTPS (got %q)\n\n  Exception: localhost and 127.0.0.1 are allowed for development", apiURL)
+				}
+			}
 
 			cmd := c.Args().First()
 			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" {

@@ -58,7 +58,10 @@ func newDomainsListCommand() *cli.Command {
 					if name, ok := envName[*d.EnvironmentID]; ok {
 						env = name
 					} else {
-						env = (*d.EnvironmentID)[:8]
+						env = *d.EnvironmentID
+					if len(env) > 8 {
+						env = env[:8]
+					}
 					}
 				}
 				tableData = append(tableData, []string{d.ID, d.Name, env, icon + " " + d.Status, msg})

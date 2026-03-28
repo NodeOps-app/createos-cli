@@ -145,9 +145,9 @@ func (c *APIClient) GetSkillDownloadURL(purchasedID string) (string, error) {
 // PaginatedResponse wraps a paginated list API response envelope.
 type PaginatedResponse[T any] struct {
 	Data struct {
-		Items []T `json:"data"`
+		Items      []T        `json:"data"`
+		Pagination Pagination `json:"pagination"`
 	} `json:"data"`
-	Pagination Pagination `json:"pagination"`
 }
 
 // Pagination holds metadata about a paginated response.
@@ -178,7 +178,7 @@ func (c *APIClient) ListAvailableSkillsForPurchase(searchText string, offset int
 	if resp.IsError() {
 		return nil, Pagination{}, ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return result.Data.Items, result.Pagination, nil
+	return result.Data.Items, result.Data.Pagination, nil
 }
 
 // DeploymentExtra holds extra deployment metadata.
