@@ -11,7 +11,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newDomainsVerifyCommand() *cli.Command {
@@ -31,31 +30,16 @@ func newDomainsVerifyCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "a domain ID")
+			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
 			if err != nil {
 				return err
 			}
 
-			// Trigger a refresh first
-			if err := client.RefreshDomain(projectID, domainID); err != nil {
-				return err
-			}
+			_ = client.RefreshDomain(projectID, domainID)
 
-			// Check status
-			domains, err := client.ListDomains(projectID)
+			domain, err := findDomain(client, projectID, domainID)
 			if err != nil {
 				return err
-			}
-
-			var domain *api.Domain
-			for i := range domains {
-				if domains[i].ID == domainID {
-					domain = &domains[i]
-					break
-				}
-			}
-			if domain == nil {
-				return fmt.Errorf("domain %s not found", domainID)
 			}
 
 			if domain.Status == "verified" || domain.Status == "active" {
@@ -63,12 +47,14 @@ func newDomainsVerifyCommand() *cli.Command {
 				return nil
 			}
 
+			// Show required DNS records so the user knows what to configure
+			printDNSRecords(*domain)
+
 			if c.Bool("no-wait") {
 				pterm.Warning.Printf("Domain %s status: %s\n", domain.Name, domain.Status)
 				return nil
 			}
 
-			// Poll until verified
 			pterm.Info.Printf("Waiting for DNS verification of %s...\n", domain.Name)
 
 			ticker := time.NewTicker(10 * time.Second)
@@ -85,15 +71,12 @@ func newDomainsVerifyCommand() *cli.Command {
 				select {
 				case <-sigCh:
 					fmt.Println()
-					pterm.Info.Println("Verification stopped. You can check again later with:")
-					pterm.Println(pterm.Gray("    createos domains verify " + projectID + " " + domainID))
+					pterm.Info.Println("Verification stopped.")
 					return nil
 				case <-ticker.C:
 					attempts++
 					if attempts > maxAttempts {
-						pterm.Warning.Println("DNS propagation is taking longer than expected.")
-						pterm.Println(pterm.Gray("  DNS changes can take up to 48 hours. Try again later:"))
-						pterm.Println(pterm.Gray("    createos domains verify " + projectID + " " + domainID))
+						pterm.Warning.Println("DNS propagation is taking longer than expected. Changes can take up to 48 hours.")
 						return nil
 					}
 
@@ -102,14 +85,13 @@ func newDomainsVerifyCommand() *cli.Command {
 					if err != nil {
 						continue
 					}
-
 					for _, d := range domains {
 						if d.ID == domainID {
 							if d.Status == "verified" || d.Status == "active" {
 								pterm.Success.Printf("Domain %s is verified!\n", d.Name)
 								return nil
 							}
-							fmt.Printf("  ⏳ Checking DNS... %s\n", d.Status)
+							fmt.Printf("  ⏳ %s\n", d.Status)
 							break
 						}
 					}
@@ -117,4 +99,17 @@ func newDomainsVerifyCommand() *cli.Command {
 			}
 		},
 	}
+}
+
+func findDomain(client *api.APIClient, projectID, domainID string) (*api.Domain, error) {
+	domains, err := client.ListDomains(projectID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range domains {
+		if domains[i].ID == domainID {
+			return &domains[i], nil
+		}
+	}
+	return nil, fmt.Errorf("domain %s not found", domainID)
 }

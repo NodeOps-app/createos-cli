@@ -19,7 +19,7 @@ func newEnvPullCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "environment", Usage: "Environment ID"},
-			&cli.StringFlag{Name: "file", Value: ".env", Usage: "Output file path"},
+			&cli.StringFlag{Name: "file", Usage: "Output file path (default: .env.<environment>)"},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite existing file without confirmation"},
 		},
 		Action: func(c *cli.Context) error {
@@ -28,12 +28,15 @@ func newEnvPullCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, envID, err := resolveProjectEnv(c, client)
+			projectID, env, err := resolveProjectEnv(c, client)
 			if err != nil {
 				return err
 			}
 
 			filePath := c.String("file")
+			if filePath == "" {
+				filePath = ".env." + env.UniqueName
+			}
 
 			// Check if file exists
 			if !c.Bool("force") {
@@ -48,7 +51,7 @@ func newEnvPullCommand() *cli.Command {
 				}
 			}
 
-			vars, err := client.GetEnvironmentVariables(projectID, envID)
+			vars, err := client.GetEnvironmentVariables(projectID, env.ID)
 			if err != nil {
 				return err
 			}
@@ -78,6 +81,7 @@ func newEnvPullCommand() *cli.Command {
 			}
 
 			pterm.Success.Printf("Pulled %d variables to %s\n", len(vars), filePath)
+			ensureEnvGitignored()
 			return nil
 		},
 	}

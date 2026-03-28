@@ -29,7 +29,7 @@ func newEnvSetCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, envID, err := resolveProjectEnv(c, client)
+			projectID, env, err := resolveProjectEnv(c, client)
 			if err != nil {
 				return err
 			}
@@ -52,7 +52,7 @@ func newEnvSetCommand() *cli.Command {
 			}
 
 			// Get existing vars and merge
-			existing, err := client.GetEnvironmentVariables(projectID, envID)
+			existing, err := client.GetEnvironmentVariables(projectID, env.ID)
 			if err != nil {
 				return err
 			}
@@ -63,7 +63,7 @@ func newEnvSetCommand() *cli.Command {
 				existing[k] = v
 			}
 
-			if err := client.UpdateEnvironmentVariables(projectID, envID, existing); err != nil {
+			if err := client.UpdateEnvironmentVariables(projectID, env.ID, existing); err != nil {
 				return err
 			}
 

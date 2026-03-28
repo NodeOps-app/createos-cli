@@ -112,12 +112,28 @@ func NewStatusCommand() *cli.Command {
 				}
 			}
 
-			// Domains
-			if len(domains) > 0 {
+			// Active domains — paired with their environment URL
+			domainEnvEndpoint := map[string]string{}
+			for _, env := range environments {
+				for _, d := range env.Extra.CustomDomains {
+					domainEnvEndpoint[d] = env.Extra.Endpoint
+				}
+			}
+			var activeDomains []api.Domain
+			for _, d := range domains {
+				if d.Status == "active" {
+					activeDomains = append(activeDomains, d)
+				}
+			}
+			if len(activeDomains) > 0 {
 				fmt.Println()
 				cyan.Println("  Domains:")
-				for _, d := range domains {
-					fmt.Printf("    %s %s — %s\n", domainStatusIcon(d.Status), d.Name, d.Status)
+				for _, d := range activeDomains {
+					if envURL := domainEnvEndpoint[d.Name]; envURL != "" {
+						fmt.Printf("    %s %s | %s\n", pterm.Green("✓"), envURL, d.Name)
+					} else {
+						fmt.Printf("    %s %s\n", pterm.Green("✓"), d.Name)
+					}
 				}
 			}
 
@@ -154,20 +170,10 @@ func statusIcon(status string) string {
 	}
 }
 
-func domainStatusIcon(status string) string {
-	switch status {
-	case "verified", "active":
-		return pterm.Green("✓")
-	case "pending":
-		return pterm.Yellow("⏳")
-	default:
-		return pterm.Red("✗")
-	}
-}
 
 func deployStatusIcon(status string) string {
 	switch status {
-	case "successful", "running", "active":
+	case "successful", "running", "active", "deployed":
 		return pterm.Green("✓")
 	case "building", "deploying", "pending":
 		return pterm.Yellow("●")

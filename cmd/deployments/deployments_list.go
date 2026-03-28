@@ -51,9 +51,6 @@ func newDeploymentsListCommand() *cli.Command {
 			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
 				return err
 			}
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see logs for a deployment, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments logs " + projectID + " <deployment-id>"))
 			return nil
 		},
 	}

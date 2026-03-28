@@ -25,6 +25,7 @@ func newDomainsListCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+
 			domains, err := client.ListDomains(projectID)
 			if err != nil {
 				return err
@@ -32,14 +33,19 @@ func newDomainsListCommand() *cli.Command {
 
 			if len(domains) == 0 {
 				fmt.Println("No custom domains added yet.")
-				fmt.Println()
-				pterm.Println(pterm.Gray("  Tip: To add a domain, run:"))
-				pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 				return nil
 			}
 
+			// Build env ID → name map for display
+			envName := map[string]string{}
+			if envs, err := client.ListEnvironments(projectID); err == nil {
+				for _, e := range envs {
+					envName[e.ID] = e.DisplayName
+				}
+			}
+
 			tableData := pterm.TableData{
-				{"ID", "Domain", "Status", "Message"},
+				{"ID", "Domain", "Environment", "Status", "Message"},
 			}
 			for _, d := range domains {
 				icon := domainIcon(d.Status)
@@ -47,15 +53,21 @@ func newDomainsListCommand() *cli.Command {
 				if d.Message != nil {
 					msg = *d.Message
 				}
-				tableData = append(tableData, []string{d.ID, d.Name, icon + " " + d.Status, msg})
+				env := "—"
+				if d.EnvironmentID != nil && *d.EnvironmentID != "" {
+					if name, ok := envName[*d.EnvironmentID]; ok {
+						env = name
+					} else {
+						env = (*d.EnvironmentID)[:8]
+					}
+				}
+				tableData = append(tableData, []string{d.ID, d.Name, env, icon + " " + d.Status, msg})
 			}
 
 			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To add a new domain, run:"))
-			pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 			return nil
 		},
 	}

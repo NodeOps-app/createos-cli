@@ -19,7 +19,7 @@ func newEnvListCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "environment", Usage: "Environment ID"},
-			&cli.BoolFlag{Name: "show", Usage: "Reveal full values (masked by default)"},
+			&cli.BoolFlag{Name: "hide", Usage: "Mask values"},
 		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -27,12 +27,12 @@ func newEnvListCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, envID, err := resolveProjectEnv(c, client)
+			projectID, env, err := resolveProjectEnv(c, client)
 			if err != nil {
 				return err
 			}
 
-			vars, err := client.GetEnvironmentVariables(projectID, envID)
+			vars, err := client.GetEnvironmentVariables(projectID, env.ID)
 			if err != nil {
 				return err
 			}
@@ -54,7 +54,7 @@ func newEnvListCommand() *cli.Command {
 			tableData := pterm.TableData{{"KEY", "VALUE"}}
 			for k, v := range vars {
 				val := v
-				if !c.Bool("show") {
+				if c.Bool("hide") {
 					val = maskValue(v)
 				}
 				tableData = append(tableData, []string{k, val})
@@ -64,9 +64,6 @@ func newEnvListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			if !c.Bool("show") {
-				pterm.Println(pterm.Gray("  Use --show to reveal full values."))
-			}
 			return nil
 		},
 	}

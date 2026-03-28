@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -185,15 +186,23 @@ type DeploymentExtra struct {
 	Endpoint string `json:"endpoint"`
 }
 
+// DeploymentSource holds git/vcs source info for a deployment.
+type DeploymentSource struct {
+	Branch        string `json:"branch"`
+	Commit        string `json:"commit"`
+	CommitMessage string `json:"commitMessage"`
+}
+
 // Deployment represents a project deployment.
 type Deployment struct {
-	ID            string          `json:"id"`
-	ProjectID     string          `json:"projectId"`
-	Status        string          `json:"status"`
-	VersionNumber int             `json:"versionNumber"`
-	Extra         DeploymentExtra `json:"extra"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	UpdatedAt     time.Time       `json:"updatedAt"`
+	ID            string              `json:"id"`
+	ProjectID     string              `json:"projectId"`
+	Status        string              `json:"status"`
+	VersionNumber int                 `json:"versionNumber"`
+	Source        *DeploymentSource   `json:"source"`
+	Extra         DeploymentExtra     `json:"extra"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	UpdatedAt     time.Time           `json:"updatedAt"`
 }
 
 // ListDeployments returns all deployments for a project.
@@ -289,14 +298,28 @@ func (c *APIClient) WakeupDeployment(projectID, deploymentID string) error {
 }
 
 // Domain represents a project custom domain
+// DomainTXTRecord holds a TXT record for domain verification.
+type DomainTXTRecord struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// DomainDNSRecords holds the DNS records required to set up a custom domain.
+type DomainDNSRecords struct {
+	TXTRecords []DomainTXTRecord `json:"txt_records"`
+	ARecords   []string          `json:"a_records"`
+}
+
 type Domain struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	ProjectID string  `json:"projectId"`
-	Status    string  `json:"status"`
-	Message   *string `json:"message"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	ProjectID     string           `json:"projectId"`
+	EnvironmentID *string          `json:"environmentId"`
+	Status        string           `json:"status"`
+	Message       *string          `json:"message"`
+	Records       *DomainDNSRecords `json:"records"`
+	CreatedAt     string           `json:"createdAt"`
+	UpdatedAt     string           `json:"updatedAt"`
 }
 
 // ListDomains returns all custom domains for a project.
@@ -315,13 +338,18 @@ func (c *APIClient) ListDomains(projectID string) ([]Domain, error) {
 }
 
 // AddDomain adds a custom domain to a project and returns the new domain ID.
-func (c *APIClient) AddDomain(projectID, name string) (string, error) {
+// environmentID is optional — pass empty string to skip.
+func (c *APIClient) AddDomain(projectID, name, environmentID string) (string, error) {
 	var result Response[struct {
 		ID string `json:"id"`
 	}]
+	body := map[string]any{"name": name}
+	if environmentID != "" {
+		body["environmentId"] = environmentID
+	}
 	resp, err := c.Client.R().
 		SetResult(&result).
-		SetBody(map[string]string{"name": name}).
+		SetBody(body).
 		Post("/v1/projects/" + projectID + "/domains")
 	if err != nil {
 		return "", err
@@ -330,6 +358,24 @@ func (c *APIClient) AddDomain(projectID, name string) (string, error) {
 		return "", ParseAPIError(resp.StatusCode(), resp.Body())
 	}
 	return result.Data.ID, nil
+}
+
+// UpdateDomainEnvironment links a domain to an environment.
+func (c *APIClient) UpdateDomainEnvironment(projectID, domainID, environmentID string) error {
+	body := map[string]any{}
+	if environmentID != "" {
+		body["environmentId"] = environmentID
+	}
+	resp, err := c.Client.R().
+		SetBody(body).
+		Put("/v1/projects/" + projectID + "/domains/" + domainID + "/environment")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
 }
 
 // DeleteDomain removes a custom domain from a project.
@@ -384,20 +430,27 @@ type EnvironmentExtra struct {
 	CustomDomains []string `json:"customDomains"`
 }
 
+// EnvironmentSettings holds mutable environment settings returned by the API.
+type EnvironmentSettings struct {
+	RunEnvs map[string]string `json:"runEnvs"`
+}
+
 // Environment represents a project environment.
 type Environment struct {
-	ID                   string           `json:"id"`
-	DisplayName          string           `json:"displayName"`
-	UniqueName           string           `json:"uniqueName"`
-	Description          *string          `json:"description"`
-	ProjectID            string           `json:"projectId"`
-	Branch               *string          `json:"branch"`
-	ProjectDeploymentID  *string          `json:"projectDeploymentId"`
-	IsAutoPromoteEnabled bool             `json:"isAutoPromoteEnabled"`
-	Status               string           `json:"status"`
-	CreatedAt            time.Time        `json:"createdAt"`
-	UpdatedAt            time.Time        `json:"updatedAt"`
-	Extra                EnvironmentExtra `json:"extra"`
+	ID                   string              `json:"id"`
+	DisplayName          string              `json:"displayName"`
+	UniqueName           string              `json:"uniqueName"`
+	Description          *string             `json:"description"`
+	ProjectID            string              `json:"projectId"`
+	Branch               *string             `json:"branch"`
+	ProjectDeploymentID  *string             `json:"projectDeploymentId"`
+	IsAutoPromoteEnabled bool                `json:"isAutoPromoteEnabled"`
+	Status               string              `json:"status"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	UpdatedAt            time.Time           `json:"updatedAt"`
+	Settings             EnvironmentSettings `json:"settings"`
+	Extra                EnvironmentExtra    `json:"extra"`
+	Resources            ResourceSettings    `json:"resources"`
 }
 
 // ListEnvironments returns all environments for a project.
@@ -430,23 +483,25 @@ func (c *APIClient) DeleteEnvironment(projectID, environmentID string) error {
 
 // GetEnvironmentVariables returns the environment variables for a project environment.
 func (c *APIClient) GetEnvironmentVariables(projectID, environmentID string) (map[string]string, error) {
-	var result Response[map[string]string]
-	resp, err := c.Client.R().
-		SetResult(&result).
-		Get("/v1/projects/" + projectID + "/environments/" + environmentID + "/environment-variables")
+	environments, err := c.ListEnvironments(projectID)
 	if err != nil {
 		return nil, err
 	}
-	if resp.IsError() {
-		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	for _, env := range environments {
+		if env.ID == environmentID {
+			if env.Settings.RunEnvs == nil {
+				return map[string]string{}, nil
+			}
+			return env.Settings.RunEnvs, nil
+		}
 	}
-	return result.Data, nil
+	return nil, &APIError{StatusCode: 404, Message: "environment not found"}
 }
 
 // UpdateEnvironmentVariables sets the environment variables for a project environment.
 func (c *APIClient) UpdateEnvironmentVariables(projectID, environmentID string, vars map[string]string) error {
 	resp, err := c.Client.R().
-		SetBody(map[string]any{"environmentVariables": vars}).
+		SetBody(map[string]any{"runEnvs": vars}).
 		Put("/v1/projects/" + projectID + "/environments/" + environmentID + "/environment-variables")
 	if err != nil {
 		return err
@@ -468,18 +523,18 @@ type ResourceSettings struct {
 type ScaleRequest = ResourceSettings
 
 // GetEnvironmentResources returns the resource settings for an environment.
+// Resources are embedded in the environment object — there is no separate GET endpoint.
 func (c *APIClient) GetEnvironmentResources(projectID, environmentID string) (*ResourceSettings, error) {
-	var result Response[ResourceSettings]
-	resp, err := c.Client.R().
-		SetResult(&result).
-		Get("/v1/projects/" + projectID + "/environments/" + environmentID + "/resources")
+	envs, err := c.ListEnvironments(projectID)
 	if err != nil {
 		return nil, err
 	}
-	if resp.IsError() {
-		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	for _, env := range envs {
+		if env.ID == environmentID {
+			return &env.Resources, nil
+		}
 	}
-	return &result.Data, nil
+	return nil, fmt.Errorf("environment %q not found", environmentID)
 }
 
 // UpdateEnvironmentResources updates the resource allocation for an environment.

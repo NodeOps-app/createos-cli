@@ -52,34 +52,83 @@ func NewOpenCommand() *cli.Command {
 				return browser.Open(url)
 			}
 
-			// Find the live URL from environments
 			envs, err := client.ListEnvironments(projectID)
 			if err != nil {
 				return err
 			}
 
-			if len(envs) == 0 {
-				fmt.Println("No environments found — the project may not be deployed yet.")
-				fmt.Println()
-				pterm.Println(pterm.Gray("  Deploy first, then try again."))
-				return nil
-			}
-
-			// Use the first environment with an endpoint
-			var url string
+			// Collect environments that have an endpoint
+			var envsWithURL []api.Environment
 			for _, env := range envs {
 				if env.Extra.Endpoint != "" {
-					url = env.Extra.Endpoint
-					break
+					envsWithURL = append(envsWithURL, env)
 				}
 			}
 
-			if url == "" {
-				fmt.Println("No live URL found for this project.")
-				return nil
+			var url string
+
+			switch len(envsWithURL) {
+			case 0:
+				// No environment URLs — fall back to deployments
+				deployments, err := client.ListDeployments(projectID)
+				if err != nil {
+					return err
+				}
+				var deploymentsWithURL []api.Deployment
+				for _, d := range deployments {
+					if d.Extra.Endpoint != "" {
+						deploymentsWithURL = append(deploymentsWithURL, d)
+					}
+				}
+				if len(deploymentsWithURL) == 0 {
+					fmt.Println("No live URL found — the project may not be deployed yet.")
+					fmt.Println()
+					pterm.Println(pterm.Gray("  Deploy first, then try again."))
+					return nil
+				}
+				if len(deploymentsWithURL) == 1 {
+					url = deploymentsWithURL[0].Extra.Endpoint
+				} else {
+					options := make([]string, len(deploymentsWithURL))
+					for i, d := range deploymentsWithURL {
+						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, d.ID[:8])
+					}
+					selected, err := pterm.DefaultInteractiveSelect.
+						WithOptions(options).
+						WithDefaultText("Select a deployment").
+						Show()
+					if err != nil {
+						return fmt.Errorf("could not read selection: %w", err)
+					}
+					for i, opt := range options {
+						if opt == selected {
+							url = deploymentsWithURL[i].Extra.Endpoint
+							break
+						}
+					}
+				}
+			case 1:
+				url = envsWithURL[0].Extra.Endpoint
+			default:
+				options := make([]string, len(envsWithURL))
+				for i, env := range envsWithURL {
+					options[i] = fmt.Sprintf("%s — %s", env.DisplayName, env.Extra.Endpoint)
+				}
+				selected, err := pterm.DefaultInteractiveSelect.
+					WithOptions(options).
+					WithDefaultText("Select an environment").
+					Show()
+				if err != nil {
+					return fmt.Errorf("could not read selection: %w", err)
+				}
+				for i, opt := range options {
+					if opt == selected {
+						url = envsWithURL[i].Extra.Endpoint
+						break
+					}
+				}
 			}
 
-			// Ensure URL has a scheme
 			if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 				url = "https://" + url
 			}

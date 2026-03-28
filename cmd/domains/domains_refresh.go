@@ -7,7 +7,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newDomainsRefreshCommand() *cli.Command {
@@ -24,7 +23,7 @@ func newDomainsRefreshCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "a domain ID")
+			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
 			if err != nil {
 				return err
 			}
@@ -34,9 +33,6 @@ func newDomainsRefreshCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Domain refresh started. This may take a few minutes.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To check the domain status, run:"))
-			pterm.Println(pterm.Gray("    createos domains list " + projectID))
 			return nil
 		},
 	}

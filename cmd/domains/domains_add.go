@@ -15,9 +15,6 @@ func newDomainsAddCommand() *cli.Command {
 		Name:      "add",
 		Usage:     "Add a custom domain to a project",
 		ArgsUsage: "[project-id] <domain>",
-		Description: "Adds a custom domain to your project.\n\n" +
-			"   After adding, point your DNS to the provided records, then run:\n" +
-			"     createos domains refresh <project-id> <domain-id>",
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
@@ -29,7 +26,12 @@ func newDomainsAddCommand() *cli.Command {
 				return err
 			}
 
-			id, err := client.AddDomain(projectID, name)
+			environmentID, err := pickEnvironment(client, projectID)
+			if err != nil {
+				return err
+			}
+
+			id, err := client.AddDomain(projectID, name, environmentID)
 			if err != nil {
 				return err
 			}
@@ -37,20 +39,41 @@ func newDomainsAddCommand() *cli.Command {
 			pterm.Success.Printf("Domain %q added successfully.\n", name)
 			fmt.Println()
 
-			// Show DNS setup instructions
-			fmt.Println("  Configure your DNS with the following record:")
-			fmt.Println()
-			tableData := pterm.TableData{
-				{"Type", "Name", "Value"},
-				{"CNAME", name, projectID + ".nodeops.app"},
+			// Fetch domain to get DNS records
+			domains, err := client.ListDomains(projectID)
+			if err == nil {
+				for _, d := range domains {
+					if d.ID == id {
+						printDNSRecords(d)
+						return nil
+					}
+				}
 			}
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-				return err
-			}
-			fmt.Println()
-			pterm.Println(pterm.Gray("  After updating DNS, verify with:"))
-			pterm.Println(pterm.Gray("    createos domains refresh " + projectID + " " + id))
+
+			// Fallback if records not yet available
+			fmt.Println("  DNS records are being generated. Run 'createos domains verify' to check status.")
 			return nil
 		},
 	}
+}
+
+func printDNSRecords(d api.Domain) {
+	if d.Records == nil || (len(d.Records.ARecords) == 0 && len(d.Records.TXTRecords) == 0) {
+		fmt.Println("  DNS records are being generated. Run verify to check status.")
+		return
+	}
+
+	fmt.Println("  Configure your DNS with the following records:")
+	fmt.Println()
+
+	tableData := pterm.TableData{{"Type", "Name", "Value"}}
+	for _, a := range d.Records.ARecords {
+		tableData = append(tableData, []string{"A", d.Name, a})
+	}
+	for _, txt := range d.Records.TXTRecords {
+		tableData = append(tableData, []string{"TXT", txt.Name + "." + d.Name, txt.Value})
+	}
+
+	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+	fmt.Println()
 }

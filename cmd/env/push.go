@@ -18,7 +18,7 @@ func newEnvPushCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "environment", Usage: "Environment ID"},
-			&cli.StringFlag{Name: "file", Value: ".env", Usage: "Input file path"},
+			&cli.StringFlag{Name: "file", Usage: "Input file path (default: .env.<environment>)"},
 			&cli.BoolFlag{Name: "force", Usage: "Push without confirmation"},
 		},
 		Action: func(c *cli.Context) error {
@@ -27,12 +27,16 @@ func newEnvPushCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, envID, err := resolveProjectEnv(c, client)
+			projectID, env, err := resolveProjectEnv(c, client)
 			if err != nil {
 				return err
 			}
 
 			filePath := c.String("file")
+			if filePath == "" {
+				filePath = ".env." + env.UniqueName
+			}
+
 			data, err := os.ReadFile(filePath) //nolint:gosec
 			if err != nil {
 				return fmt.Errorf("could not read %s: %w", filePath, err)
@@ -60,7 +64,7 @@ func newEnvPushCommand() *cli.Command {
 			}
 
 			// Merge with existing
-			existing, err := client.GetEnvironmentVariables(projectID, envID)
+			existing, err := client.GetEnvironmentVariables(projectID, env.ID)
 			if err != nil {
 				return err
 			}
@@ -71,11 +75,12 @@ func newEnvPushCommand() *cli.Command {
 				existing[k] = v
 			}
 
-			if err := client.UpdateEnvironmentVariables(projectID, envID, existing); err != nil {
+			if err := client.UpdateEnvironmentVariables(projectID, env.ID, existing); err != nil {
 				return err
 			}
 
 			pterm.Success.Printf("Pushed %d variables from %s\n", len(vars), filePath)
+			ensureEnvGitignored()
 			return nil
 		},
 	}

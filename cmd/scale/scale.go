@@ -75,8 +75,26 @@ func resolveProjectAndEnv(c *cli.Context, client *api.APIClient) (string, string
 		if len(envs) == 0 {
 			return "", "", fmt.Errorf("no environments found for this project")
 		}
-		envID = envs[0].ID
-		pterm.Println(pterm.Gray(fmt.Sprintf("  Using environment: %s (%s)", envs[0].DisplayName, envID)))
+		if len(envs) == 1 {
+			pterm.Println(pterm.Gray(fmt.Sprintf("  Using environment: %s", envs[0].DisplayName)))
+			return projectID, envs[0].ID, nil
+		}
+		options := make([]string, len(envs))
+		for i, e := range envs {
+			options[i] = fmt.Sprintf("%s (%s)", e.DisplayName, e.Status)
+		}
+		selected, err := pterm.DefaultInteractiveSelect.
+			WithOptions(options).
+			WithDefaultText("Select an environment").
+			Show()
+		if err != nil {
+			return "", "", fmt.Errorf("could not read selection: %w", err)
+		}
+		for i, opt := range options {
+			if opt == selected {
+				return projectID, envs[i].ID, nil
+			}
+		}
 	}
 
 	return projectID, envID, nil

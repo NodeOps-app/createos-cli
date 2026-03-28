@@ -7,7 +7,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newDeploymentRetriggerCommand() *cli.Command {
@@ -24,7 +23,7 @@ func newDeploymentRetriggerCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, deploymentID, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "a deployment ID")
+			projectID, deploymentID, err := resolveDeployment(c.Args().Slice(), client)
 			if err != nil {
 				return err
 			}
@@ -34,9 +33,6 @@ func newDeploymentRetriggerCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Deployment retriggered. A new deployment is now being built.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To check the status of your deployments, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + projectID))
 			return nil
 		},
 	}

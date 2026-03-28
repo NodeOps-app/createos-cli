@@ -7,7 +7,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newDomainsDeleteCommand() *cli.Command {
@@ -24,7 +23,7 @@ func newDomainsDeleteCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, domainID, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "a domain ID")
+			projectID, domainID, err := resolveDomain(c.Args().Slice(), client)
 			if err != nil {
 				return err
 			}
@@ -47,9 +46,6 @@ func newDomainsDeleteCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Domain is being removed.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your remaining domains, run:"))
-			pterm.Println(pterm.Gray("    createos domains list " + projectID))
 			return nil
 		},
 	}
