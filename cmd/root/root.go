@@ -136,7 +136,7 @@ func NewApp() *cli.App {
 				fmt.Println("  skills         Manage skills")
 				fmt.Println("  status         Show project health and deployment status")
 				fmt.Println("  templates      Browse and scaffold from project templates")
-				fmt.Println("  users          Manage your user account")
+				fmt.Println("  me             Manage your account and OAuth consents")
 				fmt.Println("  vms            Manage VM terminal instances")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {

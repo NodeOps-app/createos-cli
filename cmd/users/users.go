@@ -2,11 +2,11 @@ package users
 
 import "github.com/urfave/cli/v2"
 
-// NewUsersCommand creates the users command with subcommands.
+// NewUsersCommand creates the me command with subcommands.
 func NewUsersCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "users",
-		Usage: "Manage your user account",
+		Name:  "me",
+		Usage: "Manage your account and OAuth consents",
 		Subcommands: []*cli.Command{
 			newOAuthConsentsCommand(),
 		},

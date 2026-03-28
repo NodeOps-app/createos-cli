@@ -165,12 +165,12 @@ createos --help
 | `createos oauth-clients create`        | Create a new OAuth client             |
 | `createos oauth-clients instructions`  | Show setup instructions for a client  |
 
-### Users
+### Me
 
-| Command                                | Description             |
-| -------------------------------------- | ----------------------- |
-| `createos users oauth-consents list`   | List OAuth consents     |
-| `createos users oauth-consents revoke` | Revoke an OAuth consent |
+| Command                             | Description             |
+| ----------------------------------- | ----------------------- |
+| `createos me oauth-consents list`   | List OAuth consents     |
+| `createos me oauth-consents revoke` | Revoke an OAuth consent |
 
 ### Other
 
