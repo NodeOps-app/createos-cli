@@ -157,12 +157,13 @@ createos --help
 | `createos open`   | Open a project's live URL in your browser         |
 | `createos scale`  | Adjust replicas and resources for an environment  |
 
-### OAuth
+### OAuth Clients
 
-| Command                         | Description              |
-| ------------------------------- | ------------------------ |
-| `createos oauth clients list`   | List OAuth clients       |
-| `createos oauth clients create` | Create a new OAuth client |
+| Command                                | Description                           |
+| -------------------------------------- | ------------------------------------- |
+| `createos oauth-clients list`          | List your OAuth clients               |
+| `createos oauth-clients create`        | Create a new OAuth client             |
+| `createos oauth-clients instructions`  | Show setup instructions for a client  |
 
 ### Users
 
@@ -184,6 +185,16 @@ createos --help
 All commands that would normally show an interactive prompt accept flags instead:
 
 ```bash
+# OAuth clients
+createos oauth-clients instructions --client <client-id>
+createos oauth-clients create \
+  --name "My App" \
+  --redirect-uri https://myapp.com/callback \
+  --app-url https://myapp.com \
+  --policy-url https://myapp.com/privacy \
+  --tos-url https://myapp.com/tos \
+  --logo-url https://myapp.com/logo.png
+
 # Projects
 createos projects get --project <id>
 

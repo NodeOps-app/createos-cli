@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func getClient(c *cli.Context) (*api.APIClient, error) {
@@ -17,6 +18,50 @@ func getClient(c *cli.Context) (*api.APIClient, error) {
 		return nil, fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	return client, nil
+}
+
+// resolveOAuthClientID resolves a client ID from flag, arg, or interactive select.
+func resolveOAuthClientID(c *cli.Context, apiClient *api.APIClient) (string, error) {
+	if id := c.String("client"); id != "" {
+		return id, nil
+	}
+	if c.NArg() > 0 {
+		return c.Args().First(), nil
+	}
+	if !terminal.IsInteractive() {
+		return "", fmt.Errorf("please provide a client ID\n\n  Example:\n    createos oauth-clients %s --client <client-id>", c.Command.Name)
+	}
+	return pickOAuthClient(apiClient)
+}
+
+func pickOAuthClient(apiClient *api.APIClient) (string, error) {
+	clients, err := apiClient.ListOAuthClients()
+	if err != nil {
+		return "", err
+	}
+	if len(clients) == 0 {
+		return "", fmt.Errorf("you don't have any OAuth clients yet — run 'createos oauth-clients create' to create one")
+	}
+	if len(clients) == 1 {
+		return clients[0].ID, nil
+	}
+	options := make([]string, len(clients))
+	for i, cl := range clients {
+		options[i] = cl.Name
+	}
+	selected, err := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultText("Select an OAuth client").
+		Show()
+	if err != nil {
+		return "", fmt.Errorf("could not read selection: %w", err)
+	}
+	for i, opt := range options {
+		if opt == selected {
+			return clients[i].ID, nil
+		}
+	}
+	return "", fmt.Errorf("no client selected")
 }
 
 func promptRequiredText(prompt string, validate func(string) error) (string, error) {
@@ -171,6 +216,4 @@ func printInstructions(apiURL string, client *api.OAuthClientDetail) {
 	fmt.Println("This CLI can fetch your client details, but the CreateOS API does not currently return the auth/token endpoints directly.")
 	fmt.Println("The URLs above match the tested oauth-client-test setup. If your deployment uses a different identity host, replace them there.")
 	fmt.Println()
-	pterm.Println(pterm.Gray("  Hint: To review app consents and revoke them, run:"))
-	pterm.Println(pterm.Gray("    createos users oauth-consents list"))
 }

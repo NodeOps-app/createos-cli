@@ -127,7 +127,7 @@ func NewApp() *cli.App {
 				fmt.Println("  environments   Manage project environments")
 				fmt.Println("  init           Link this directory to a CreateOS project")
 				fmt.Println("  logout         Sign out from CreateOS")
-				fmt.Println("  oauth          Manage OAuth clients")
+				fmt.Println("  oauth-clients  Manage OAuth clients")
 				fmt.Println("  open           Open project URL or dashboard in browser")
 				fmt.Println("  projects       Manage projects")
 				fmt.Println("  scale          Adjust replicas and resources")
