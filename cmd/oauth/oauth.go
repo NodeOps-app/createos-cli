@@ -10,6 +10,7 @@ func NewOAuthCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newListCommand(),
 			newCreateCommand(),
+			newDeleteCommand(),
 			newInstructionsCommand(),
 		},
 	}
