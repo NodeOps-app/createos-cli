@@ -104,7 +104,7 @@ func ensureEnvGitignored() {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	_, _ = f.WriteString(content)
 
 	pterm.Println(pterm.Gray("  Added .env.* to .gitignore"))

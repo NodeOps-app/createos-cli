@@ -1,3 +1,4 @@
+// Package cmdutil provides shared CLI utilities.
 package cmdutil
 
 import (

@@ -101,7 +101,7 @@ func newTemplatesUseCommand() *cli.Command {
 				return err
 			}
 
-			if err := os.MkdirAll(absDir, 0755); err != nil {
+			if err := os.MkdirAll(absDir, 0750); err != nil { //nolint:gosec
 				return fmt.Errorf("could not create directory %s: %w", dir, err)
 			}
 
@@ -117,7 +117,7 @@ func newTemplatesUseCommand() *cli.Command {
 
 			zipPath := filepath.Join(absDir, "template.zip")
 			if err := downloadToFile(zipPath, resp.Body); err != nil {
-				os.Remove(zipPath) //nolint:errcheck
+				_ = os.Remove(zipPath)
 				return err
 			}
 
@@ -133,7 +133,7 @@ func downloadToFile(path string, src io.Reader) error {
 		return fmt.Errorf("could not create file: %w", err)
 	}
 	if _, err := io.Copy(out, src); err != nil {
-		out.Close() //nolint:errcheck
+		_ = out.Close()
 		return fmt.Errorf("could not write template: %w", err)
 	}
 	if err := out.Close(); err != nil {
