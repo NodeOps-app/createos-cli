@@ -16,10 +16,10 @@ func newDomainsRefreshCommand() *cli.Command {
 		ArgsUsage: "<project-id> <domain-id>",
 		Description: "Triggers a DNS verification and certificate refresh for your domain.\n\n" +
 			"   To find your domain ID, run:\n" +
-			"     createos projects domains list <project-id>",
+			"     createos domains list <project-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and domain ID\n\n  Example:\n    createos projects domains refresh <project-id> <domain-id>")
+				return fmt.Errorf("please provide a project ID and domain ID\n\n  Example:\n    createos domains refresh <project-id> <domain-id>")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -37,7 +37,7 @@ func newDomainsRefreshCommand() *cli.Command {
 			pterm.Success.Println("Domain refresh started. This may take a few minutes.")
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To check the domain status, run:"))
-			pterm.Println(pterm.Gray("    createos projects domains list " + projectID))
+			pterm.Println(pterm.Gray("    createos domains list " + projectID))
 			return nil
 		},
 	}

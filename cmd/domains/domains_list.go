@@ -34,7 +34,7 @@ func newDomainsListCommand() *cli.Command {
 				fmt.Println("No custom domains added yet.")
 				fmt.Println()
 				pterm.Println(pterm.Gray("  Tip: To add a domain, run:"))
-				pterm.Println(pterm.Gray("    createos projects domains add " + projectID + " <your-domain.com>"))
+				pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 				return nil
 			}
 
@@ -54,7 +54,7 @@ func newDomainsListCommand() *cli.Command {
 			}
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To add a new domain, run:"))
-			pterm.Println(pterm.Gray("    createos projects domains add " + projectID + " <your-domain.com>"))
+			pterm.Println(pterm.Gray("    createos domains add " + projectID + " <your-domain.com>"))
 			return nil
 		},
 	}

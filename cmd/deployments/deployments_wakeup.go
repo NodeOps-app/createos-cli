@@ -16,10 +16,10 @@ func newDeploymentWakeupCommand() *cli.Command {
 		ArgsUsage: "<project-id> <deployment-id>",
 		Description: "Resumes a deployment that is currently sleeping.\n\n" +
 			"   To find your deployment ID, run:\n" +
-			"     createos projects deployments list <project-id>",
+			"     createos deployments list <project-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos projects deployments wakeup <project-id> <deployment-id>")
+				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos deployments wakeup <project-id> <deployment-id>")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -37,7 +37,7 @@ func newDeploymentWakeupCommand() *cli.Command {
 			pterm.Success.Println("Your deployment is waking up.")
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To check the status of your deployments, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + projectID))
+			pterm.Println(pterm.Gray("    createos deployments list " + projectID))
 			return nil
 		},
 	}

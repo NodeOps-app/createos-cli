@@ -16,10 +16,10 @@ func newEnvironmentsDeleteCommand() *cli.Command {
 		ArgsUsage: "<project-id> <environment-id>",
 		Description: "Permanently deletes an environment from your project.\n\n" +
 			"   To find your environment ID, run:\n" +
-			"     createos projects environments list <project-id>",
+			"     createos environments list <project-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and environment ID\n\n  Example:\n    createos projects environments delete <project-id> <environment-id>")
+				return fmt.Errorf("please provide a project ID and environment ID\n\n  Example:\n    createos environments delete <project-id> <environment-id>")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -50,7 +50,7 @@ func newEnvironmentsDeleteCommand() *cli.Command {
 			pterm.Success.Println("Environment deletion started.")
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To check the environment status, run:"))
-			pterm.Println(pterm.Gray("    createos projects environments list " + projectID))
+			pterm.Println(pterm.Gray("    createos environments list " + projectID))
 			return nil
 		},
 	}

@@ -16,10 +16,10 @@ func newDeploymentBuildLogsCommand() *cli.Command {
 		ArgsUsage: "<project-id> <deployment-id>",
 		Description: "Fetches the build logs for a deployment.\n\n" +
 			"   To find your deployment ID, run:\n" +
-			"     createos projects deployments list <project-id>",
+			"     createos deployments list <project-id>",
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos projects deployments build-logs <project-id> <deployment-id>")
+				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos deployments build-logs <project-id> <deployment-id>")
 			}
 
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -46,7 +46,7 @@ func newDeploymentBuildLogsCommand() *cli.Command {
 
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To see runtime logs, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments logs " + projectID + " " + deploymentID))
+			pterm.Println(pterm.Gray("    createos deployments logs " + projectID + " " + deploymentID))
 			return nil
 		},
 	}

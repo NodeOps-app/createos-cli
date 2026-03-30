@@ -53,7 +53,7 @@ func newDeploymentsListCommand() *cli.Command {
 			}
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To see logs for a deployment, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments logs " + projectID + " <deployment-id>"))
+			pterm.Println(pterm.Gray("    createos deployments logs " + projectID + " <deployment-id>"))
 			return nil
 		},
 	}

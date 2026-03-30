@@ -58,7 +58,7 @@ func newGetCommand() *cli.Command {
 
 			fmt.Println()
 			pterm.Println(pterm.Gray("  Tip: To manage deployments for this project, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + project.ID))
+			pterm.Println(pterm.Gray("    createos deployments list " + project.ID))
 
 			return nil
 		},
