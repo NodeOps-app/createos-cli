@@ -11,9 +11,8 @@ import (
 
 func newDeleteCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "delete",
-		Usage:     "Delete an OAuth client",
-		ArgsUsage: "[client-id]",
+		Name:  "delete",
+		Usage: "Delete an OAuth client",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "client", Usage: "OAuth client ID"},
 			&cli.BoolFlag{Name: "force", Usage: "Skip confirmation prompt (required in non-interactive mode)"},

@@ -140,9 +140,8 @@ func selectPublicKey() (publicKey string, privateKeyPath string, err error) {
 
 func newVMSSHCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "ssh",
-		Usage:     "Connect to a VM instance via SSH",
-		ArgsUsage: "[vm-id]",
+		Name:  "ssh",
+		Usage: "Connect to a VM instance via SSH",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.StringFlag{

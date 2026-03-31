@@ -3,6 +3,7 @@ package cronjobs
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -10,19 +11,26 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
+	"github.com/NodeOps-app/createos-cli/internal/utils"
 )
 
 func newCronjobsCreateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "create",
-		Usage:     "Create a new HTTP cron job for a project",
-		ArgsUsage: "[project-id]",
+		Name:  "create",
+		Usage: "Create a new HTTP cron job for a project",
 		Description: `Create a new HTTP cron job that fires on a cron schedule.
 
 Examples:
   createos cronjobs create --project <project-id> --environment <env-id> \
     --name "Cleanup job" --schedule "0 * * * *" \
-    --path /api/cleanup --method POST`,
+    --path /api/cleanup --method POST
+
+  # With custom headers and JSON body:
+  createos cronjobs create --project <project-id> --environment <env-id> \
+    --name "Webhook" --schedule "*/5 * * * *" \
+    --path /api/hook --method POST \
+    --header "Authorization=Bearer token" --header "X-Source=cron" \
+    --body '{"event":"tick"}'`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "environment", Usage: "Environment ID to attach the cron job to"},
@@ -30,6 +38,8 @@ Examples:
 			&cli.StringFlag{Name: "schedule", Usage: "Cron schedule expression (e.g. \"0 * * * *\")"},
 			&cli.StringFlag{Name: "path", Usage: "HTTP path to call (must start with /)"},
 			&cli.StringFlag{Name: "method", Usage: "HTTP method: GET, POST, PUT, DELETE, PATCH, HEAD", Value: "GET"},
+			&cli.StringSliceFlag{Name: "header", Usage: "HTTP header to send with each request (format: Key=Value, repeatable)"},
+			&cli.StringFlag{Name: "body", Usage: "JSON body to send with the request"},
 		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -37,11 +47,7 @@ Examples:
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			pid := c.String("project")
-			if pid == "" {
-				pid = c.Args().First()
-			}
-			projectID, err := cmdutil.ResolveProjectID(pid)
+			projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 			if err != nil {
 				return err
 			}
@@ -51,6 +57,8 @@ Examples:
 			environmentID := c.String("environment")
 			path := c.String("path")
 			method := c.String("method")
+			headers := parseHeaders(c.StringSlice("header"))
+			bodyStr := c.String("body")
 
 			if !terminal.IsInteractive() {
 				// Non-TTY: all values must come from flags.
@@ -123,6 +131,7 @@ Examples:
 					if err != nil {
 						return fmt.Errorf("could not read path: %w", err)
 					}
+					path = pterm.RemoveColorFromString(path)
 				}
 				if method == "GET" {
 					methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"}
@@ -135,11 +144,44 @@ Examples:
 					}
 					method = selected
 				}
+				if headers == nil {
+					headers = map[string]string{}
+					for {
+						pair, inputErr := pterm.DefaultInteractiveTextInput.
+							WithDefaultText("Add header (Key=Value, leave blank to skip)").
+							Show()
+						if inputErr != nil {
+							return fmt.Errorf("could not read header: %w", inputErr)
+						}
+						if pair == "" {
+							break
+						}
+						k, v, _ := strings.Cut(pair, "=")
+						if k != "" {
+							headers[k] = v
+						}
+					}
+					if len(headers) == 0 {
+						headers = nil
+					}
+				}
+				if bodyStr == "" && methodSupportsBody(method) {
+					bodyStr, err = pterm.DefaultInteractiveTextInput.
+						WithDefaultText("JSON body (leave blank to skip)").
+						Show()
+					if err != nil {
+						return fmt.Errorf("could not read body: %w", err)
+					}
+				}
 			}
 
 			settings := api.HTTPCronjobSettings{
-				Path:   path,
-				Method: method,
+				Path:    path,
+				Method:  method,
+				Headers: headers,
+			}
+			if bodyStr != "" {
+				settings.Body = utils.Ptr(bodyStr)
 			}
 			settingsJSON, err := json.Marshal(settings)
 			if err != nil {

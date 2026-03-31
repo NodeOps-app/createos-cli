@@ -4,40 +4,30 @@ import (
 	"fmt"
 
 	"github.com/pterm/pterm"
+	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// resolveDeployment resolves projectID and deploymentID from args or interactively.
-// Args can be:
-//   - <deployment-id>              (project resolved from .createos.json)
-//   - <project-id> <deployment-id> (explicit)
-//   - (none)                       → project from config, deployment from interactive select
-func resolveDeployment(args []string, client *api.APIClient) (string, string, error) {
-	switch len(args) {
-	case 0:
-		// No args — resolve project from config, then prompt for deployment
-		projectID, err := cmdutil.ResolveProjectID("")
-		if err != nil {
-			return "", "", err
-		}
-		deploymentID, err := pickDeployment(client, projectID)
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, deploymentID, nil
-	case 1:
-		// One arg — could be deployment ID (project from config)
-		projectID, err := cmdutil.ResolveProjectID("")
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, args[0], nil
-	default:
-		// Two args — project ID + deployment ID
-		return args[0], args[1], nil
+// resolveDeployment resolves projectID and deploymentID from flags or interactively.
+// Uses --project and --deployment flags; falls back to config and interactive select.
+func resolveDeployment(c *cli.Context, client *api.APIClient) (string, string, error) {
+	projectID, err := cmdutil.ResolveProjectID(c.String("project"))
+	if err != nil {
+		return "", "", err
 	}
+
+	if deploymentID := c.String("deployment"); deploymentID != "" {
+		return projectID, deploymentID, nil
+	}
+
+	deploymentID, err := pickDeployment(client, projectID)
+	if err != nil {
+		return "", "", err
+	}
+	return projectID, deploymentID, nil
 }
 
 func pickDeployment(client *api.APIClient, projectID string) (string, error) {
@@ -49,7 +39,6 @@ func pickDeployment(client *api.APIClient, projectID string) (string, error) {
 		return "", fmt.Errorf("no deployments found for this project")
 	}
 	if len(deployments) == 1 {
-		pterm.Println(pterm.Gray(fmt.Sprintf("  Using deployment: v%d (%s)", deployments[0].VersionNumber, deployments[0].Status)))
 		return deployments[0].ID, nil
 	}
 
@@ -72,6 +61,9 @@ func pickDeployment(client *api.APIClient, projectID string) (string, error) {
 			label = fmt.Sprintf("%s  %s  %s  %s %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id, commit, msg)
 		}
 		options[i] = label
+	}
+	if !terminal.IsInteractive() {
+		return "", fmt.Errorf("multiple deployments found — use --deployment <id> to specify one\n\n  To see your deployments, run:\n    createos deployments list")
 	}
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).

@@ -11,9 +11,8 @@ import (
 
 func newCronjobsUnsuspendCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "unsuspend",
-		Usage:     "Resume a suspended cron job",
-		ArgsUsage: "[project-id] [cronjob-id]",
+		Name:  "unsuspend",
+		Usage: "Resume a suspended cron job",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},

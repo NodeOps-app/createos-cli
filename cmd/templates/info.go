@@ -15,9 +15,8 @@ import (
 
 func newTemplatesInfoCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "info",
-		Usage:     "Show details about a template",
-		ArgsUsage: "[template-id]",
+		Name:  "info",
+		Usage: "Show details about a template",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "template", Usage: "Template ID"},
 		},

@@ -10,13 +10,10 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// resolveTemplate resolves a template ID from flags, args, or interactively.
+// resolveTemplate resolves a template ID from flags or interactively.
 func resolveTemplate(c *cli.Context, client *api.APIClient) (string, error) {
 	if id := c.String("template"); id != "" {
 		return id, nil
-	}
-	if c.NArg() > 0 {
-		return c.Args().First(), nil
 	}
 	if !terminal.IsInteractive() {
 		return "", fmt.Errorf("please provide a template ID\n\n  Example:\n    createos templates %s --template <template-id>", c.Command.Name)

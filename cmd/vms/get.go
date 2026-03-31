@@ -1,19 +1,21 @@
 package vms
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newVMGetCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "get",
-		Usage:     "Get details for a VM instance",
-		ArgsUsage: "[vm-id]",
+		Name:  "get",
+		Usage: "Get details for a VM instance",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 		},
@@ -31,6 +33,12 @@ func newVMGetCommand() *cli.Command {
 			vm, err := client.GetVMDeployment(id)
 			if err != nil {
 				return err
+			}
+
+			if output.IsJSON(c) {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(vm)
 			}
 
 			cyan := pterm.NewStyle(pterm.FgCyan)

@@ -49,6 +49,7 @@ type HTTPCronjobSettings struct {
 	Path             string            `json:"path"`
 	Method           string            `json:"method"`
 	Headers          map[string]string `json:"headers,omitempty"`
+	Body             *string           `json:"body,omitempty"`
 	TimeoutInSeconds *int              `json:"timeoutInSeconds,omitempty"`
 }
 

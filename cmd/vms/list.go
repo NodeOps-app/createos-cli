@@ -1,4 +1,4 @@
-package projects
+package vms
 
 import (
 	"fmt"
@@ -10,40 +10,50 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
-func newListCommand() *cli.Command {
+func newVMListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
-		Usage: "List all projects",
+		Usage: "List all VM terminal instances",
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projects, err := client.ListProjects()
+			vms, err := client.ListVMDeployments()
 			if err != nil {
 				return err
 			}
 
-			output.Render(c, projects, func() {
-				if len(projects) == 0 {
-					fmt.Println("You don't have any projects yet.")
+			output.Render(c, vms, func() {
+				if len(vms) == 0 {
+					fmt.Println("You don't have any VM instances yet.")
 					return
 				}
 
 				tableData := pterm.TableData{
-					{"ID", "Name", "Status", "Type", "Created At"},
+					{"ID", "Name", "Status", "IP Address", "Size", "Created At"},
 				}
-				for _, p := range projects {
+				for _, vm := range vms {
+					name := "-"
+					if vm.Name != nil {
+						name = *vm.Name
+					}
+					ip := "-"
+					if vm.Extra.IPAddress != "" {
+						ip = vm.Extra.IPAddress
+					}
 					tableData = append(tableData, []string{
-						p.ID,
-						p.DisplayName,
-						p.Status,
-						p.Type,
-						p.CreatedAt.Format("2006-01-02 15:04:05"),
+						vm.ID,
+						name,
+						vm.Status,
+						ip,
+						"-",
+						vm.CreatedAt.Format("2006-01-02 15:04:05"),
 					})
 				}
 				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				fmt.Println()
 			})
 			return nil
 		},

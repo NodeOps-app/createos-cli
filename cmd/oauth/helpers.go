@@ -20,13 +20,10 @@ func getClient(c *cli.Context) (*api.APIClient, error) {
 	return client, nil
 }
 
-// resolveOAuthClientID resolves a client ID from flag, arg, or interactive select.
+// resolveOAuthClientID resolves a client ID from flag or interactive select.
 func resolveOAuthClientID(c *cli.Context, apiClient *api.APIClient) (string, error) {
 	if id := c.String("client"); id != "" {
 		return id, nil
-	}
-	if c.NArg() > 0 {
-		return c.Args().First(), nil
 	}
 	if !terminal.IsInteractive() {
 		return "", fmt.Errorf("please provide a client ID\n\n  Example:\n    createos oauth-clients %s --client <client-id>", c.Command.Name)

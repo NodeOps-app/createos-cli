@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newEnvPushCommand() *cli.Command {
@@ -54,6 +55,9 @@ func newEnvPushCommand() *cli.Command {
 			}
 
 			if !c.Bool("force") {
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("use --force to push without a confirmation prompt")
+				}
 				fmt.Printf("Will push %d variables from %s:\n", len(vars), filePath)
 				for k := range vars {
 					fmt.Printf("  %s\n", k)

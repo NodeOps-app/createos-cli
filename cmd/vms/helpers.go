@@ -10,13 +10,10 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// resolveVM resolves a VM ID from flags, args, or interactively.
+// resolveVM resolves a VM ID from flags or interactively.
 func resolveVM(c *cli.Context, client *api.APIClient) (string, error) {
 	if vmID := c.String("vm"); vmID != "" {
 		return vmID, nil
-	}
-	if c.NArg() > 0 {
-		return c.Args().First(), nil
 	}
 	if !terminal.IsInteractive() {
 		return "", fmt.Errorf("please provide a VM ID\n\n  Example:\n    createos vms %s --vm <vm-id>", c.Command.Name)

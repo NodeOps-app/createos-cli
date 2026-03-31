@@ -7,16 +7,17 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newDomainsDeleteCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "delete",
-		Usage:     "Remove a custom domain from a project",
-		ArgsUsage: "[project-id] <domain-id>",
+		Name:  "delete",
+		Usage: "Remove a custom domain from a project",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "domain", Usage: "Domain ID"},
+			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Skip confirmation prompt"},
 		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -29,17 +30,23 @@ func newDomainsDeleteCommand() *cli.Command {
 				return err
 			}
 
-			confirm, err := pterm.DefaultInteractiveConfirm.
-				WithDefaultText(fmt.Sprintf("Are you sure you want to remove domain %q from this project?", domainID)).
-				WithDefaultValue(false).
-				Show()
-			if err != nil {
-				return fmt.Errorf("could not read confirmation: %w", err)
-			}
+			if !c.Bool("force") {
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("confirmation required — use --force to delete without a prompt")
+				}
 
-			if !confirm {
-				fmt.Println("Cancelled. Your domain was not removed.")
-				return nil
+				confirm, err := pterm.DefaultInteractiveConfirm.
+					WithDefaultText(fmt.Sprintf("Are you sure you want to remove domain %q from this project?", domainID)).
+					WithDefaultValue(false).
+					Show()
+				if err != nil {
+					return fmt.Errorf("could not read confirmation: %w", err)
+				}
+
+				if !confirm {
+					fmt.Println("Cancelled. Your domain was not removed.")
+					return nil
+				}
 			}
 
 			if err := client.DeleteDomain(projectID, domainID); err != nil {

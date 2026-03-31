@@ -1,19 +1,21 @@
 package cronjobs
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newCronjobsGetCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "get",
-		Usage:     "Show details for a cron job",
-		ArgsUsage: "[project-id] [cronjob-id]",
+		Name:  "get",
+		Usage: "Show details for a cron job",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},
@@ -32,6 +34,12 @@ func newCronjobsGetCommand() *cli.Command {
 			cj, err := client.GetCronjob(projectID, cronjobID)
 			if err != nil {
 				return err
+			}
+
+			if output.IsJSON(c) {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(cj)
 			}
 
 			label := pterm.NewStyle(pterm.FgCyan)
@@ -58,6 +66,30 @@ func newCronjobsGetCommand() *cli.Command {
 			if cj.SuspendText != nil && *cj.SuspendText != "" {
 				label.Print("Suspend Text:  ")
 				fmt.Println(*cj.SuspendText)
+			}
+
+			if cj.Settings != nil {
+				var s api.HTTPCronjobSettings
+				if err := json.Unmarshal(*cj.Settings, &s); err == nil {
+					label.Print("Path:          ")
+					fmt.Println(s.Path)
+					label.Print("Method:        ")
+					fmt.Println(s.Method)
+					if len(s.Headers) > 0 {
+						label.Println("Headers:")
+						for k, v := range s.Headers {
+							fmt.Printf("  %s=%s\n", k, v)
+						}
+					}
+					if s.Body != nil {
+						label.Print("Body:          ")
+						fmt.Println(*s.Body)
+					}
+					if s.TimeoutInSeconds != nil {
+						label.Print("Timeout (s):   ")
+						fmt.Println(*s.TimeoutInSeconds)
+					}
+				}
 			}
 
 			label.Print("Created At:    ")

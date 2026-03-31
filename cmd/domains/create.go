@@ -10,12 +10,13 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
-func newDomainsAddCommand() *cli.Command {
+func newDomainsCreateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "add",
-		Usage:     "Add a custom domain to a project",
-		ArgsUsage: "[project-id] <domain>",
+		Name:  "create",
+		Usage: "Add a custom domain to a project",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "name", Usage: "Domain name to add (e.g. example.com)"},
 			&cli.StringFlag{Name: "environment", Usage: "Environment ID to link the domain to"},
 		},
 		Action: func(c *cli.Context) error {
@@ -24,9 +25,13 @@ func newDomainsAddCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, name, err := cmdutil.ResolveProjectScopedArg(c.Args().Slice(), "a domain name")
+			projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 			if err != nil {
 				return err
+			}
+			name := c.String("name")
+			if name == "" {
+				return fmt.Errorf("please provide a domain name with --name (e.g. --name example.com)")
 			}
 
 			environmentID, err := resolveEnvironmentForDomain(c, client, projectID)

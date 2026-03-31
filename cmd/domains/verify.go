@@ -15,9 +15,8 @@ import (
 
 func newDomainsVerifyCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "verify",
-		Usage:     "Check DNS propagation and wait for domain verification",
-		ArgsUsage: "[project-id] <domain-id>",
+		Name:  "verify",
+		Usage: "Check DNS propagation and wait for domain verification",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "domain", Usage: "Domain ID"},

@@ -3,6 +3,7 @@ package cronjobs
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -13,14 +14,17 @@ import (
 
 func newCronjobsUpdateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "update",
-		Usage:     "Update a cron job's name, schedule, or HTTP settings",
-		ArgsUsage: "[project-id] [cronjob-id]",
+		Name:  "update",
+		Usage: "Update a cron job's name, schedule, or HTTP settings",
 		Description: `Update the name, schedule, or HTTP settings of an existing cron job.
 
 Examples:
   createos cronjobs update --cronjob <id> --name "New name" --schedule "*/5 * * * *" \
-    --path /api/ping --method GET`,
+    --path /api/ping --method GET
+
+  # With custom headers and JSON body:
+  createos cronjobs update --cronjob <id> --path /api/hook --method POST \
+    --header "Authorization=Bearer token" --body '{"event":"tick"}'`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},
@@ -28,6 +32,8 @@ Examples:
 			&cli.StringFlag{Name: "schedule", Usage: "New cron schedule expression"},
 			&cli.StringFlag{Name: "path", Usage: "HTTP path to call (must start with /)"},
 			&cli.StringFlag{Name: "method", Usage: "HTTP method: GET, POST, PUT, DELETE, PATCH, HEAD"},
+			&cli.StringSliceFlag{Name: "header", Usage: "HTTP header to send with each request (format: Key=Value, repeatable)"},
+			&cli.StringFlag{Name: "body", Usage: "JSON body to send with the request"},
 		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
@@ -50,6 +56,8 @@ Examples:
 			schedule := c.String("schedule")
 			path := c.String("path")
 			method := c.String("method")
+			headers := parseHeaders(c.StringSlice("header"))
+			bodyStr := c.String("body")
 
 			// Decode existing settings for defaults in both TTY and non-TTY.
 			var currentSettings api.HTTPCronjobSettings
@@ -70,6 +78,9 @@ Examples:
 				}
 				if method == "" {
 					method = currentSettings.Method
+				}
+				if headers == nil {
+					headers = currentSettings.Headers
 				}
 			} else {
 				if name == "" {
@@ -102,6 +113,7 @@ Examples:
 					if err != nil {
 						return fmt.Errorf("could not read path: %w", err)
 					}
+					path = pterm.RemoveColorFromString(path)
 				}
 				if method == "" {
 					defaultMethod := "GET"
@@ -119,11 +131,45 @@ Examples:
 					}
 					method = selected
 				}
+				if headers == nil {
+					headers = map[string]string{}
+					for {
+						pair, inputErr := pterm.DefaultInteractiveTextInput.
+							WithDefaultText("Add header (Key=Value, leave blank to skip)").
+							Show()
+						if inputErr != nil {
+							return fmt.Errorf("could not read header: %w", inputErr)
+						}
+						if pair == "" {
+							break
+						}
+						k, v, _ := strings.Cut(pair, "=")
+						if k != "" {
+							headers[k] = v
+						}
+					}
+					if len(headers) == 0 {
+						headers = currentSettings.Headers
+					}
+				}
+				if bodyStr == "" && methodSupportsBody(method) {
+					bodyStr, err = pterm.DefaultInteractiveTextInput.
+						WithDefaultText("JSON body (leave blank to keep existing)").
+						Show()
+					if err != nil {
+						return fmt.Errorf("could not read body: %w", err)
+					}
+				}
 			}
 
 			settings := api.HTTPCronjobSettings{
-				Path:   path,
-				Method: method,
+				Path:    path,
+				Method:  method,
+				Headers: headers,
+				Body:    currentSettings.Body,
+			}
+			if bodyStr != "" {
+				settings.Body = &bodyStr
 			}
 			settingsJSON, err := json.Marshal(settings)
 			if err != nil {

@@ -8,40 +8,25 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// resolveEnvironment resolves projectID and environmentID from flags, args, or interactively.
+// resolveEnvironment resolves projectID and environmentID from flags or interactively.
 func resolveEnvironment(c *cli.Context, client *api.APIClient) (string, string, error) {
-	args := c.Args().Slice()
+	projectID, err := cmdutil.ResolveProjectID(c.String("project"))
+	if err != nil {
+		return "", "", err
+	}
 
 	if envID := c.String("environment"); envID != "" {
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
 		return projectID, envID, nil
 	}
 
-	switch len(args) {
-	case 0:
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
-		envID, err := pickEnvironment(client, projectID)
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, envID, nil
-	case 1:
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, args[0], nil
-	default:
-		return args[0], args[1], nil
+	envID, err := pickEnvironment(client, projectID)
+	if err != nil {
+		return "", "", err
 	}
+	return projectID, envID, nil
 }
 
 func pickEnvironment(client *api.APIClient, projectID string) (string, error) {
@@ -53,13 +38,15 @@ func pickEnvironment(client *api.APIClient, projectID string) (string, error) {
 		return "", fmt.Errorf("no environments found for this project")
 	}
 	if len(envs) == 1 {
-		pterm.Println(pterm.Gray(fmt.Sprintf("  Using environment: %s", envs[0].DisplayName)))
 		return envs[0].ID, nil
 	}
 
 	options := make([]string, len(envs))
 	for i, e := range envs {
 		options[i] = fmt.Sprintf("%s (%s)", e.DisplayName, e.Status)
+	}
+	if !terminal.IsInteractive() {
+		return "", fmt.Errorf("multiple environments found — use --environment <id> to specify one\n\n  To see your environments, run:\n    createos environments list")
 	}
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).

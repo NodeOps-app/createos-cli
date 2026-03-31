@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -14,19 +13,17 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
-func newDeploymentLogsCommand() *cli.Command {
+func newDeploymentBuildLogsCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "logs",
-		Usage:     "Get logs for a deployment",
-		ArgsUsage: "[project-id] <deployment-id>",
-		Description: "Fetches the latest logs for a running deployment.\n\n" +
-			"   To find your deployment ID, run:\n" +
-			"     createos deployments list <project-id>",
+		Name:  "build-logs",
+		Usage: "Get build logs for a deployment",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "deployment", Usage: "Deployment ID"},
 			&cli.BoolFlag{
 				Name:    "follow",
 				Aliases: []string{"f"},
-				Usage:   "Continuously poll for new logs",
+				Usage:   "Continuously poll for new build logs",
 			},
 			&cli.DurationFlag{
 				Name:  "interval",
@@ -40,22 +37,21 @@ func newDeploymentLogsCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, deploymentID, err := resolveDeployment(c.Args().Slice(), client)
+			projectID, deploymentID, err := resolveDeployment(c, client)
 			if err != nil {
 				return err
 			}
 
-			logs, err := client.GetDeploymentLogs(projectID, deploymentID)
+			entries, err := client.GetDeploymentBuildLogs(projectID, deploymentID)
 			if err != nil {
 				return err
 			}
 
-			if logs == "" {
-				fmt.Println("No logs available yet. The deployment may still be starting up.")
+			if len(entries) == 0 {
+				fmt.Println("No build logs available yet.")
 			} else {
-				fmt.Print(logs)
-				if !strings.HasSuffix(logs, "\n") {
-					fmt.Println()
+				for _, e := range entries {
+					fmt.Println(e.Log)
 				}
 			}
 
@@ -63,11 +59,13 @@ func newDeploymentLogsCommand() *cli.Command {
 				return nil
 			}
 
-			// Follow mode: poll for new logs
-			pterm.Println(pterm.Gray("  Tailing logs (Ctrl+C to stop)..."))
-			fmt.Println()
+			lastLineNumber := 0
+			for _, e := range entries {
+				if e.LineNumber > lastLineNumber {
+					lastLineNumber = e.LineNumber
+				}
+			}
 
-			previousLen := len(logs)
 			interval := c.Duration("interval")
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
@@ -83,14 +81,15 @@ func newDeploymentLogsCommand() *cli.Command {
 					pterm.Info.Println("Log streaming stopped.")
 					return nil
 				case <-ticker.C:
-					newLogs, err := client.GetDeploymentLogs(projectID, deploymentID)
+					newEntries, err := client.GetDeploymentBuildLogs(projectID, deploymentID)
 					if err != nil {
-						continue // transient error, keep trying
+						continue
 					}
-					if len(newLogs) > previousLen {
-						// Print only the new portion
-						fmt.Print(newLogs[previousLen:])
-						previousLen = len(newLogs)
+					for _, e := range newEntries {
+						if e.LineNumber > lastLineNumber {
+							fmt.Println(e.Log)
+							lastLineNumber = e.LineNumber
+						}
 					}
 				}
 			}

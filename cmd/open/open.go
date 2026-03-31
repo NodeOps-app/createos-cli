@@ -11,6 +11,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/browser"
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 // NewOpenCommand returns the open command.
@@ -95,6 +96,9 @@ func NewOpenCommand() *cli.Command {
 						}
 						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id)
 					}
+					if !terminal.IsInteractive() {
+						return fmt.Errorf("multiple deployments found — use 'createos deployments list' and pass the deployment ID")
+					}
 					selected, err := pterm.DefaultInteractiveSelect.
 						WithOptions(options).
 						WithDefaultText("Select a deployment").
@@ -115,6 +119,9 @@ func NewOpenCommand() *cli.Command {
 				options := make([]string, len(envsWithURL))
 				for i, env := range envsWithURL {
 					options[i] = fmt.Sprintf("%s — %s", env.DisplayName, env.Extra.Endpoint)
+				}
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("multiple environments found — use --project <id> and ensure only one environment is active, or run interactively")
 				}
 				selected, err := pterm.DefaultInteractiveSelect.
 					WithOptions(options).

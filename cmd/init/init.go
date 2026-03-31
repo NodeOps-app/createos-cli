@@ -10,6 +10,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 // NewInitCommand returns the init command.
@@ -38,6 +39,9 @@ func NewInitCommand() *cli.Command {
 			existing, _ := config.LoadProjectConfig(dir)
 			if existing != nil {
 				pterm.Warning.Printf("This directory is already linked to project %s\n", existing.ProjectName)
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("directory already linked — use --project <id> to re-link non-interactively")
+				}
 				result, _ := pterm.DefaultInteractiveConfirm.
 					WithDefaultText("Overwrite existing link?").
 					WithDefaultValue(false).
@@ -58,6 +62,9 @@ func NewInitCommand() *cli.Command {
 				projectID = project.ID
 				projectName = project.DisplayName
 			} else {
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("no project specified — use --project <id> to link non-interactively\n\n  To see your projects, run:\n    createos projects list")
+				}
 				// Interactive: list projects and let user pick
 				projects, err := client.ListProjects()
 				if err != nil {
@@ -101,7 +108,7 @@ func NewInitCommand() *cli.Command {
 			if err == nil && len(envs) > 0 {
 				if len(envs) == 1 {
 					envID = envs[0].ID
-				} else {
+				} else if terminal.IsInteractive() {
 					envOptions := make([]string, len(envs))
 					for i, e := range envs {
 						envOptions[i] = fmt.Sprintf("%s (%s)", e.DisplayName, e.ID)
