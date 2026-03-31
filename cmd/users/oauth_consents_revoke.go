@@ -11,8 +11,8 @@ import (
 
 func newOAuthConsentsRevokeCommand() *cli.Command {
 	return &cli.Command{
-		Name:        "revoke",
-		Usage:       "Revoke an OAuth app consent",
+		Name:  "revoke",
+		Usage: "Revoke an OAuth app consent",
 		Description: "Revokes all tokens and consent granted to an OAuth client.\n\n" +
 			"   To find the client ID, run:\n" +
 			"     createos me oauth-consents list",

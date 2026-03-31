@@ -11,8 +11,8 @@ import (
 
 func newCronjobsSuspendCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "suspend",
-		Usage:     "Pause a cron job so it stops running on schedule",
+		Name:  "suspend",
+		Usage: "Pause a cron job so it stops running on schedule",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},

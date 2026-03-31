@@ -14,8 +14,8 @@ import (
 
 func newCronjobsCreateCommand() *cli.Command {
 	return &cli.Command{
-		Name:        "create",
-		Usage:       "Create a new HTTP cron job for a project",
+		Name:  "create",
+		Usage: "Create a new HTTP cron job for a project",
 		Description: `Create a new HTTP cron job that fires on a cron schedule.
 
 Examples:
