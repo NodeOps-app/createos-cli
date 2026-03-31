@@ -11,6 +11,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
+	"github.com/NodeOps-app/createos-cli/internal/utils"
 )
 
 func newCronjobsCreateCommand() *cli.Command {
@@ -130,6 +131,7 @@ Examples:
 					if err != nil {
 						return fmt.Errorf("could not read path: %w", err)
 					}
+					path = pterm.RemoveColorFromString(path)
 				}
 				if method == "GET" {
 					methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"}
@@ -179,11 +181,7 @@ Examples:
 				Headers: headers,
 			}
 			if bodyStr != "" {
-				if !json.Valid([]byte(bodyStr)) {
-					return fmt.Errorf("body must be valid JSON (e.g. '{\"key\":\"value\"}')")
-				}
-				raw := json.RawMessage(bodyStr)
-				settings.Body = &raw
+				settings.Body = utils.Ptr(bodyStr)
 			}
 			settingsJSON, err := json.Marshal(settings)
 			if err != nil {

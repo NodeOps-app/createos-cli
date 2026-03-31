@@ -113,6 +113,7 @@ Examples:
 					if err != nil {
 						return fmt.Errorf("could not read path: %w", err)
 					}
+					path = pterm.RemoveColorFromString(path)
 				}
 				if method == "" {
 					defaultMethod := "GET"
@@ -168,11 +169,7 @@ Examples:
 				Body:    currentSettings.Body,
 			}
 			if bodyStr != "" {
-				if !json.Valid([]byte(bodyStr)) {
-					return fmt.Errorf("body must be valid JSON (e.g. '{\"key\":\"value\"}')")
-				}
-				raw := json.RawMessage(bodyStr)
-				settings.Body = &raw
+				settings.Body = &bodyStr
 			}
 			settingsJSON, err := json.Marshal(settings)
 			if err != nil {

@@ -83,7 +83,7 @@ func newCronjobsGetCommand() *cli.Command {
 					}
 					if s.Body != nil {
 						label.Print("Body:          ")
-						fmt.Println(string(*s.Body))
+						fmt.Println(*s.Body)
 					}
 					if s.TimeoutInSeconds != nil {
 						label.Print("Timeout (s):   ")
