@@ -12,9 +12,8 @@ import (
 
 func newVMResizeCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "resize",
-		Usage:     "Resize a VM terminal instance",
-		ArgsUsage: "[vm-id]",
+		Name:  "resize",
+		Usage: "Resize a VM terminal instance",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.IntFlag{

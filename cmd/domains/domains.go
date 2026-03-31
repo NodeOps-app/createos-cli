@@ -12,7 +12,7 @@ func NewDomainsCommand() *cli.Command {
 		Usage: "Manage custom domains for a project",
 		Subcommands: []*cli.Command{
 			newDomainsListCommand(),
-			newDomainsAddCommand(),
+			newDomainsCreateCommand(),
 			newDomainsVerifyCommand(),
 			newDomainsDeleteCommand(),
 		},

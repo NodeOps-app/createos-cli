@@ -1,19 +1,21 @@
 package cronjobs
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newCronjobsGetCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "get",
-		Usage:     "Show details for a cron job",
-		ArgsUsage: "[project-id] [cronjob-id]",
+		Name:  "get",
+		Usage: "Show details for a cron job",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},
@@ -32,6 +34,12 @@ func newCronjobsGetCommand() *cli.Command {
 			cj, err := client.GetCronjob(projectID, cronjobID)
 			if err != nil {
 				return err
+			}
+
+			if output.IsJSON(c) {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(cj)
 			}
 
 			label := pterm.NewStyle(pterm.FgCyan)

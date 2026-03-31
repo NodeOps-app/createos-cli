@@ -14,13 +14,10 @@ import (
 
 func newDeleteCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "delete",
-		Usage:     "Delete a project",
-		ArgsUsage: "[project-id]",
-		Description: "Permanently deletes a project. This action cannot be undone.\n\n" +
-			"   To find your project ID, run:\n" +
-			"     createos projects list",
+		Name:  "delete",
+		Usage: "Delete a project",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.BoolFlag{
 				Name:  "force",
 				Usage: "Skip confirmation prompt (required in non-interactive mode)",
@@ -32,7 +29,7 @@ func newDeleteCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id, err := cmdutil.ResolveProjectID(c.Args().First())
+			id, err := cmdutil.ResolveProjectID(c.String("project"))
 			if err != nil {
 				return err
 			}

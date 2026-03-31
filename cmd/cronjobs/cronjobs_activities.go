@@ -7,13 +7,13 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newCronjobsActivitiesCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "activities",
-		Usage:     "Show recent execution history for a cron job",
-		ArgsUsage: "[project-id] [cronjob-id]",
+		Name:  "activities",
+		Usage: "Show recent execution history for a cron job",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "project", Usage: "Project ID"},
 			&cli.StringFlag{Name: "cronjob", Usage: "Cron job ID"},
@@ -34,47 +34,46 @@ func newCronjobsActivitiesCommand() *cli.Command {
 				return err
 			}
 
-			if len(activities) == 0 {
-				fmt.Println("No execution history found for this cron job yet.")
-				return nil
-			}
+			output.Render(c, activities, func() {
+				if len(activities) == 0 {
+					fmt.Println("No execution history found for this cron job yet.")
+					return
+				}
 
-			tableData := pterm.TableData{
-				{"ID", "Success", "Status Code", "Scheduled At", "Log"},
-			}
-			for _, a := range activities {
-				success := "-"
-				if a.Success != nil {
-					if *a.Success {
-						success = "yes"
-					} else {
-						success = "no"
+				tableData := pterm.TableData{
+					{"ID", "Success", "Status Code", "Scheduled At", "Log"},
+				}
+				for _, a := range activities {
+					success := "-"
+					if a.Success != nil {
+						if *a.Success {
+							success = "yes"
+						} else {
+							success = "no"
+						}
 					}
-				}
-				statusCode := "-"
-				if a.StatusCode != nil {
-					statusCode = fmt.Sprintf("%d", *a.StatusCode)
-				}
-				log := "-"
-				if a.Log != nil && *a.Log != "" {
-					log = *a.Log
-					if len(log) > 80 {
-						log = log[:77] + "..."
+					statusCode := "-"
+					if a.StatusCode != nil {
+						statusCode = fmt.Sprintf("%d", *a.StatusCode)
 					}
+					log := "-"
+					if a.Log != nil && *a.Log != "" {
+						log = *a.Log
+						if len(log) > 80 {
+							log = log[:77] + "..."
+						}
+					}
+					tableData = append(tableData, []string{
+						a.ID,
+						success,
+						statusCode,
+						a.ScheduledAt.Format("2006-01-02 15:04:05"),
+						log,
+					})
 				}
-				tableData = append(tableData, []string{
-					a.ID,
-					success,
-					statusCode,
-					a.ScheduledAt.Format("2006-01-02 15:04:05"),
-					log,
-				})
-			}
-
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-				return err
-			}
-			fmt.Println()
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				fmt.Println()
+			})
 			return nil
 		},
 	}

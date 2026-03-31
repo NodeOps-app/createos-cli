@@ -78,11 +78,11 @@ createos --help
 
 ### Projects
 
-| Command                    | Description      |
-| -------------------------- | ---------------- |
-| `createos projects list`   | List all projects |
+| Command                    | Description         |
+| -------------------------- | ------------------- |
+| `createos projects list`   | List all projects   |
 | `createos projects get`    | Get project details |
-| `createos projects delete` | Delete a project |
+| `createos projects delete` | Delete a project    |
 
 ### Deployments
 
@@ -93,7 +93,7 @@ createos --help
 | `createos deployments build-logs` | Stream build logs for a deployment   |
 | `createos deployments retrigger`  | Retrigger a deployment               |
 | `createos deployments wakeup`     | Wake up a sleeping deployment        |
-| `createos deployments cancel`     | Cancel a deployment                  |
+| `createos deployments cancel`     | Cancel a running deployment          |
 
 ### Environments
 
@@ -104,30 +104,43 @@ createos --help
 
 ### Environment Variables
 
-| Command                | Description                                       |
-| ---------------------- | ------------------------------------------------- |
-| `createos env list`    | List environment variables for a project          |
-| `createos env set`     | Set one or more environment variables             |
-| `createos env rm`      | Remove an environment variable                    |
-| `createos env pull`    | Download environment variables to a local `.env` file |
-| `createos env push`    | Upload environment variables from a local `.env` file |
+| Command             | Description                                           |
+| ------------------- | ----------------------------------------------------- |
+| `createos env list` | List environment variables for a project              |
+| `createos env set`  | Set one or more environment variables                 |
+| `createos env rm`   | Remove an environment variable                        |
+| `createos env pull` | Download environment variables to a local `.env` file |
+| `createos env push` | Upload environment variables from a local `.env` file |
 
 ### Domains
 
-| Command                    | Description                       |
-| -------------------------- | --------------------------------- |
-| `createos domains list`    | List custom domains for a project |
-| `createos domains add`     | Add a custom domain               |
-| `createos domains verify`  | Check DNS propagation and wait for verification |
-| `createos domains delete`  | Remove a custom domain            |
+| Command                   | Description                                     |
+| ------------------------- | ----------------------------------------------- |
+| `createos domains list`   | List custom domains for a project               |
+| `createos domains create` | Create a custom domain for a project            |
+| `createos domains verify` | Check DNS propagation and wait for verification |
+| `createos domains delete` | Delete a custom domain                          |
+
+### Cron Jobs
+
+| Command                          | Description                            |
+| -------------------------------- | -------------------------------------- |
+| `createos cronjobs list`         | List cron jobs for a project           |
+| `createos cronjobs create`       | Create a new HTTP cron job             |
+| `createos cronjobs get`          | Show details for a cron job            |
+| `createos cronjobs update`       | Update a cron job's settings           |
+| `createos cronjobs suspend`      | Pause a cron job                       |
+| `createos cronjobs unsuspend`    | Resume a suspended cron job            |
+| `createos cronjobs activities`   | Show recent execution history          |
+| `createos cronjobs delete`       | Delete a cron job                      |
 
 ### Templates
 
-| Command                    | Description                                   |
-| -------------------------- | --------------------------------------------- |
-| `createos templates list`  | Browse available project templates            |
-| `createos templates info`  | Show details about a template                 |
-| `createos templates use`   | Download and scaffold a project from a template |
+| Command                   | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `createos templates list` | Browse available project templates               |
+| `createos templates info` | Show details about a template                    |
+| `createos templates use`  | Download and scaffold a project from a template  |
 
 ### VMs
 
@@ -150,20 +163,21 @@ createos --help
 
 ### Quick Actions
 
-| Command           | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `createos init`   | Link the current directory to a CreateOS project  |
-| `createos status` | Show a project's health and deployment status     |
-| `createos open`   | Open a project's live URL in your browser         |
-| `createos scale`  | Adjust replicas and resources for an environment  |
+| Command           | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `createos init`   | Link the current directory to a CreateOS project |
+| `createos status` | Show a project's health and deployment status    |
+| `createos open`   | Open a project's live URL in your browser        |
+| `createos scale`  | Adjust replicas and resources for an environment |
 
 ### OAuth Clients
 
-| Command                                | Description                           |
-| -------------------------------------- | ------------------------------------- |
-| `createos oauth-clients list`          | List your OAuth clients               |
-| `createos oauth-clients create`        | Create a new OAuth client             |
-| `createos oauth-clients instructions`  | Show setup instructions for a client  |
+| Command                               | Description                          |
+| ------------------------------------- | ------------------------------------ |
+| `createos oauth-clients list`         | List your OAuth clients              |
+| `createos oauth-clients create`       | Create a new OAuth client            |
+| `createos oauth-clients instructions` | Show setup instructions for a client |
+| `createos oauth-clients delete`       | Delete an OAuth client               |
 
 ### Me
 
@@ -182,11 +196,58 @@ createos --help
 
 ## Non-interactive / CI usage
 
-All commands that would normally show an interactive prompt accept flags instead:
+All commands accept flags so they work in CI and non-interactive environments. Destructive commands require `--force` to skip the confirmation prompt.
 
 ```bash
+# Projects
+createos projects get --project <id>
+createos projects delete --project <id> --force
+
+# Deployments
+createos deployments list --project <id>
+createos deployments logs --project <id> --deployment <id>
+createos deployments build-logs --project <id> --deployment <id>
+createos deployments retrigger --project <id> --deployment <id>
+createos deployments wakeup --project <id> --deployment <id>
+createos deployments cancel --project <id> --deployment <id> --force
+
+# Environments
+createos environments list --project <id>
+createos environments delete --project <id> --environment <id> --force
+
+# Environment variables
+createos env list --project <id> --environment <id>
+createos env set KEY=value --project <id> --environment <id>
+createos env rm KEY --project <id> --environment <id>
+createos env pull --project <id> --environment <id> --force
+createos env push --project <id> --environment <id> --force
+
+# Domains
+createos domains list --project <id>
+createos domains create --project <id> --name example.com
+createos domains verify --project <id> --domain <id> --no-wait
+createos domains delete --project <id> --domain <id> --force
+
+# Cron jobs
+createos cronjobs list --project <id>
+createos cronjobs create --project <id> --environment <id> \
+  --name "Cleanup job" --schedule "0 * * * *" \
+  --path /api/cleanup --method POST
+createos cronjobs delete --project <id> --cronjob <id> --force
+
+# Templates
+createos templates use --template <id> --yes
+
+# VMs
+createos vms list
+createos vms get --vm <id>
+createos vms deploy --zone nyc3 --size 1 --name "my-vm" --ssh-key "ssh-ed25519 ..."
+createos vms reboot --vm <id> --force
+createos vms terminate --vm <id> --force
+createos vms resize --vm <id> --size 1
+
 # OAuth clients
-createos oauth-clients instructions --client <client-id>
+createos oauth-clients list
 createos oauth-clients create \
   --name "My App" \
   --redirect-uri https://myapp.com/callback \
@@ -194,45 +255,39 @@ createos oauth-clients create \
   --policy-url https://myapp.com/privacy \
   --tos-url https://myapp.com/tos \
   --logo-url https://myapp.com/logo.png
+createos oauth-clients instructions --client <id>
+createos oauth-clients delete --client <id> --force
 
-# Projects
-createos projects get --project <id>
+# Me
+createos me oauth-consents list
+createos me oauth-consents revoke --client <id> --force
+```
 
-# Deployments
-createos deployments logs --project <id> --deployment <id>
-createos deployments retrigger --project <id> --deployment <id>
+## JSON output and piping
 
-# Environments
-createos environments delete --project <id> --environment <id>
+All list and get commands output JSON automatically when stdout is a pipe, so `| jq` works without any flags:
 
-# Environment variables
-createos env list --project <id> --environment <id>
-createos env set KEY=value --project <id> --environment <id>
-createos env pull --project <id> --environment <id> --force
+```bash
+createos projects list | jq '.[].id'
+createos deployments list --project <id> | jq '.[] | select(.status == "running")'
+createos cronjobs list --project <id> | jq '.[] | {id, name, schedule}'
+createos vms list | jq '.[].extra.ip_address'
+```
 
-# Domains
-createos domains add example.com --project <id>
-createos domains verify --project <id> --domain <id> --no-wait
-createos domains delete --project <id> --domain <id>
+To force JSON output in a TTY, use `--output json` (or `-o json`):
 
-# Templates
-createos templates use --template <id> --yes
-
-# VMs
-createos vms get --vm <id>
-createos vms reboot --vm <id> --force
-createos vms terminate --vm <id> --force
-createos vms resize --vm <id> --size 1
-createos vms deploy --zone nyc3 --size 1
+```bash
+createos projects get --project <id> --output json
+createos environments list --project <id> -o json
 ```
 
 ## Options
 
-| Flag          | Description                                           |
-| ------------- | ----------------------------------------------------- |
-| `--output json` | Output results as JSON (supported on most list/get commands) |
-| `--debug, -d` | Print HTTP request/response details (token is masked) |
-| `--api-url`   | Override the API base URL                             |
+| Flag                  | Description                                                          |
+| --------------------- | -------------------------------------------------------------------- |
+| `--output, -o <fmt>`  | Output format: `json` or `table` (default). Auto-json when piped.   |
+| `--debug, -d`         | Print HTTP request/response details (token is masked)                |
+| `--api-url`           | Override the API base URL                                            |
 
 ## Security
 

@@ -14,7 +14,6 @@ func newCronjobsDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Usage:     "Delete a cron job",
-		ArgsUsage: "[project-id] [cronjob-id]",
 		Description: `Permanently delete a cron job. This action cannot be undone.
 
 Examples:

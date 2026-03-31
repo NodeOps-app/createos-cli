@@ -6,9 +6,8 @@ import (
 
 func newInstructionsCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "instructions",
-		Usage:     "Show setup instructions for an OAuth client",
-		ArgsUsage: "[client-id]",
+		Name:        "instructions",
+		Usage:       "Show setup instructions for an OAuth client",
 		Description: "Shows the client details you need after registration, including redirect URIs,\n" +
 			"whether the client is public, and the user info endpoint.",
 		Flags: []cli.Flag{

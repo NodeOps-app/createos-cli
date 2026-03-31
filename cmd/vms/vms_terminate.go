@@ -12,9 +12,8 @@ import (
 
 func newVMTerminateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "terminate",
-		Usage:     "Permanently destroy a VM terminal instance",
-		ArgsUsage: "[vm-id]",
+		Name:        "terminate",
+		Usage:       "Permanently destroy a VM terminal instance",
 		Description: "Permanently destroys a VM and all its data. This action cannot be undone.\n\n" +
 			"   To find your VM ID, run:\n" +
 			"     createos vms list",

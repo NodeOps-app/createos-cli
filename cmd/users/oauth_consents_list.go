@@ -5,6 +5,8 @@ import (
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newOAuthConsentsListCommand() *cli.Command {
@@ -22,35 +24,33 @@ func newOAuthConsentsListCommand() *cli.Command {
 				return err
 			}
 
-			if len(consents) == 0 {
-				fmt.Println("You haven't granted access to any OAuth clients yet.")
-				return nil
-			}
-
-			tableData := pterm.TableData{
-				{"Client ID", "Client Name", "Client URL"},
-			}
-			for _, consent := range consents {
-				clientID := "-"
-				clientName := "-"
-				clientURI := "-"
-				if consent.ClientID != nil && *consent.ClientID != "" {
-					clientID = *consent.ClientID
-				}
-				if consent.ClientName != nil && *consent.ClientName != "" {
-					clientName = *consent.ClientName
-				}
-				if consent.ClientURI != nil && *consent.ClientURI != "" {
-					clientURI = *consent.ClientURI
+			output.Render(c, consents, func() {
+				if len(consents) == 0 {
+					fmt.Println("You haven't granted access to any OAuth clients yet.")
+					return
 				}
 
-				tableData = append(tableData, []string{clientID, clientName, clientURI})
-			}
-
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-				return err
-			}
-			fmt.Println()
+				tableData := pterm.TableData{
+					{"Client ID", "Client Name", "Client URL"},
+				}
+				for _, consent := range consents {
+					clientID := "-"
+					clientName := "-"
+					clientURI := "-"
+					if consent.ClientID != nil && *consent.ClientID != "" {
+						clientID = *consent.ClientID
+					}
+					if consent.ClientName != nil && *consent.ClientName != "" {
+						clientName = *consent.ClientName
+					}
+					if consent.ClientURI != nil && *consent.ClientURI != "" {
+						clientURI = *consent.ClientURI
+					}
+					tableData = append(tableData, []string{clientID, clientName, clientURI})
+				}
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				fmt.Println()
+			})
 			return nil
 		},
 	}

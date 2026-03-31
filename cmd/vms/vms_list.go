@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newVMListCommand() *cli.Command {
@@ -24,37 +25,36 @@ func newVMListCommand() *cli.Command {
 				return err
 			}
 
-			if len(vms) == 0 {
-				fmt.Println("You don't have any VM instances yet.")
-				return nil
-			}
-
-			tableData := pterm.TableData{
-				{"ID", "Name", "Status", "IP Address", "Size", "Created At"},
-			}
-			for _, vm := range vms {
-				name := "-"
-				if vm.Name != nil {
-					name = *vm.Name
+			output.Render(c, vms, func() {
+				if len(vms) == 0 {
+					fmt.Println("You don't have any VM instances yet.")
+					return
 				}
-				ip := "-"
-				if vm.Extra.IPAddress != "" {
-					ip = vm.Extra.IPAddress
-				}
-				tableData = append(tableData, []string{
-					vm.ID,
-					name,
-					vm.Status,
-					ip,
-					"-",
-					vm.CreatedAt.Format("2006-01-02 15:04:05"),
-				})
-			}
 
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-				return err
-			}
-			fmt.Println()
+				tableData := pterm.TableData{
+					{"ID", "Name", "Status", "IP Address", "Size", "Created At"},
+				}
+				for _, vm := range vms {
+					name := "-"
+					if vm.Name != nil {
+						name = *vm.Name
+					}
+					ip := "-"
+					if vm.Extra.IPAddress != "" {
+						ip = vm.Extra.IPAddress
+					}
+					tableData = append(tableData, []string{
+						vm.ID,
+						name,
+						vm.Status,
+						ip,
+						"-",
+						vm.CreatedAt.Format("2006-01-02 15:04:05"),
+					})
+				}
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				fmt.Println()
+			})
 			return nil
 		},
 	}

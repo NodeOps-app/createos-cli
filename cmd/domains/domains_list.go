@@ -8,20 +8,23 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newDomainsListCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "list",
-		Usage:     "List all custom domains for a project",
-		ArgsUsage: "[project-id]",
+		Name:  "list",
+		Usage: "List all custom domains for a project",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+		},
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, err := cmdutil.ResolveProjectID(c.Args().First())
+			projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 			if err != nil {
 				return err
 			}
@@ -31,46 +34,45 @@ func newDomainsListCommand() *cli.Command {
 				return err
 			}
 
-			if len(domains) == 0 {
-				fmt.Println("No custom domains added yet.")
-				return nil
-			}
-
-			// Build env ID → name map for display
-			envName := map[string]string{}
-			if envs, err := client.ListEnvironments(projectID); err == nil {
-				for _, e := range envs {
-					envName[e.ID] = e.DisplayName
+			output.Render(c, domains, func() {
+				if len(domains) == 0 {
+					fmt.Println("No custom domains added yet.")
+					return
 				}
-			}
 
-			tableData := pterm.TableData{
-				{"ID", "Domain", "Environment", "Status", "Message"},
-			}
-			for _, d := range domains {
-				icon := domainIcon(d.Status)
-				msg := ""
-				if d.Message != nil {
-					msg = *d.Message
-				}
-				env := "—"
-				if d.EnvironmentID != nil && *d.EnvironmentID != "" {
-					if name, ok := envName[*d.EnvironmentID]; ok {
-						env = name
-					} else {
-						env = *d.EnvironmentID
-						if len(env) > 8 {
-							env = env[:8]
-						}
+				// Build env ID → name map for display
+				envName := map[string]string{}
+				if envs, err := client.ListEnvironments(projectID); err == nil {
+					for _, e := range envs {
+						envName[e.ID] = e.DisplayName
 					}
 				}
-				tableData = append(tableData, []string{d.ID, d.Name, env, icon + " " + d.Status, msg})
-			}
 
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-				return err
-			}
-			fmt.Println()
+				tableData := pterm.TableData{
+					{"ID", "Domain", "Environment", "Status", "Message"},
+				}
+				for _, d := range domains {
+					icon := domainIcon(d.Status)
+					msg := ""
+					if d.Message != nil {
+						msg = *d.Message
+					}
+					env := "—"
+					if d.EnvironmentID != nil && *d.EnvironmentID != "" {
+						if name, ok := envName[*d.EnvironmentID]; ok {
+							env = name
+						} else {
+							env = *d.EnvironmentID
+							if len(env) > 8 {
+								env = env[:8]
+							}
+						}
+					}
+					tableData = append(tableData, []string{d.ID, d.Name, env, icon + " " + d.Status, msg})
+				}
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				fmt.Println()
+			})
 			return nil
 		},
 	}

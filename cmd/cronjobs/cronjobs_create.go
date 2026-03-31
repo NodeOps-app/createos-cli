@@ -14,9 +14,8 @@ import (
 
 func newCronjobsCreateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "create",
-		Usage:     "Create a new HTTP cron job for a project",
-		ArgsUsage: "[project-id]",
+		Name:        "create",
+		Usage:       "Create a new HTTP cron job for a project",
 		Description: `Create a new HTTP cron job that fires on a cron schedule.
 
 Examples:
@@ -37,11 +36,7 @@ Examples:
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			pid := c.String("project")
-			if pid == "" {
-				pid = c.Args().First()
-			}
-			projectID, err := cmdutil.ResolveProjectID(pid)
+			projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 			if err != nil {
 				return err
 			}

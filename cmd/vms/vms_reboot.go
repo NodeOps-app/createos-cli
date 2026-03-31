@@ -12,9 +12,8 @@ import (
 
 func newVMRebootCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "reboot",
-		Usage:     "Reboot a VM terminal instance",
-		ArgsUsage: "[vm-id]",
+		Name:  "reboot",
+		Usage: "Reboot a VM terminal instance",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.BoolFlag{

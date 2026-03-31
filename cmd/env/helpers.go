@@ -10,6 +10,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 // resolveProjectEnv resolves the project ID and environment from flags or .createos.json.
@@ -43,12 +44,14 @@ func resolveProjectEnv(c *cli.Context, client *api.APIClient) (string, *api.Envi
 			return "", nil, fmt.Errorf("no environments found for this project")
 		}
 		if len(envs) == 1 {
-			pterm.Println(pterm.Gray(fmt.Sprintf("  Using environment: %s", envs[0].DisplayName)))
 			return projectID, &envs[0], nil
 		}
 		options := make([]string, len(envs))
 		for i, e := range envs {
 			options[i] = fmt.Sprintf("%s (%s)", e.DisplayName, e.Status)
+		}
+		if !terminal.IsInteractive() {
+			return "", nil, fmt.Errorf("multiple environments found — use --environment <id> to specify one\n\n  To see your environments, run:\n    createos environments list")
 		}
 		selected, err := pterm.DefaultInteractiveSelect.
 			WithOptions(options).

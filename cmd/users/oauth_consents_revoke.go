@@ -11,9 +11,8 @@ import (
 
 func newOAuthConsentsRevokeCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "revoke",
-		Usage:     "Revoke an OAuth app consent",
-		ArgsUsage: "[client-id]",
+		Name:        "revoke",
+		Usage:       "Revoke an OAuth app consent",
 		Description: "Revokes all tokens and consent granted to an OAuth client.\n\n" +
 			"   To find the client ID, run:\n" +
 			"     createos me oauth-consents list",
@@ -28,9 +27,6 @@ func newOAuthConsentsRevokeCommand() *cli.Command {
 			}
 
 			clientID := c.String("client")
-			if clientID == "" {
-				clientID = c.Args().First()
-			}
 			if clientID == "" {
 				if !terminal.IsInteractive() {
 					return fmt.Errorf("please provide a client ID\n\n  Example:\n    createos me oauth-consents revoke --client <client-id>")

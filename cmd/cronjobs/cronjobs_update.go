@@ -15,7 +15,6 @@ func newCronjobsUpdateCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "update",
 		Usage:     "Update a cron job's name, schedule, or HTTP settings",
-		ArgsUsage: "[project-id] [cronjob-id]",
 		Description: `Update the name, schedule, or HTTP settings of an existing cron job.
 
 Examples:

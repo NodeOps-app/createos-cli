@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newEnvPullCommand() *cli.Command {
@@ -46,6 +47,9 @@ func newEnvPullCommand() *cli.Command {
 			// Check if file exists
 			if !c.Bool("force") {
 				if _, err := os.Stat(filePath); err == nil {
+					if !terminal.IsInteractive() {
+						return fmt.Errorf("%s already exists — use --force to overwrite", filePath)
+					}
 					result, _ := pterm.DefaultInteractiveConfirm.
 						WithDefaultText(fmt.Sprintf("%s already exists. Overwrite?", filePath)).
 						WithDefaultValue(false).

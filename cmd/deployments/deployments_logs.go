@@ -16,13 +16,11 @@ import (
 
 func newDeploymentLogsCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "logs",
-		Usage:     "Get logs for a deployment",
-		ArgsUsage: "[project-id] <deployment-id>",
-		Description: "Fetches the latest logs for a running deployment.\n\n" +
-			"   To find your deployment ID, run:\n" +
-			"     createos deployments list <project-id>",
+		Name:  "logs",
+		Usage: "Get logs for a deployment",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "deployment", Usage: "Deployment ID"},
 			&cli.BoolFlag{
 				Name:    "follow",
 				Aliases: []string{"f"},
@@ -40,7 +38,7 @@ func newDeploymentLogsCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, deploymentID, err := resolveDeployment(c.Args().Slice(), client)
+			projectID, deploymentID, err := resolveDeployment(c, client)
 			if err != nil {
 				return err
 			}
@@ -64,9 +62,6 @@ func newDeploymentLogsCommand() *cli.Command {
 			}
 
 			// Follow mode: poll for new logs
-			pterm.Println(pterm.Gray("  Tailing logs (Ctrl+C to stop)..."))
-			fmt.Println()
-
 			previousLen := len(logs)
 			interval := c.Duration("interval")
 			ticker := time.NewTicker(interval)

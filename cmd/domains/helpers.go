@@ -8,41 +8,25 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// resolveDomain resolves projectID and domainID from flags, args, or interactively.
+// resolveDomain resolves projectID and domainID from flags or interactively.
 func resolveDomain(c *cli.Context, client *api.APIClient) (string, string, error) {
-	args := c.Args().Slice()
+	projectID, err := cmdutil.ResolveProjectID(c.String("project"))
+	if err != nil {
+		return "", "", err
+	}
 
-	// --domain flag takes priority
 	if domainID := c.String("domain"); domainID != "" {
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
 		return projectID, domainID, nil
 	}
 
-	switch len(args) {
-	case 0:
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
-		domainID, err := pickDomain(client, projectID)
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, domainID, nil
-	case 1:
-		projectID, err := cmdutil.ResolveProjectID(c.String("project"))
-		if err != nil {
-			return "", "", err
-		}
-		return projectID, args[0], nil
-	default:
-		return args[0], args[1], nil
+	domainID, err := pickDomain(client, projectID)
+	if err != nil {
+		return "", "", err
 	}
+	return projectID, domainID, nil
 }
 
 func pickDomain(client *api.APIClient, projectID string) (string, error) {
@@ -54,13 +38,15 @@ func pickDomain(client *api.APIClient, projectID string) (string, error) {
 		return "", fmt.Errorf("no domains found for this project")
 	}
 	if len(domains) == 1 {
-		pterm.Println(pterm.Gray(fmt.Sprintf("  Using domain: %s (%s)", domains[0].Name, domains[0].Status)))
 		return domains[0].ID, nil
 	}
 
 	options := make([]string, len(domains))
 	for i, d := range domains {
 		options[i] = fmt.Sprintf("%s  %s", d.Name, d.Status)
+	}
+	if !terminal.IsInteractive() {
+		return "", fmt.Errorf("multiple domains found — use --domain <id> to specify one\n\n  To see your domains, run:\n    createos domains list")
 	}
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).
@@ -95,13 +81,15 @@ func pickEnvironment(client *api.APIClient, projectID string) (string, error) {
 		return "", fmt.Errorf("no environments found — deploy your project first before adding a domain")
 	}
 	if len(envs) == 1 {
-		pterm.Println(pterm.Gray(fmt.Sprintf("  Linking to environment: %s", envs[0].DisplayName)))
 		return envs[0].ID, nil
 	}
 
 	options := make([]string, len(envs))
 	for i, e := range envs {
 		options[i] = fmt.Sprintf("%s (%s)", e.DisplayName, e.Status)
+	}
+	if !terminal.IsInteractive() {
+		return "", fmt.Errorf("multiple environments found — use --environment <id> to specify one\n\n  To see your environments, run:\n    createos environments list")
 	}
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).

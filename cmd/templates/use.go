@@ -16,9 +16,8 @@ import (
 
 func newTemplatesUseCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "use",
-		Usage:     "Download and scaffold a project from a template",
-		ArgsUsage: "[template-id]",
+		Name:  "use",
+		Usage: "Download and scaffold a project from a template",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "template", Usage: "Template ID"},
 			&cli.StringFlag{Name: "dir", Usage: "Target directory (defaults to template name)"},
