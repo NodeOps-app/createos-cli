@@ -3,19 +3,27 @@ package root
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/NodeOps-app/createos-cli/cmd/ask"
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
 	"github.com/NodeOps-app/createos-cli/cmd/completion"
+	"github.com/NodeOps-app/createos-cli/cmd/cronjobs"
 	"github.com/NodeOps-app/createos-cli/cmd/deployments"
 	"github.com/NodeOps-app/createos-cli/cmd/domains"
+	"github.com/NodeOps-app/createos-cli/cmd/env"
 	"github.com/NodeOps-app/createos-cli/cmd/environments"
+	initcmd "github.com/NodeOps-app/createos-cli/cmd/init"
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
-	"github.com/NodeOps-app/createos-cli/cmd/ask"
+	"github.com/NodeOps-app/createos-cli/cmd/open"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
+	"github.com/NodeOps-app/createos-cli/cmd/scale"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
+	"github.com/NodeOps-app/createos-cli/cmd/status"
+	"github.com/NodeOps-app/createos-cli/cmd/templates"
 	"github.com/NodeOps-app/createos-cli/cmd/users"
 	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
 	"github.com/NodeOps-app/createos-cli/cmd/vms"
@@ -23,6 +31,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/intro"
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 )
 
@@ -46,8 +55,25 @@ func NewApp() *cli.App {
 				EnvVars: []string{"CREATEOS_API_URL"},
 				Value:   api.DefaultBaseURL,
 			},
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Output format: table or json",
+				EnvVars: []string{"CREATEOS_OUTPUT"},
+			},
 		},
 		Before: func(c *cli.Context) error {
+			// Store the output format in metadata
+			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
+
+			apiURL := c.String("api-url")
+			if apiURL != "" && apiURL != api.DefaultBaseURL {
+				parsed, err := url.Parse(apiURL)
+				if err != nil || (parsed.Scheme != "https" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1") {
+					return fmt.Errorf("--api-url must use HTTPS (got %q)\n\n  Exception: localhost and 127.0.0.1 are allowed for development", apiURL)
+				}
+			}
+
 			cmd := c.Args().First()
 			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" {
 				return nil
@@ -105,22 +131,33 @@ func NewApp() *cli.App {
 
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
+				fmt.Println("  cronjobs       Manage cron jobs for a project")
 				fmt.Println("  deployments    Manage project deployments")
 				fmt.Println("  domains        Manage custom domains")
+				fmt.Println("  env            Manage environment variables")
 				fmt.Println("  environments   Manage project environments")
+				fmt.Println("  init           Link this directory to a CreateOS project")
 				fmt.Println("  logout         Sign out from CreateOS")
-				fmt.Println("  oauth          Manage OAuth clients")
+				fmt.Println("  oauth-clients  Manage OAuth clients")
+				fmt.Println("  open           Open project URL or dashboard in browser")
 				fmt.Println("  projects       Manage projects")
+				fmt.Println("  scale          Adjust replicas and resources")
 				fmt.Println("  skills         Manage skills")
-				fmt.Println("  users          Manage your user account")
+				fmt.Println("  status         Show project health and deployment status")
+				fmt.Println("  templates      Browse and scaffold from project templates")
+				fmt.Println("  me             Manage your account and OAuth consents")
 				fmt.Println("  vms            Manage VM terminal instances")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
-			fmt.Println("  completion      Generate shell completion script")
 			fmt.Println("  ask             Ask the AI assistant to help manage your infrastructure")
+			fmt.Println("  completion      Generate shell completion script")
 			fmt.Println("  version        Print the current version")
+			fmt.Println()
+			fmt.Println("Global Flags:")
+			fmt.Println("  --output, -o   Output format: table (default) or json")
+			fmt.Println("  --debug, -d    Enable debug mode")
 			fmt.Println()
 			fmt.Println("Run 'createos <command> --help' for more information on a command.")
 
@@ -130,13 +167,20 @@ func NewApp() *cli.App {
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
 			completion.NewCompletionCommand(),
+			cronjobs.NewCronjobsCommand(),
 			deployments.NewDeploymentsCommand(),
 			ask.NewAskCommand(),
 			domains.NewDomainsCommand(),
+			env.NewEnvCommand(),
 			environments.NewEnvironmentsCommand(),
+			initcmd.NewInitCommand(),
 			oauth.NewOAuthCommand(),
+			open.NewOpenCommand(),
 			projects.NewProjectsCommand(),
+			scale.NewScaleCommand(),
 			skills.NewSkillsCommand(),
+			status.NewStatusCommand(),
+			templates.NewTemplatesCommand(),
 			users.NewUsersCommand(),
 			vms.NewVMsCommand(),
 			auth.NewWhoamiCommand(),

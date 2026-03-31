@@ -13,22 +13,21 @@ func newDomainsDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Usage:     "Remove a custom domain from a project",
-		ArgsUsage: "<project-id> <domain-id>",
-		Description: "Permanently removes a custom domain from your project.\n\n" +
-			"   To find your domain ID, run:\n" +
-			"     createos projects domains list <project-id>",
+		ArgsUsage: "[project-id] <domain-id>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "domain", Usage: "Domain ID"},
+		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and domain ID\n\n  Example:\n    createos projects domains delete <project-id> <domain-id>")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().Get(0)
-			domainID := c.Args().Get(1)
+			projectID, domainID, err := resolveDomain(c, client)
+			if err != nil {
+				return err
+			}
 
 			confirm, err := pterm.DefaultInteractiveConfirm.
 				WithDefaultText(fmt.Sprintf("Are you sure you want to remove domain %q from this project?", domainID)).
@@ -48,9 +47,6 @@ func newDomainsDeleteCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Domain is being removed.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your remaining domains, run:"))
-			pterm.Println(pterm.Gray("    createos projects domains list " + projectID))
 			return nil
 		},
 	}

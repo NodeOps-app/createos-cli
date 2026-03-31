@@ -95,6 +95,19 @@ func (c *APIClient) GetOAuthClient(clientID string) (*OAuthClientDetail, error) 
 	return &result.Data, nil
 }
 
+// DeleteOAuthClient permanently deletes an OAuth client.
+func (c *APIClient) DeleteOAuthClient(clientID string) error {
+	resp, err := c.Client.R().
+		Delete("/v1/-/oauth2/clients/" + clientID)
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
 // ListOAuthConsents returns all OAuth consents granted by the authenticated user.
 func (c *APIClient) ListOAuthConsents() ([]OAuthConsent, error) {
 	var result Response[[]OAuthConsent]

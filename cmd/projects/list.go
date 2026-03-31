@@ -45,9 +45,6 @@ func newListCommand() *cli.Command {
 			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
 				return err
 			}
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see details for a project, run:"))
-			pterm.Println(pterm.Gray("    createos projects get <id>"))
 			return nil
 		},
 	}

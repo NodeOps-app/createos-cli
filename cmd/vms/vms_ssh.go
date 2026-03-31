@@ -142,8 +142,9 @@ func newVMSSHCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "ssh",
 		Usage:     "Connect to a VM instance via SSH",
-		ArgsUsage: "<vm-id>",
+		ArgsUsage: "[vm-id]",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.StringFlag{
 				Name:  "user",
 				Usage: "SSH user to connect as",
@@ -155,16 +156,15 @@ func newVMSSHCommand() *cli.Command {
 				return fmt.Errorf("SSH requires an interactive terminal")
 			}
 
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a VM ID\n\n  To see your VMs and their IDs, run:\n    createos vms list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := resolveVM(c, client)
+			if err != nil {
+				return err
+			}
 			user := c.String("user")
 
 			vm, err := client.GetVMDeployment(id)

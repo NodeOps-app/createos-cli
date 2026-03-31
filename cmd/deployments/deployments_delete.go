@@ -13,22 +13,20 @@ func newDeploymentDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "cancel",
 		Usage:     "Cancel a running deployment",
-		ArgsUsage: "<project-id> <deployment-id>",
+		ArgsUsage: "[project-id] <deployment-id>",
 		Description: "Stops a deployment that is currently building or deploying.\n\n" +
 			"   To find your deployment ID, run:\n" +
-			"     createos projects deployments list <project-id>",
+			"     createos deployments list <project-id>",
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos projects deployments cancel <project-id> <deployment-id>")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().Get(0)
-			deploymentID := c.Args().Get(1)
+			projectID, deploymentID, err := resolveDeployment(c.Args().Slice(), client)
+			if err != nil {
+				return err
+			}
 
 			confirm, err := pterm.DefaultInteractiveConfirm.
 				WithDefaultText(fmt.Sprintf("Are you sure you want to cancel deployment %q?", deploymentID)).
@@ -39,7 +37,7 @@ func newDeploymentDeleteCommand() *cli.Command {
 			}
 
 			if !confirm {
-				fmt.Println("Cancelled. Your deployment was not stopped.")
+				fmt.Println("Aborted. Your deployment was not cancelled.")
 				return nil
 			}
 
@@ -48,9 +46,6 @@ func newDeploymentDeleteCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Deployment has been cancelled.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your deployments, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + projectID))
 			return nil
 		},
 	}

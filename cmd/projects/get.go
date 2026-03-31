@@ -7,24 +7,24 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 )
 
 func newGetCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "get",
 		Usage:     "Get a project by ID",
-		ArgsUsage: "<project-id>",
+		ArgsUsage: "[project-id]",
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a project ID\n\n  To see your projects and their IDs, run:\n    createos projects list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := cmdutil.ResolveProjectID(c.Args().First())
+			if err != nil {
+				return err
+			}
 			project, err := client.GetProject(id)
 			if err != nil {
 				return err
@@ -55,10 +55,6 @@ func newGetCommand() *cli.Command {
 
 			cyan.Printf("Updated At:  ")
 			fmt.Println(project.UpdatedAt.Format("2006-01-02 15:04:05"))
-
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To manage deployments for this project, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + project.ID))
 
 			return nil
 		},

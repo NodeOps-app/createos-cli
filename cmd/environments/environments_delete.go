@@ -13,22 +13,21 @@ func newEnvironmentsDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Usage:     "Delete an environment",
-		ArgsUsage: "<project-id> <environment-id>",
-		Description: "Permanently deletes an environment from your project.\n\n" +
-			"   To find your environment ID, run:\n" +
-			"     createos projects environments list <project-id>",
+		ArgsUsage: "[project-id] <environment-id>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "project", Usage: "Project ID"},
+			&cli.StringFlag{Name: "environment", Usage: "Environment ID"},
+		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and environment ID\n\n  Example:\n    createos projects environments delete <project-id> <environment-id>")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().Get(0)
-			environmentID := c.Args().Get(1)
+			projectID, environmentID, err := resolveEnvironment(c, client)
+			if err != nil {
+				return err
+			}
 
 			confirm, err := pterm.DefaultInteractiveConfirm.
 				WithDefaultText(fmt.Sprintf("Are you sure you want to permanently delete environment %q?", environmentID)).
@@ -48,9 +47,6 @@ func newEnvironmentsDeleteCommand() *cli.Command {
 			}
 
 			pterm.Success.Println("Environment deletion started.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To check the environment status, run:"))
-			pterm.Println(pterm.Gray("    createos projects environments list " + projectID))
 			return nil
 		},
 	}

@@ -191,7 +191,6 @@ func newVMDeployCommand() *cli.Command {
 						pterm.Success.Printf("IP Address: %s\n", updated.Extra.IPAddress)
 					}
 					fmt.Println()
-					pterm.Println(pterm.Gray("  Connect via SSH: createos vms ssh " + updated.ID))
 					return nil
 				}
 
@@ -203,7 +202,6 @@ func newVMDeployCommand() *cli.Command {
 
 			spinner.Warning("Deployment is taking longer than expected.")
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Check the status with: createos vms get " + vmID))
 			return nil
 		},
 	}

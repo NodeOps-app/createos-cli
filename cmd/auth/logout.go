@@ -3,7 +3,6 @@ package auth
 import (
 	"fmt"
 
-	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/config"
@@ -27,9 +26,6 @@ func NewLogoutCommand() *cli.Command {
 			}
 
 			fmt.Println("You've been signed out successfully.")
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To sign back in, run:"))
-			pterm.Println(pterm.Gray("    createos login"))
 			return nil
 		},
 	}

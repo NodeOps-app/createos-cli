@@ -24,9 +24,6 @@ func newListCommand() *cli.Command {
 
 			if len(clients) == 0 {
 				fmt.Println("You don't have any OAuth clients yet.")
-				fmt.Println()
-				pterm.Println(pterm.Gray("  Hint: To create one, run:"))
-				pterm.Println(pterm.Gray("    createos oauth clients create"))
 				return nil
 			}
 
@@ -45,8 +42,6 @@ func newListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Hint: To see setup instructions for a client, run:"))
-			pterm.Println(pterm.Gray("    createos oauth clients instructions <client-id>"))
 			return nil
 		},
 	}

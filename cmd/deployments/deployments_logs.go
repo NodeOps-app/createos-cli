@@ -2,6 +2,11 @@ package deployments
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -13,22 +18,32 @@ func newDeploymentLogsCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "logs",
 		Usage:     "Get logs for a deployment",
-		ArgsUsage: "<project-id> <deployment-id>",
+		ArgsUsage: "[project-id] <deployment-id>",
 		Description: "Fetches the latest logs for a running deployment.\n\n" +
 			"   To find your deployment ID, run:\n" +
-			"     createos projects deployments list <project-id>",
+			"     createos deployments list <project-id>",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "follow",
+				Aliases: []string{"f"},
+				Usage:   "Continuously poll for new logs",
+			},
+			&cli.DurationFlag{
+				Name:  "interval",
+				Value: 2 * time.Second,
+				Usage: "Polling interval when using --follow",
+			},
+		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() < 2 {
-				return fmt.Errorf("please provide a project ID and deployment ID\n\n  Example:\n    createos projects deployments logs <project-id> <deployment-id>")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID := c.Args().Get(0)
-			deploymentID := c.Args().Get(1)
+			projectID, deploymentID, err := resolveDeployment(c.Args().Slice(), client)
+			if err != nil {
+				return err
+			}
 
 			logs, err := client.GetDeploymentLogs(projectID, deploymentID)
 			if err != nil {
@@ -37,14 +52,48 @@ func newDeploymentLogsCommand() *cli.Command {
 
 			if logs == "" {
 				fmt.Println("No logs available yet. The deployment may still be starting up.")
+			} else {
+				fmt.Print(logs)
+				if !strings.HasSuffix(logs, "\n") {
+					fmt.Println()
+				}
+			}
+
+			if !c.Bool("follow") {
 				return nil
 			}
 
-			fmt.Println(logs)
+			// Follow mode: poll for new logs
+			pterm.Println(pterm.Gray("  Tailing logs (Ctrl+C to stop)..."))
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To redeploy, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments retrigger " + projectID + " " + deploymentID))
-			return nil
+
+			previousLen := len(logs)
+			interval := c.Duration("interval")
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			defer signal.Stop(sigCh)
+
+			for {
+				select {
+				case <-sigCh:
+					fmt.Println()
+					pterm.Info.Println("Log streaming stopped.")
+					return nil
+				case <-ticker.C:
+					newLogs, err := client.GetDeploymentLogs(projectID, deploymentID)
+					if err != nil {
+						continue // transient error, keep trying
+					}
+					if len(newLogs) > previousLen {
+						// Print only the new portion
+						fmt.Print(newLogs[previousLen:])
+						previousLen = len(newLogs)
+					}
+				}
+			}
 		},
 	}
 }

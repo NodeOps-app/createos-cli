@@ -51,8 +51,6 @@ func newOAuthConsentsListCommand() *cli.Command {
 				return err
 			}
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Hint: To revoke a client's access, run:"))
-			pterm.Println(pterm.Gray("    createos users oauth-consents revoke <client-id>"))
 			return nil
 		},
 	}

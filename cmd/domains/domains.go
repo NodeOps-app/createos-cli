@@ -13,7 +13,7 @@ func NewDomainsCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newDomainsListCommand(),
 			newDomainsAddCommand(),
-			newDomainsRefreshCommand(),
+			newDomainsVerifyCommand(),
 			newDomainsDeleteCommand(),
 		},
 	}

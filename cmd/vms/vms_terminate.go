@@ -14,27 +14,27 @@ func newVMTerminateCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "terminate",
 		Usage:     "Permanently destroy a VM terminal instance",
-		ArgsUsage: "<vm-id>",
+		ArgsUsage: "[vm-id]",
 		Description: "Permanently destroys a VM and all its data. This action cannot be undone.\n\n" +
 			"   To find your VM ID, run:\n" +
 			"     createos vms list",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "vm", Usage: "VM ID"},
 			&cli.BoolFlag{
 				Name:  "force",
 				Usage: "Skip confirmation prompt (required in non-interactive mode)",
 			},
 		},
 		Action: func(c *cli.Context) error {
-			if c.NArg() == 0 {
-				return fmt.Errorf("please provide a VM ID\n\n  To see your VMs and their IDs, run:\n    createos vms list")
-			}
-
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			id := c.Args().First()
+			id, err := resolveVM(c, client)
+			if err != nil {
+				return err
+			}
 
 			if !terminal.IsInteractive() && !c.Bool("force") {
 				return fmt.Errorf("non-interactive mode: use --force flag to confirm termination\n\n  Example:\n    createos vms terminate %s --force", id)
@@ -60,9 +60,6 @@ func newVMTerminateCommand() *cli.Command {
 			}
 
 			pterm.Success.Printf("VM %q has been terminated.\n", id)
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your remaining VMs, run:"))
-			pterm.Println(pterm.Gray("    createos vms list"))
 			return nil
 		},
 	}

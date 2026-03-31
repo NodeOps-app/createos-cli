@@ -2,13 +2,16 @@ package oauth
 
 import "github.com/urfave/cli/v2"
 
-// NewOAuthCommand creates the oauth command with subcommands.
+// NewOAuthCommand creates the oauth-clients command with subcommands.
 func NewOAuthCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "oauth",
+		Name:  "oauth-clients",
 		Usage: "Manage OAuth clients",
 		Subcommands: []*cli.Command{
-			newClientsCommand(),
+			newListCommand(),
+			newCreateCommand(),
+			newDeleteCommand(),
+			newInstructionsCommand(),
 		},
 	}
 }
