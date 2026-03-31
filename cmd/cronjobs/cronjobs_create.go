@@ -159,8 +159,7 @@ Examples:
 				return err
 			}
 
-			pterm.Success.Println("Cron job created.")
-			fmt.Println("ID:", id)
+			pterm.Success.Printf("Cron job created. ID: %s\n", id)
 			return nil
 		},
 	}

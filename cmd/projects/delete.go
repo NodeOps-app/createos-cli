@@ -60,9 +60,6 @@ func newDeleteCommand() *cli.Command {
 			}
 
 			pterm.Success.Printf("Project %q has been deleted.\n", id)
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your remaining projects, run:"))
-			pterm.Println(pterm.Gray("    createos projects list"))
 			return nil
 		},
 	}

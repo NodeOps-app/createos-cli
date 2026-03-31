@@ -36,7 +36,7 @@ func NewLoginCommand() *cli.Command {
 				if err := config.SaveToken(token); err != nil {
 					return fmt.Errorf("could not save your token: %w", err)
 				}
-				pterm.Success.Println("You're now signed in! Run 'createos whoami' to confirm your account.")
+				pterm.Success.Println("You're signed in.")
 				return nil
 			}
 
@@ -66,8 +66,6 @@ func NewLoginCommand() *cli.Command {
 }
 
 func loginWithAPIToken() error {
-	pterm.Println(pterm.Gray("  You can find your API token in your CreateOS dashboard."))
-	fmt.Println()
 	token, err := pterm.DefaultInteractiveTextInput.WithMask("*").Show("Paste your API token")
 	if err != nil || token == "" {
 		return fmt.Errorf("sign in cancelled")
@@ -75,7 +73,7 @@ func loginWithAPIToken() error {
 	if err := config.SaveToken(token); err != nil {
 		return fmt.Errorf("could not save your token: %w", err)
 	}
-	pterm.Success.Println("You're now signed in! Run 'createos whoami' to confirm your account.")
+	pterm.Success.Println("You're signed in.")
 	return nil
 }
 
@@ -156,6 +154,6 @@ func loginWithBrowser() error {
 	}
 
 	fmt.Println()
-	pterm.Success.Println("You're signed in! Run 'createos whoami' to confirm your account.")
+	pterm.Success.Println("You're signed in.")
 	return nil
 }

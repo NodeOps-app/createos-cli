@@ -44,9 +44,6 @@ func NewWhoamiCommand() *cli.Command {
 			pterm.Printfln("  %s  %s", pterm.Gray("ID           "), u.ID)
 			pterm.Printfln("  %s  %s", pterm.Gray("Member since "), memberSince)
 			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To see your projects, run:"))
-			pterm.Println(pterm.Gray("    createos projects list"))
-			fmt.Println()
 
 			return nil
 		},

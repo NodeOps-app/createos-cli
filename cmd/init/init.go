@@ -65,8 +65,6 @@ func NewInitCommand() *cli.Command {
 				}
 				if len(projects) == 0 {
 					fmt.Println("You don't have any projects yet.")
-					fmt.Println()
-					pterm.Println(pterm.Gray("  Create a project on the CreateOS dashboard first, then run 'createos init' again."))
 					return nil
 				}
 
@@ -137,9 +135,6 @@ func NewInitCommand() *cli.Command {
 			_ = config.EnsureGitignore(dir)
 
 			pterm.Success.Printf("Linked to %s\n", projectName)
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Project config saved to .createos.json"))
-			pterm.Println(pterm.Gray("  Commands like deploy, status, and logs will now auto-detect this project."))
 			return nil
 		},
 	}

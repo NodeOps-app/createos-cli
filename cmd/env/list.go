@@ -45,9 +45,6 @@ func newEnvListCommand() *cli.Command {
 
 			if len(vars) == 0 {
 				fmt.Println("No environment variables set.")
-				fmt.Println()
-				pterm.Println(pterm.Gray("  Set one with:"))
-				pterm.Println(pterm.Gray("    createos env set KEY=value"))
 				return nil
 			}
 

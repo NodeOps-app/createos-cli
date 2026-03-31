@@ -16,7 +16,7 @@ func newDeploymentWakeupCommand() *cli.Command {
 		ArgsUsage: "[project-id] <deployment-id>",
 		Description: "Resumes a deployment that is currently sleeping.\n\n" +
 			"   To find your deployment ID, run:\n" +
-			"     createos projects deployments list <project-id>",
+			"     createos deployments list <project-id>",
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {

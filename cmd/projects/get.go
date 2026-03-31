@@ -56,10 +56,6 @@ func newGetCommand() *cli.Command {
 			cyan.Printf("Updated At:  ")
 			fmt.Println(project.UpdatedAt.Format("2006-01-02 15:04:05"))
 
-			fmt.Println()
-			pterm.Println(pterm.Gray("  Tip: To manage deployments for this project, run:"))
-			pterm.Println(pterm.Gray("    createos projects deployments list " + project.ID))
-
 			return nil
 		},
 	}

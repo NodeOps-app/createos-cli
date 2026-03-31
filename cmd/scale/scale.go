@@ -119,8 +119,6 @@ func showScale(c *cli.Context, client *api.APIClient, projectID, envID string) e
 	fmt.Printf("    Replicas:  %d\n", resources.Replicas)
 	fmt.Printf("    CPU:       %dm\n", resources.CPU)
 	fmt.Printf("    Memory:    %dMB\n", resources.Memory)
-	fmt.Println()
-	pterm.Println(pterm.Gray("  Adjust with: createos scale --replicas 2 --cpu 300 --memory 512"))
 	return nil
 }
 

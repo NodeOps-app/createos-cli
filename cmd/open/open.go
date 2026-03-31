@@ -82,8 +82,6 @@ func NewOpenCommand() *cli.Command {
 				}
 				if len(deploymentsWithURL) == 0 {
 					fmt.Println("No live URL found — the project may not be deployed yet.")
-					fmt.Println()
-					pterm.Println(pterm.Gray("  Deploy first, then try again."))
 					return nil
 				}
 				if len(deploymentsWithURL) == 1 {
