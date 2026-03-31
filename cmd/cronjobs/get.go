@@ -68,6 +68,30 @@ func newCronjobsGetCommand() *cli.Command {
 				fmt.Println(*cj.SuspendText)
 			}
 
+			if cj.Settings != nil {
+				var s api.HTTPCronjobSettings
+				if err := json.Unmarshal(*cj.Settings, &s); err == nil {
+					label.Print("Path:          ")
+					fmt.Println(s.Path)
+					label.Print("Method:        ")
+					fmt.Println(s.Method)
+					if len(s.Headers) > 0 {
+						label.Println("Headers:")
+						for k, v := range s.Headers {
+							fmt.Printf("  %s=%s\n", k, v)
+						}
+					}
+					if s.Body != nil {
+						label.Print("Body:          ")
+						fmt.Println(string(*s.Body))
+					}
+					if s.TimeoutInSeconds != nil {
+						label.Print("Timeout (s):   ")
+						fmt.Println(*s.TimeoutInSeconds)
+					}
+				}
+			}
+
 			label.Print("Created At:    ")
 			fmt.Println(cj.CreatedAt.Format("2006-01-02 15:04:05"))
 			label.Print("Updated At:    ")

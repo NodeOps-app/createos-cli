@@ -127,12 +127,21 @@ createos --help
 | -------------------------------- | -------------------------------------- |
 | `createos cronjobs list`         | List cron jobs for a project           |
 | `createos cronjobs create`       | Create a new HTTP cron job             |
-| `createos cronjobs get`          | Show details for a cron job            |
-| `createos cronjobs update`       | Update a cron job's settings           |
+| `createos cronjobs get`          | Show details for a cron job (including path, method, headers, body) |
+| `createos cronjobs update`       | Update a cron job's name, schedule, or HTTP settings |
 | `createos cronjobs suspend`      | Pause a cron job                       |
 | `createos cronjobs unsuspend`    | Resume a suspended cron job            |
 | `createos cronjobs activities`   | Show recent execution history          |
 | `createos cronjobs delete`       | Delete a cron job                      |
+
+**HTTP settings flags** (for `create` and `update`):
+
+| Flag | Description |
+| ---- | ----------- |
+| `--path` | HTTP path to call, must start with `/` |
+| `--method` | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD` |
+| `--header` | Header in `Key=Value` format, repeatable |
+| `--body` | JSON body to send with the request (only for POST, PUT, PATCH) |
 
 ### Templates
 
@@ -230,9 +239,25 @@ createos domains delete --project <id> --domain <id> --force
 
 # Cron jobs
 createos cronjobs list --project <id>
+
+# Simple GET cron job
 createos cronjobs create --project <id> --environment <id> \
   --name "Cleanup job" --schedule "0 * * * *" \
-  --path /api/cleanup --method POST
+  --path /api/cleanup --method GET
+
+# POST cron job with headers and JSON body
+createos cronjobs create --project <id> --environment <id> \
+  --name "Webhook" --schedule "*/5 * * * *" \
+  --path /api/hook --method POST \
+  --header "Authorization=Bearer token" --header "X-Source=cron" \
+  --body '{"event":"tick"}'
+
+# Update HTTP settings (headers and body preserved if omitted)
+createos cronjobs update --project <id> --cronjob <id> \
+  --path /api/hook --method POST \
+  --header "Authorization=Bearer token" --body '{"event":"tick"}'
+
+createos cronjobs get --project <id> --cronjob <id>
 createos cronjobs delete --project <id> --cronjob <id> --force
 
 # Templates

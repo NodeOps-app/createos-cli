@@ -2,6 +2,7 @@ package cronjobs
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -10,6 +11,30 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
+
+// methodSupportsBody returns true for HTTP methods that typically carry a request body.
+func methodSupportsBody(method string) bool {
+	switch strings.ToUpper(method) {
+	case "POST", "PUT", "PATCH":
+		return true
+	}
+	return false
+}
+
+// parseHeaders converts a slice of "Key=Value" strings into a map.
+func parseHeaders(pairs []string) map[string]string {
+	if len(pairs) == 0 {
+		return nil
+	}
+	headers := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		k, v, _ := strings.Cut(pair, "=")
+		if k != "" {
+			headers[k] = v
+		}
+	}
+	return headers
+}
 
 // resolveCronjob resolves a project ID and cron job ID from flags or interactively (TTY only).
 func resolveCronjob(c *cli.Context, client *api.APIClient) (string, string, error) {
