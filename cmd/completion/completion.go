@@ -43,16 +43,26 @@ func NewCompletionCommand() *cli.Command {
 		Name:      "completion",
 		Usage:     "Generate shell completion script",
 		ArgsUsage: "<bash|zsh|fish>",
-		Description: "Generate a shell completion script for createos.\n\n" +
-			"   Add the output to your shell profile to enable tab completion.\n\n" +
-			"   Bash:\n" +
-			"     source <(createos completion bash)\n\n" +
-			"   Zsh:\n" +
-			"     source <(createos completion zsh)\n\n" +
-			"   Fish:\n" +
-			"     createos completion fish | source",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "shell", Usage: "Shell type: bash, zsh, or fish"},
+		},
+		Description: "Generate a shell completion script and load it into your shell.\n\n" +
+			"   Bash — add to ~/.bashrc:\n" +
+			"     echo 'source <(createos completion bash)' >> ~/.bashrc\n" +
+			"     source ~/.bashrc\n\n" +
+			"   Zsh — add to ~/.zshrc:\n" +
+			"     echo 'source <(createos completion zsh)' >> ~/.zshrc\n" +
+			"     source ~/.zshrc\n\n" +
+			"   Fish — add to fish config:\n" +
+			"     createos completion fish > ~/.config/fish/completions/createos.fish\n\n" +
+			"   To load once for the current session only (without persisting):\n" +
+			"     source <(createos completion bash)\n" +
+			"     source <(createos completion zsh)",
 		Action: func(c *cli.Context) error {
-			shell := c.Args().First()
+			shell := c.String("shell")
+			if shell == "" {
+				shell = c.Args().First()
+			}
 			switch shell {
 			case "bash":
 				fmt.Println(bashScript)

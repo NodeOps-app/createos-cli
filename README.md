@@ -200,7 +200,7 @@ createos --help
 | Command               | Description                                             |
 | --------------------- | ------------------------------------------------------- |
 | `createos ask`        | Ask the AI assistant to help manage your infrastructure |
-| `createos completion` | Generate shell completion script (bash/zsh/fish/powershell) |
+| `createos completion` | Generate shell completion script (bash/zsh/fish) |
 | `createos version`    | Print the current version                               |
 
 ## Non-interactive / CI usage
