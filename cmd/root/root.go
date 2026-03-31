@@ -10,7 +10,6 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/cmd/ask"
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
-	"github.com/NodeOps-app/createos-cli/cmd/completion"
 	"github.com/NodeOps-app/createos-cli/cmd/cronjobs"
 	"github.com/NodeOps-app/createos-cli/cmd/deployments"
 	"github.com/NodeOps-app/createos-cli/cmd/domains"
@@ -75,7 +74,7 @@ func NewApp() *cli.App {
 			}
 
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "completion" || cmd == "ask" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" {
 				return nil
 			}
 
@@ -152,7 +151,6 @@ func NewApp() *cli.App {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
 			fmt.Println("  ask             Ask the AI assistant to help manage your infrastructure")
-			fmt.Println("  completion      Generate shell completion script")
 			fmt.Println("  version        Print the current version")
 			fmt.Println()
 			fmt.Println("Global Flags:")
@@ -166,7 +164,6 @@ func NewApp() *cli.App {
 		Commands: []*cli.Command{
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
-			completion.NewCompletionCommand(),
 			cronjobs.NewCronjobsCommand(),
 			deployments.NewDeploymentsCommand(),
 			ask.NewAskCommand(),
