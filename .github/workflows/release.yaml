@@ -90,14 +90,55 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
+          BASE="https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}"
 
-          ARM64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-darwin-arm64.sha256")
-          AMD64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-darwin-amd64.sha256")
+          DARWIN_ARM64=$(curl -sL "${BASE}/createos-darwin-arm64.sha256")
+          DARWIN_AMD64=$(curl -sL "${BASE}/createos-darwin-amd64.sha256")
+          LINUX_ARM64=$(curl -sL  "${BASE}/createos-linux-arm64.sha256")
+          LINUX_AMD64=$(curl -sL  "${BASE}/createos-linux-amd64.sha256")
 
-          sed -i "s/version \".*\"/version \"${VERSION_NUM}\"/" Formula/createos.rb
-          sed -i "/on_arm/,/end/{s/sha256 \".*\"/sha256 \"${ARM64_SHA}\"/}" Formula/createos.rb
-          sed -i "/on_intel/,/end/{s/sha256 \".*\"/sha256 \"${AMD64_SHA}\"/}" Formula/createos.rb
-          sed -i "s|releases/download/v[^/]*/|releases/download/${VERSION}/|g" Formula/createos.rb
+          cat > Formula/createos.rb <<FORMULA
+class Createos < Formula
+  desc "CreateOS CLI - Manage your infrastructure"
+  homepage "https://github.com/NodeOps-app/createos-cli"
+  version "${VERSION_NUM}"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "${BASE}/createos-darwin-arm64"
+      sha256 "${DARWIN_ARM64}"
+    end
+
+    on_intel do
+      url "${BASE}/createos-darwin-amd64"
+      sha256 "${DARWIN_AMD64}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "${BASE}/createos-linux-arm64"
+      sha256 "${LINUX_ARM64}"
+    end
+
+    on_intel do
+      url "${BASE}/createos-linux-amd64"
+      sha256 "${LINUX_AMD64}"
+    end
+  end
+
+  def install
+    os = OS.mac? ? "darwin" : "linux"
+    arch = Hardware::CPU.arm? ? "arm64" : "amd64"
+    bin.install "createos-\#{os}-\#{arch}" => "createos"
+  end
+
+  test do
+    system "\#{bin}/createos", "version"
+  end
+end
+FORMULA
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
