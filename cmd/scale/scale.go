@@ -98,6 +98,7 @@ func resolveProjectAndEnv(c *cli.Context, client *api.APIClient) (string, string
 				return projectID, envs[i].ID, nil
 			}
 		}
+		return "", "", fmt.Errorf("no environment selected")
 	}
 
 	return projectID, envID, nil

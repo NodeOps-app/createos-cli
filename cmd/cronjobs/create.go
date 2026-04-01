@@ -133,7 +133,7 @@ Examples:
 					}
 					path = pterm.RemoveColorFromString(path)
 				}
-				if method == "GET" {
+				if !c.IsSet("method") {
 					methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"}
 					selected, selErr := pterm.DefaultInteractiveSelect.
 						WithOptions(methods).

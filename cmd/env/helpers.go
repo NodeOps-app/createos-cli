@@ -65,6 +65,7 @@ func resolveProjectEnv(c *cli.Context, client *api.APIClient) (string, *api.Envi
 				return projectID, &envs[i], nil
 			}
 		}
+		return "", nil, fmt.Errorf("no environment selected")
 	}
 
 	// envID was known — fetch the full object so callers have UniqueName etc.

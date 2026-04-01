@@ -62,7 +62,9 @@ Examples:
 			// Decode existing settings for defaults in both TTY and non-TTY.
 			var currentSettings api.HTTPCronjobSettings
 			if existing.Settings != nil {
-				_ = json.Unmarshal(*existing.Settings, &currentSettings)
+				if err := json.Unmarshal(*existing.Settings, &currentSettings); err != nil {
+					return fmt.Errorf("could not parse existing cron job settings: %w", err)
+				}
 			}
 
 			if !terminal.IsInteractive() {
@@ -121,10 +123,10 @@ Examples:
 						defaultMethod = currentSettings.Method
 					}
 					methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"}
-					_ = defaultMethod // used as visual reference; select will show all options
 					selected, selErr := pterm.DefaultInteractiveSelect.
 						WithOptions(methods).
 						WithDefaultText("HTTP method").
+						WithDefaultOption(defaultMethod).
 						Show()
 					if selErr != nil {
 						return fmt.Errorf("could not read method: %w", selErr)
