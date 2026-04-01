@@ -7,6 +7,7 @@ import (
 	"github.com/pterm/pterm"
 
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
+	"github.com/NodeOps-app/createos-cli/internal/updater"
 )
 
 const asciiLogo = ` ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
@@ -24,5 +25,12 @@ func Show() {
 	style2 := pterm.NewStyle(pterm.FgGray)
 	style2.Println("  Your intelligent infrastructure CLI (version: " + version.Version + ")")
 	fmt.Println()
+
+	if latest := updater.LatestVersion(); latest != "" {
+		pterm.Info.Printf("A new version is available: %s → %s\n", version.Version, latest)
+		pterm.Println(pterm.Gray("  Run 'createos upgrade' to update."))
+		fmt.Println()
+	}
+
 	fmt.Println()
 }

@@ -158,7 +158,7 @@ func NewApp() *cli.App {
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
-			fmt.Println("  ask             Ask the AI assistant to help manage your infrastructure")
+			fmt.Println("  ask            Ask the AI assistant to help manage your infrastructure")
 			fmt.Println("  upgrade        Upgrade createos to the latest version")
 			fmt.Println("  version        Print the current version")
 			fmt.Println()

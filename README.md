@@ -14,6 +14,34 @@ The official command-line interface for [CreateOS](https://createos.nodeops.netw
 
 ## Installation
 
+### Stable (recommended)
+
+```sh
+curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | sh -
+```
+
+### Nightly
+
+Built daily from the latest commit on `main`. May contain unreleased features.
+
+```sh
+curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | CREATEOS_CHANNEL=nightly sh -
+```
+
+### Pin a specific version
+
+```sh
+curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | CREATEOS_VERSION=v0.1.0 sh -
+```
+
+### Upgrade
+
+```sh
+createos upgrade
+```
+
+### Build from source
+
 Requires Go 1.21+.
 
 ```bash
