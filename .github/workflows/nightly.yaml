@@ -83,6 +83,9 @@ jobs:
           git push --delete origin nightly || true
         shell: bash
 
+      - name: Write commit SHA
+        run: echo -n "${{ github.sha }}" > commit.txt
+
       - name: Create nightly release
         uses: softprops/action-gh-release@v2
         with:
@@ -90,4 +93,6 @@ jobs:
           name: "nightly (${{ env.RELEASE_DATE }})"
           prerelease: true
           body: "Automated nightly build from the latest commit on main."
-          files: createos-*
+          files: |
+            createos-*
+            commit.txt

@@ -64,11 +64,15 @@ func runUpgrade() error {
 	}
 
 	if version.Channel == "nightly" {
-		// Nightly: ISO date string comparison is sufficient
-		if release.TagName == version.Version {
-			pterm.Success.Println("Already up to date.")
+		remoteCommit, err := fetchNightlyCommit(release)
+		if err != nil {
+			return fmt.Errorf("could not check nightly commit: %w", err)
+		}
+		if remoteCommit == version.Commit {
+			pterm.Success.Printf("Already up to date (commit: %s).\n", shortSHA(version.Commit))
 			return nil
 		}
+		pterm.Info.Printf("New nightly available: %s → %s\n", shortSHA(version.Commit), shortSHA(remoteCommit))
 	} else {
 		cmp := semver.Compare(version.Version, release.TagName)
 		switch {
@@ -236,6 +240,54 @@ func downloadToTemp(rawURL string) (string, error) {
 	}
 
 	return tmp.Name(), nil
+}
+
+func fetchNightlyCommit(release *githubRelease) (string, error) {
+	commitURL := ""
+	for _, a := range release.Assets {
+		if a.Name == "commit.txt" {
+			commitURL = a.BrowserDownloadURL
+			break
+		}
+	}
+	if commitURL == "" {
+		return "", fmt.Errorf("commit.txt not found in nightly release assets")
+	}
+	if err := validateDownloadURL(commitURL); err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("commit.txt download returned %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 128))
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(data)), nil
+}
+
+func shortSHA(sha string) string {
+	if len(sha) >= 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 func fetchChecksum(rawURL string) (string, error) {
