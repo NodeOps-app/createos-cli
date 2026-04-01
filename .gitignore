@@ -1,3 +1,5 @@
 .claude
 .createos.json
 .env.*
+cos
+build.sh

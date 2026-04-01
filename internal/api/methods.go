@@ -258,17 +258,42 @@ func (c *APIClient) GetDeploymentBuildLogs(projectID, deploymentID string) ([]Bu
 	return result.Data, nil
 }
 
-// RetriggerDeployment triggers a new deployment run.
-func (c *APIClient) RetriggerDeployment(projectID, deploymentID string) error {
-	resp, err := c.Client.R().
-		Post("/v1/projects/" + projectID + "/deployments/" + deploymentID + "/retrigger")
+// RetriggerDeployment triggers a new deployment run and returns the new deployment.
+// branch is optional — pass empty string to use the branch from the existing deployment.
+func (c *APIClient) RetriggerDeployment(projectID, deploymentID, branch string) (*Deployment, error) {
+	var result Response[Deployment]
+	req := c.Client.R().SetResult(&result)
+	if branch != "" {
+		req = req.SetQueryParam("branch", branch)
+	}
+	resp, err := req.Post("/v1/projects/" + projectID + "/deployments/" + deploymentID + "/retrigger")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.IsError() {
-		return ParseAPIError(resp.StatusCode(), resp.Body())
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return nil
+	return &result.Data, nil
+}
+
+// TriggerLatestDeployment triggers a new deployment from the latest commit.
+// branch is optional — passed as a query param; omit to use the project's default branch.
+func (c *APIClient) TriggerLatestDeployment(projectID, branch string) (*Deployment, error) {
+	var result Response[struct {
+		ID string `json:"id"`
+	}]
+	req := c.Client.R().SetResult(&result)
+	if branch != "" {
+		req = req.SetQueryParam("branch", branch)
+	}
+	resp, err := req.Post("/v1/projects/" + projectID + "/trigger-latest")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return c.GetDeployment(projectID, result.Data.ID)
 }
 
 // CancelDeployment cancels a running deployment.
@@ -660,13 +685,45 @@ func (c *APIClient) GetTemplatePurchaseDownloadURL(purchaseID string) (string, e
 	return result.Data.DownloadURI, nil
 }
 
-// CreateDeployment creates a new deployment for a project.
+// CreateDeployment creates a new deployment for an image-type project.
 func (c *APIClient) CreateDeployment(projectID string, body map[string]any) (*Deployment, error) {
 	var result Response[Deployment]
 	resp, err := c.Client.R().
 		SetResult(&result).
 		SetBody(body).
 		Post("/v1/projects/" + projectID + "/deployments")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// UploadDeploymentZip creates a new deployment by uploading a ZIP file.
+// Only available for upload-type projects.
+func (c *APIClient) UploadDeploymentZip(projectID, zipPath string) (*Deployment, error) {
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetFile("file", zipPath).
+		Put("/v1/projects/" + projectID + "/deployments/upload-zip")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// GetDeployment returns a single deployment by ID.
+func (c *APIClient) GetDeployment(projectID, deploymentID string) (*Deployment, error) {
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/" + projectID + "/deployments/" + deploymentID)
 	if err != nil {
 		return nil, err
 	}

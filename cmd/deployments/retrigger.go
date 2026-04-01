@@ -28,7 +28,7 @@ func newDeploymentRetriggerCommand() *cli.Command {
 				return err
 			}
 
-			if err := client.RetriggerDeployment(projectID, deploymentID); err != nil {
+			if _, err := client.RetriggerDeployment(projectID, deploymentID, ""); err != nil {
 				return err
 			}
 
