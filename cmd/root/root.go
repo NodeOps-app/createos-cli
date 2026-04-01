@@ -65,6 +65,13 @@ func NewApp() *cli.App {
 			// Store the output format in metadata
 			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
 
+			// Skip auth for --help / -h on any command
+			for _, a := range c.Args().Slice() {
+				if a == "--help" || a == "-h" || a == "help" {
+					return nil
+				}
+			}
+
 			apiURL := c.String("api-url")
 			if apiURL != "" && apiURL != api.DefaultBaseURL {
 				parsed, err := url.Parse(apiURL)
@@ -74,7 +81,7 @@ func NewApp() *cli.App {
 			}
 
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "init" {
 				return nil
 			}
 
@@ -137,6 +144,7 @@ func NewApp() *cli.App {
 				fmt.Println("  environments   Manage project environments")
 				fmt.Println("  init           Link this directory to a CreateOS project")
 				fmt.Println("  logout         Sign out from CreateOS")
+				fmt.Println("  me             Manage your account and OAuth consents")
 				fmt.Println("  oauth-clients  Manage OAuth clients")
 				fmt.Println("  open           Open project URL or dashboard in browser")
 				fmt.Println("  projects       Manage projects")
@@ -144,7 +152,6 @@ func NewApp() *cli.App {
 				fmt.Println("  skills         Manage skills")
 				fmt.Println("  status         Show project health and deployment status")
 				fmt.Println("  templates      Browse and scaffold from project templates")
-				fmt.Println("  me             Manage your account and OAuth consents")
 				fmt.Println("  vms            Manage VM terminal instances")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
