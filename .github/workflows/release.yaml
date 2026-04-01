@@ -1,0 +1,78 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          VERSION="${{ github.ref_name }}"
+          PKG="github.com/NodeOps-app/createos-cli/internal/pkg/version"
+          CFG="github.com/NodeOps-app/createos-cli/internal/config"
+          LDFLAGS="-s -w -X ${PKG}.Version=${VERSION} -X ${PKG}.Channel=stable -X ${CFG}.OAuthClientID=${{ secrets.OAUTH_CLIENT_ID }}"
+
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY="createos-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
+          else
+            BINARY="createos-${{ matrix.goos }}-${{ matrix.goarch }}"
+          fi
+
+          go build -trimpath -ldflags="${LDFLAGS}" -o "${BINARY}" .
+          sha256sum "${BINARY}" | awk '{print $1}' > "${BINARY}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: createos-*
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: createos-*

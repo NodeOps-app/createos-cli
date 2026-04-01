@@ -11,8 +11,9 @@ import (
 
 const oauthFile = ".oauth"
 
-// OAuthClientID is the pre-registered public OAuth client ID for the CreateOS CLI
-const OAuthClientID = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
+// OAuthClientID is the pre-registered public OAuth client ID for the CreateOS CLI.
+// Injected at build time via -ldflags="-X .../config.OAuthClientID=<id>"
+var OAuthClientID = "fbcaaa58-1e30-43fe-8fba-34382ba4fe7f"
 
 // OAuthIssuerURL is the OAuth identity server base URL
 const OAuthIssuerURL = "https://id.nodeops.network"

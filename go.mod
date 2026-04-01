@@ -9,6 +9,7 @@ require (
 	github.com/pterm/pterm v0.12.82
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/crypto v0.49.0
+	golang.org/x/mod v0.34.0
 	golang.org/x/term v0.41.0
 )
 

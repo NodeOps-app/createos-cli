@@ -23,6 +23,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/status"
 	"github.com/NodeOps-app/createos-cli/cmd/templates"
+	"github.com/NodeOps-app/createos-cli/cmd/upgrade"
 	"github.com/NodeOps-app/createos-cli/cmd/users"
 	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
 	"github.com/NodeOps-app/createos-cli/cmd/vms"
@@ -81,7 +82,7 @@ func NewApp() *cli.App {
 			}
 
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "init" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "init" || cmd == "upgrade" {
 				return nil
 			}
 
@@ -158,6 +159,7 @@ func NewApp() *cli.App {
 				fmt.Println("  login          Authenticate with CreateOS")
 			}
 			fmt.Println("  ask             Ask the AI assistant to help manage your infrastructure")
+			fmt.Println("  upgrade        Upgrade createos to the latest version")
 			fmt.Println("  version        Print the current version")
 			fmt.Println()
 			fmt.Println("Global Flags:")
@@ -185,6 +187,7 @@ func NewApp() *cli.App {
 			skills.NewSkillsCommand(),
 			status.NewStatusCommand(),
 			templates.NewTemplatesCommand(),
+			upgrade.NewUpgradeCommand(),
 			users.NewUsersCommand(),
 			vms.NewVMsCommand(),
 			auth.NewWhoamiCommand(),

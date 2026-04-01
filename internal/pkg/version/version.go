@@ -2,4 +2,9 @@
 package version
 
 // Version is the current release version of the CreateOS CLI.
-var Version = "0.0.1"
+// Injected at build time via -ldflags="-X .../version.Version=vX.Y.Z"
+var Version = "dev"
+
+// Channel is the release channel: "stable" or "nightly".
+// Injected at build time via -ldflags="-X .../version.Channel=stable"
+var Channel = "stable"
