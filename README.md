@@ -112,6 +112,33 @@ createos --help
 | `createos projects get`    | Get project details |
 | `createos projects delete` | Delete a project    |
 
+### Deploy
+
+| Command                 | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `createos deploy`       | Deploy your project (auto-detects type)                  |
+
+**Deploy flags:**
+
+| Flag         | Description                                                        |
+| ------------ | ------------------------------------------------------------------ |
+| `--project`  | Project ID (auto-detected from `.createos.json`)                   |
+| `--branch`   | Branch to deploy from (VCS/GitHub projects only)                   |
+| `--image`    | Docker image to deploy (image projects only, e.g. `nginx:latest`)  |
+| `--dir`      | Directory to zip and upload (upload projects only, default: `.`)   |
+
+**Deploy behaviour by project type:**
+
+| Project type   | What happens                                                                          |
+| -------------- | ------------------------------------------------------------------------------------- |
+| VCS / GitHub   | Triggers from the latest commit. Prompts for branch interactively if not provided.   |
+| Upload         | Zips the local directory (respects `.gitignore`), uploads, and streams build logs.   |
+| Image          | Deploys the specified Docker image.                                                   |
+
+**Files excluded from upload zip:**
+
+Sensitive and noisy files are always excluded: `.env`, `.env.*`, secrets/keys (`*.pem`, `*.key`, `*.p12`, etc.), `node_modules`, build artifacts (`target`, `coverage`, etc.), OS/editor files, and anything listed in your project's `.gitignore`.
+
 ### Deployments
 
 | Command                           | Description                          |
@@ -235,6 +262,12 @@ createos --help
 All commands accept flags so they work in CI and non-interactive environments. Destructive commands require `--force` to skip the confirmation prompt.
 
 ```bash
+# Deploy
+createos deploy                                      # upload project — zips current dir
+createos deploy --dir ./dist                         # upload project — zip a specific dir
+createos deploy --branch main                        # VCS project — deploy from main
+createos deploy --image nginx:latest                 # image project
+
 # Projects
 createos projects get --project <id>
 createos projects delete --project <id> --force
