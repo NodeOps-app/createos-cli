@@ -46,5 +46,5 @@ jobs:
       - name: Build
         run: |
           set -x
-          CGO_ENABLED=0	go build -trimpath -ldflags="-s -w -extldflags '-static'" -o nodeops main.go
+          CGO_ENABLED=0	go build -trimpath -ldflags="-s -w -extldflags '-static'" -o createos main.go
           ldd createos || true
