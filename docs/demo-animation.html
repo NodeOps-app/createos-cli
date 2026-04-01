@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CreateOS CLI Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .terminal-wrapper {
+    width: 880px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
+  }
+
+  .terminal-bar {
+    background: #3c3c3c;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .terminal-btn { width: 12px; height: 12px; border-radius: 50%; }
+  .btn-red { background: #ff5f57; }
+  .btn-yellow { background: #febc2e; }
+  .btn-green { background: #28c840; }
+
+  .terminal-title {
+    color: #a0a0a0;
+    font-size: 13px;
+    flex: 1;
+    text-align: center;
+    margin-right: 48px;
+  }
+
+  /* macOS Terminal "Basic" profile colors */
+  .terminal-body {
+    background: #000000;
+    padding: 20px 24px;
+    min-height: 520px;
+    font-family: 'Menlo', 'SF Mono', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cccccc;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .line {
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.15s, transform 0.15s;
+    white-space: pre;
+  }
+  .line.visible { opacity: 1; transform: translateY(0); }
+
+  /* macOS Terminal standard ANSI colors */
+  .prompt { color: #4ae04a; font-weight: bold; }    /* green — standard prompt */
+  .cmd { color: #cccccc; }                           /* white — user input */
+  .success { color: #4ae04a; }                       /* green */
+  .info { color: #5ccfe6; }                          /* cyan */
+  .error { color: #ff6b6b; }                         /* red */
+  .dim { color: #808080; }                           /* gray */
+  .cyan { color: #5ccfe6; }                          /* cyan */
+  .yellow { color: #f0c674; }                        /* yellow */
+  .green { color: #4ae04a; }                         /* green */
+  .white { color: #ffffff; font-weight: bold; }      /* bright white */
+  .url { color: #5ccfe6; text-decoration: underline; } /* cyan underline */
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: #cccccc;
+    animation: blink 1s infinite;
+    vertical-align: middle;
+    margin-left: 1px;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  .scene-label {
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    color: #555;
+    font-size: 11px;
+    font-family: -apple-system, sans-serif;
+    z-index: 10;
+  }
+
+  .tagline {
+    text-align: center;
+    padding: 16px 24px;
+    background: #000;
+    border-top: 1px solid #222;
+    display: none;
+  }
+  .tagline-text {
+    color: #999;
+    font-size: 14px;
+    font-family: -apple-system, sans-serif;
+  }
+  .tagline-text strong { color: #5ccfe6; font-weight: 600; }
+  .tagline-cmd {
+    margin-top: 6px;
+    color: #666;
+    font-family: 'Menlo', monospace;
+    font-size: 12px;
+  }
+
+  /* End screen */
+  .end-screen {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: #000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    z-index: 20;
+  }
+  .end-screen.visible { display: flex; }
+
+  .end-logo {
+    color: #5ccfe6;
+    font-family: 'Menlo', 'SF Mono', 'Monaco', monospace;
+    font-size: 9.5px;
+    line-height: 1.15;
+    margin: 0 0 28px 0;
+    padding: 0;
+    white-space: pre;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .end-logo.show { opacity: 1; transform: translateY(0); }
+
+  .end-title {
+    font-family: -apple-system, sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
+  }
+  .end-title.show { opacity: 1; transform: translateY(0); }
+
+  .end-subtitle {
+    font-family: -apple-system, sans-serif;
+    font-size: 16px;
+    color: #808080;
+    margin-bottom: 36px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s ease 0.6s, transform 0.5s ease 0.6s;
+  }
+  .end-subtitle.show { opacity: 1; transform: translateY(0); }
+
+  .end-url {
+    font-family: 'Menlo', monospace;
+    font-size: 18px;
+    color: #5ccfe6;
+    background: rgba(92, 207, 230, 0.06);
+    border: 1px solid rgba(92, 207, 230, 0.2);
+    border-radius: 8px;
+    padding: 14px 28px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s ease 0.9s, transform 0.5s ease 0.9s;
+  }
+  .end-url.show { opacity: 1; transform: translateY(0); }
+
+  .end-install {
+    font-family: 'Menlo', monospace;
+    font-size: 13px;
+    color: #666;
+    margin-top: 20px;
+    opacity: 0;
+    transition: opacity 0.5s ease 1.2s;
+  }
+  .end-install.show { opacity: 1; }
+  .end-install span { color: #4ae04a; }
+</style>
+</head>
+<body>
+
+<div class="terminal-wrapper">
+  <div class="terminal-bar">
+    <div class="terminal-btn btn-red"></div>
+    <div class="terminal-btn btn-yellow"></div>
+    <div class="terminal-btn btn-green"></div>
+    <div class="terminal-title">naman — createos — zsh — 80x24</div>
+  </div>
+  <div class="terminal-body" id="terminal">
+    <div class="scene-label" id="sceneLabel"></div>
+    <div class="end-screen" id="endScreen">
+      <pre class="end-logo" id="endLogo"> ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗
+██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██╔════╝
+██║     ██████╔╝█████╗  ███████║   ██║   █████╗  ██║   ██║███████╗
+██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══╝  ██║   ██║╚════██║
+╚██████╗██║  ██║███████╗██║  ██║   ██║   ███████╗╚██████╔╝███████║
+ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  ╚═╝   ╚══════╝ ╚═════╝ ╚══════╝</pre>
+      <div class="end-title" id="endTitle">CreateOS CLI</div>
+      <div class="end-subtitle" id="endSubtitle">Deploy. Manage. Scale. Monetize.</div>
+      <div class="end-url" id="endUrl">nodeops.network/createos/cli</div>
+      <div class="end-install" id="endInstall"><span>$</span> brew install createos</div>
+    </div>
+  </div>
+  <div class="tagline" id="tagline">
+    <div class="tagline-text"><strong>CreateOS CLI v1.0</strong> — Deploy APIs. Manage infrastructure. Scale in seconds.</div>
+    <div class="tagline-cmd">brew install createos</div>
+  </div>
+</div>
+
+<div id="startOverlay" style="
+  position:fixed;inset:0;background:rgba(0,0,0,0.85);
+  display:flex;align-items:center;justify-content:center;
+  z-index:100;cursor:pointer;
+" onclick="startDemo()">
+  <div style="text-align:center;color:#e0e0e0;font-family:-apple-system,sans-serif;">
+    <div style="font-size:48px;margin-bottom:16px;">&#9654;</div>
+    <div style="font-size:18px;font-weight:500;">Click to play</div>
+    <div style="font-size:13px;color:#666;margin-top:8px;">Sound on for the full experience</div>
+  </div>
+</div>
+
+<script>
+const terminal = document.getElementById('terminal');
+const sceneLabel = document.getElementById('sceneLabel');
+const tagline = document.getElementById('tagline');
+
+// ── Real keyboard ASMR audio ──
+let typingAudio = null;
+
+function initAudio() {
+  typingAudio = new Audio('dragon-studio-typing-keyboard-asmr-356116.mp3');
+  typingAudio.loop = true;
+  typingAudio.volume = 0.8;
+}
+
+let isTyping = false;
+
+function playKeystroke() {
+  if (!typingAudio) return;
+  if (!isTyping) {
+    isTyping = true;
+    typingAudio.currentTime = Math.random() * 2;
+    typingAudio.play().catch(() => {});
+  }
+}
+
+function stopTyping() {
+  if (typingAudio && isTyping) {
+    const fadeOut = setInterval(() => {
+      if (typingAudio.volume > 0.05) {
+        typingAudio.volume -= 0.05;
+      } else {
+        typingAudio.pause();
+        typingAudio.volume = 0.8;
+        isTyping = false;
+        clearInterval(fadeOut);
+      }
+    }, 15);
+  }
+}
+
+function playEnterKey() { stopTyping(); }
+
+let demoStarted = false;
+function startDemo() {
+  if (demoStarted) return;
+  demoStarted = true;
+  document.getElementById('startOverlay').style.display = 'none';
+  initAudio();
+  runScene(0);
+}
+
+const scenes = [];
+
+function createScene(label, buildFn) {
+  scenes.push({ label, buildFn });
+}
+
+function runScene(index) {
+  if (index >= scenes.length) {
+    stopTyping();
+    sceneLabel.textContent = '';
+    // Remove all lines but keep sceneLabel and endScreen
+    Array.from(terminal.children).forEach(c => {
+      if (c.id !== 'sceneLabel' && c.id !== 'endScreen') c.remove();
+    });
+    // Show end screen with staggered animation
+    document.getElementById('endScreen').classList.add('visible');
+    setTimeout(() => document.getElementById('endLogo').classList.add('show'), 200);
+    setTimeout(() => document.getElementById('endTitle').classList.add('show'), 600);
+    setTimeout(() => document.getElementById('endSubtitle').classList.add('show'), 1000);
+    setTimeout(() => document.getElementById('endUrl').classList.add('show'), 1400);
+    setTimeout(() => document.getElementById('endInstall').classList.add('show'), 1800);
+    setTimeout(() => { tagline.style.display = 'block'; }, 2200);
+    return;
+  }
+
+  // Clear terminal lines (keep sceneLabel + endScreen)
+  Array.from(terminal.children).forEach(c => {
+    if (c.id !== 'sceneLabel' && c.id !== 'endScreen') c.remove();
+  });
+
+  stopTyping();
+
+  const scene = scenes[index];
+  sceneLabel.textContent = scene.label;
+
+  let totalDelay = 0;
+
+  const ctx = {
+    add(html, delay = 60) {
+      totalDelay += delay;
+      const d = totalDelay;
+      const div = document.createElement('div');
+      div.className = 'line';
+      div.innerHTML = html;
+      terminal.appendChild(div);
+      setTimeout(() => { div.classList.add('visible'); }, d);
+    },
+    type(prompt, cmd, delay = 60, speed = 30) {
+      totalDelay += delay;
+      const d = totalDelay;
+      const div = document.createElement('div');
+      div.className = 'line';
+      terminal.appendChild(div);
+
+      setTimeout(() => {
+        div.classList.add('visible');
+        div.innerHTML = `<span class="prompt">${prompt}</span> `;
+        const span = document.createElement('span');
+        span.className = 'cmd';
+        div.appendChild(span);
+        const cur = document.createElement('span');
+        cur.className = 'cursor';
+        div.appendChild(cur);
+
+        let i = 0;
+        const iv = setInterval(() => {
+          if (i < cmd.length) {
+            span.textContent += cmd[i]; i++;
+            playKeystroke();
+          } else {
+            clearInterval(iv);
+            cur.remove();
+            playEnterKey();
+          }
+        }, speed);
+      }, d);
+
+      totalDelay += cmd.length * speed + 150;
+    },
+    pause(ms) { totalDelay += ms; },
+    next() {
+      totalDelay += 1200;
+      setTimeout(() => runScene(index + 1), totalDelay);
+    }
+  };
+
+  scene.buildFn(ctx);
+  ctx.next();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 1: First view — exact CLI home screen (not logged in)
+// ═══════════════════════════════════════════════════════════
+createScene('', (s) => {
+  s.type('~$', 'createos', 200, 50);
+  s.pause(300);
+  s.add('<span class="cyan"> ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗</span>', 100);
+  s.add('<span class="cyan">██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██╔════╝</span>', 30);
+  s.add('<span class="cyan">██║     ██████╔╝█████╗  ███████║   ██║   █████╗  ██║   ██║███████╗</span>', 30);
+  s.add('<span class="cyan">██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══╝  ██║   ██║╚════██║</span>', 30);
+  s.add('<span class="cyan">╚██████╗██║  ██║███████╗██║  ██║   ██║   ███████╗╚██████╔╝███████║</span>', 30);
+  s.add('<span class="cyan"> ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  ╚═╝   ╚══════╝ ╚═════╝ ╚══════╝</span>', 30);
+  s.add('<span class="dim">  Your intelligent infrastructure CLI (version: v1.0.0)</span>', 80);
+  s.add('', 50);
+  s.add('', 50);
+  s.add('<span class="white">Available Commands:</span>', 80);
+  s.add('  <span class="cyan">login</span>          Authenticate with CreateOS', 40);
+  s.add('  <span class="dim">ask</span>            Ask the AI assistant to help manage your infrastructure', 40);
+  s.add('  <span class="dim">upgrade</span>        Upgrade createos to the latest version', 40);
+  s.add('  <span class="dim">version</span>        Print the current version', 40);
+  s.add('', 40);
+  s.add('<span class="dim">Run \'createos &lt;command&gt; --help\' for more information on a command.</span>', 40);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 2: Login
+// ═══════════════════════════════════════════════════════════
+createScene('Step 1: Login', (s) => {
+  s.type('~$', 'createos login', 200, 45);
+  s.pause(200);
+  s.add('', 100);
+  s.add('<span class="info">ℹ Opening browser for authentication...</span>', 400);
+  s.pause(800);
+  s.add('<span class="success">✓ Logged in as naman@gmail.com</span>', 600);
+  s.add('', 100);
+  s.add('<span class="dim">  Welcome back, Naman!</span>', 200);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 3: Home screen after login — full command list
+// ═══════════════════════════════════════════════════════════
+createScene('22 commands unlocked', (s) => {
+  s.type('~/my-api$', 'createos', 200, 50);
+  s.pause(200);
+  s.add('<span class="cyan"> ██████╗██████╗ ███████╗ █████╗ ████████╗███████╗ ██████╗ ███████╗</span>', 100);
+  s.add('<span class="cyan">██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██╔════╝██╔═══██╗██╔════╝</span>', 20);
+  s.add('<span class="cyan">██║     ██████╔╝█████╗  ███████║   ██║   █████╗  ██║   ██║███████╗</span>', 20);
+  s.add('<span class="cyan">██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══╝  ██║   ██║╚════██║</span>', 20);
+  s.add('<span class="cyan">╚██████╗██║  ██║███████╗██║  ██║   ██║   ███████╗╚██████╔╝███████║</span>', 20);
+  s.add('<span class="cyan"> ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  ╚═╝   ╚══════╝ ╚═════╝ ╚══════╝</span>', 20);
+  s.add('<span class="dim">  Your intelligent infrastructure CLI (version: v1.0.0)</span>', 60);
+  s.add('', 30);
+  s.add('', 30);
+  s.add('<span class="white">Available Commands:</span>', 60);
+  s.add('  <span class="cyan">cronjobs</span>       Manage cron jobs for a project', 25);
+  s.add('  <span class="cyan">deploy</span>         Deploy your project to CreateOS', 25);
+  s.add('  <span class="cyan">deployments</span>    Manage project deployments', 25);
+  s.add('  <span class="cyan">domains</span>        Manage custom domains', 25);
+  s.add('  <span class="cyan">env</span>            Manage environment variables', 25);
+  s.add('  <span class="cyan">environments</span>   Manage project environments', 25);
+  s.add('  <span class="cyan">init</span>           Link this directory to a CreateOS project', 25);
+  s.add('  <span class="dim">logout</span>         Sign out from CreateOS', 25);
+  s.add('  <span class="cyan">me</span>             Manage your account and OAuth consents', 25);
+  s.add('  <span class="cyan">oauth-clients</span>  Manage OAuth clients', 25);
+  s.add('  <span class="cyan">open</span>           Open project URL or dashboard in browser', 25);
+  s.add('  <span class="cyan">projects</span>       Manage projects', 25);
+  s.add('  <span class="cyan">scale</span>          Adjust replicas and resources', 25);
+  s.add('  <span class="cyan">skills</span>         Manage skills', 25);
+  s.add('  <span class="cyan">status</span>         Show project health and deployment status', 25);
+  s.add('  <span class="cyan">templates</span>      Browse and scaffold from project templates', 25);
+  s.add('  <span class="cyan">vms</span>            Manage VM terminal instances', 25);
+  s.add('  <span class="cyan">whoami</span>         Show the currently authenticated user', 25);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 4: Init + Deploy
+// ═══════════════════════════════════════════════════════════
+createScene('Step 2: Init & Deploy', (s) => {
+  s.type('~/my-api$', 'createos init --project a3f8c912', 200, 35);
+  s.pause(200);
+  s.add('<span class="dim">  Using environment: production</span>', 300);
+  s.add('<span class="success">✓ Linked to my-api</span>', 200);
+  s.add('', 200);
+
+  s.type('~/my-api$', 'createos deploy', 400, 45);
+  s.pause(200);
+  s.add('<span class="info">ℹ Deploying my-api from main...</span>', 300);
+  s.add('', 80);
+  s.add('  <span class="white">Building v12...</span>', 500);
+  s.add('', 40);
+  s.add('<span class="dim">  Step 1/4: Installing dependencies...</span>', 350);
+  s.add('<span class="dim">  Step 2/4: Building application...</span>', 500);
+  s.add('<span class="dim">  Step 3/4: Running tests...</span>', 400);
+  s.add('<span class="dim">  Step 4/4: Packaging container...</span>', 350);
+  s.add('', 80);
+  s.add('<span class="success">✓ Deployed (v12)</span>', 700);
+  s.add('', 40);
+  s.add('<span class="info">ℹ Live at: <span class="url">https://my-api.nodeops.app</span></span>', 150);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 5: Status
+// ═══════════════════════════════════════════════════════════
+createScene('Step 3: Status', (s) => {
+  s.type('~/my-api$', 'createos status', 200, 45);
+  s.pause(300);
+  s.add('', 100);
+  s.add('  <span class="white">my-api</span>', 80);
+  s.add('  <span class="dim">──────────────────────────────────</span>', 40);
+  s.add('', 30);
+  s.add('  <span class="cyan">Status:</span>       <span class="green">● Running</span>', 50);
+  s.add('  <span class="cyan">URL:</span>          <span class="url">https://my-api.nodeops.app</span>', 50);
+  s.add('  <span class="cyan">Type:</span>         vcs', 50);
+  s.add('  <span class="cyan">Created:</span>      3 days ago', 50);
+  s.add('', 40);
+  s.add('  <span class="cyan">Environments:</span>', 60);
+  s.add('    <span class="green">●</span> production — active (branch: main)', 40);
+  s.add('      <span class="dim">https://my-api.nodeops.app</span>', 40);
+  s.add('', 40);
+  s.add('  <span class="cyan">Domains:</span>', 60);
+  s.add('    <span class="green">✓</span> api.myapp.com', 40);
+  s.add('', 40);
+  s.add('  <span class="cyan">Recent deploys:</span>', 60);
+  s.add('    <span class="green">✓</span>  v12  just now      deployed', 40);
+  s.add('    <span class="green">✓</span>  v11  2 hours ago   deployed', 40);
+  s.add('    <span class="green">✓</span>  v10  1 day ago     deployed', 40);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SCENE 6: Env + Scale + Cron + Open
+// ═══════════════════════════════════════════════════════════
+createScene('Step 4: Manage', (s) => {
+  s.type('~/my-api$', 'createos env set API_KEY=sk-prod-xxxx DATABASE_URL=postgres://...', 200, 22);
+  s.pause(200);
+  s.add('<span class="success">✓ Set API_KEY</span>', 300);
+  s.add('<span class="success">✓ Set DATABASE_URL</span>', 100);
+  s.add('', 200);
+
+  s.type('~/my-api$', 'createos scale --replicas 2 --cpu 300', 400, 30);
+  s.pause(200);
+  s.add('', 200);
+  s.add('  <span class="dim">           Before    After</span>', 80);
+  s.add('  <span class="white">Replicas</span>   1         <span class="green">2</span>', 40);
+  s.add('  <span class="white">CPU</span>        200m      <span class="green">300m</span>', 40);
+  s.add('  <span class="white">Memory</span>     512MB     512MB', 40);
+  s.add('', 60);
+  s.add('<span class="success">✓ Scaling complete.</span>', 200);
+  s.add('', 200);
+
+  s.type('~/my-api$', 'createos cronjobs create --name "cleanup" --schedule "0 * * * *" --path /api/cleanup', 400, 20);
+  s.pause(200);
+  s.add('<span class="success">✓ Cron job "cleanup" created — runs every hour</span>', 400);
+  s.add('', 300);
+
+  s.type('~/my-api$', 'createos open', 400, 45);
+  s.pause(200);
+  s.add('<span class="info">ℹ Opening https://my-api.nodeops.app...</span>', 300);
+  s.pause(800);
+});
+
+// Demo starts on click — audio requires user gesture
+</script>
+</body>
+</html>

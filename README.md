@@ -23,8 +23,7 @@ curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/instal
 ### macOS & Linux — Homebrew
 
 ```sh
-brew tap nodeops-app/tap
-brew install createos
+brew install NodeOps-app/createos/createos
 ```
 
 ### Nightly
