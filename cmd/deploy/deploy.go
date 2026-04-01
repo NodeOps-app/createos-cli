@@ -22,26 +22,60 @@ const maxZipSize = 50 * 1024 * 1024 // 50 MB
 
 // defaultIgnorePatterns are files/dirs excluded when zipping for upload.
 var defaultIgnorePatterns = []string{
+	// Version control
 	".git",
-	".gitignore",
+
+	// CreateOS config
 	".createos.json",
-	"node_modules",
+
+	// Secrets and credentials
 	".env",
 	".env.*",
-	"__pycache__",
+	"*.pem",
+	"*.key",
+	"*.p12",
+	"*.pfx",
+	"*.crt",
+	"*.cer",
+	"*.jks",
+	".npmrc",
+	".pypirc",
+	"credentials.json",
+	"service-account*.json",
+
+	// Dependencies
+	"node_modules",
 	".venv",
 	"venv",
+	"vendor", // Go
+
+	// Build artifacts
+	"target", // Rust
+	"coverage",
+	".nyc_output",
+	".pytest_cache",
+	"__pycache__",
+
+	// Database files
+	"*.sqlite",
+	"*.sqlite3",
+	"*.db",
+
+	// Log files
+	"*.log",
+
+	// Terraform state
+	".terraform",
+	"terraform.tfstate",
+	"terraform.tfstate.*",
+
+	// OS/editor noise
 	".DS_Store",
 	"Thumbs.db",
 	".idea",
 	".vscode",
 	"*.swp",
 	"*.swo",
-	"target",       // Rust
-	"vendor",       // Go (optional, but common to exclude)
-	"dist",         // built output — may need to include for some projects
-	"coverage",
-	".nyc_output",
 }
 
 // NewDeployCommand returns the deploy command.
@@ -97,23 +131,43 @@ func NewDeployCommand() *cli.Command {
 				return err
 			}
 
+			// Validate flag/type combinations
+			isVCS := project.Type == "vcs" || project.Type == "githubImport"
+			if c.IsSet("branch") && !isVCS {
+				return fmt.Errorf("--branch is only supported for Git-connected projects (this project uses %q deployment)", project.Type)
+			}
+			if c.IsSet("dir") && project.Type != "upload" {
+				return fmt.Errorf("--dir is only supported for upload projects (this project uses %q deployment)", project.Type)
+			}
+
 			// Route based on project type
 			switch {
 			case c.IsSet("image") || project.Type == "image":
 				return deployImage(c, client, project)
 			case project.Type == "upload":
 				return deployUpload(c, client, project)
-			default:
-				// VCS (GitHub) projects and anything else
+			case project.Type == "vcs" || project.Type == "githubImport":
 				return deployVCS(c, client, project)
+			default:
+				return fmt.Errorf("unsupported project type %q — please deploy from the dashboard", project.Type)
 			}
 		},
 	}
 }
 
-// deployVCS triggers a deployment from the latest commit on a branch.
+// deployVCS triggers a new deployment from the latest commit, optionally on a specific branch.
 func deployVCS(c *cli.Context, client *api.APIClient, project *api.Project) error {
 	branch := c.String("branch")
+
+	if branch == "" && terminal.IsInteractive() {
+		result, err := pterm.DefaultInteractiveTextInput.
+			WithDefaultText("Branch to deploy (leave empty for default branch)").
+			Show()
+		if err != nil {
+			return err
+		}
+		branch = strings.TrimSpace(result)
+	}
 
 	branchLabel := "default branch"
 	if branch != "" {
@@ -170,7 +224,9 @@ func deployUpload(c *cli.Context, client *api.APIClient, project *api.Project) e
 	spinner.UpdateText("Uploading...")
 
 	// Close before uploading so the file is flushed
-	zipFile.Close() //nolint:errcheck
+	if err := zipFile.Close(); err != nil { //nolint:govet
+		return fmt.Errorf("could not flush deployment package: %w", err)
+	}
 
 	deployment, err := client.UploadDeploymentZip(project.ID, zipFile.Name())
 	if err != nil {
@@ -211,18 +267,22 @@ func deployImage(c *cli.Context, client *api.APIClient, project *api.Project) er
 	return waitForDeployment(client, project.ID, deployment)
 }
 
-// waitForDeployment polls until the deployment succeeds, fails, or times out.
+// waitForDeployment streams build logs while building, then runtime logs on success.
 func waitForDeployment(client *api.APIClient, projectID string, deployment *api.Deployment) error {
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Deploying (v%d)...", deployment.VersionNumber))
+	fmt.Println()
 
-	timeout := time.After(5 * time.Minute)
-	ticker := time.NewTicker(3 * time.Second)
+	timeout := time.After(10 * time.Minute)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+
+	lastBuildLine := 0
+	headerPrinted := false
 
 	for {
 		select {
 		case <-timeout:
-			spinner.Warning("Deployment is still in progress — check back with: createos deployments logs")
+			fmt.Println()
+			pterm.Warning.Println("Deployment is still in progress — check back with: createos deployments build-logs")
 			return nil
 		case <-ticker.C:
 			d, err := client.GetDeployment(projectID, deployment.ID)
@@ -230,9 +290,26 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 				continue // transient error, keep polling
 			}
 
+			if !headerPrinted && d.VersionNumber > 0 {
+				fmt.Printf("  Building v%d...\n\n", d.VersionNumber)
+				headerPrinted = true
+			}
+
+			// Stream new build log lines
+			buildLogs, err := client.GetDeploymentBuildLogs(projectID, deployment.ID)
+			if err == nil {
+				for _, e := range buildLogs {
+					if e.LineNumber > lastBuildLine {
+						fmt.Println(e.Log)
+						lastBuildLine = e.LineNumber
+					}
+				}
+			}
+
 			switch d.Status {
 			case "successful", "running", "active", "deployed":
-				spinner.Success(fmt.Sprintf("Deployed (v%d)", d.VersionNumber))
+				fmt.Println()
+				pterm.Success.Printf("Deployed (v%d)\n", d.VersionNumber)
 				fmt.Println()
 				if d.Extra.Endpoint != "" {
 					url := d.Extra.Endpoint
@@ -240,27 +317,72 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 						url = "https://" + url
 					}
 					pterm.Info.Printf("Live at: %s\n", url)
+					fmt.Println()
 				}
-				fmt.Println()
-				pterm.Println(pterm.Gray("  View logs:   createos deployments logs"))
-				pterm.Println(pterm.Gray("  Redeploy:    createos deploy"))
+				// Stream initial runtime logs
+				streamRuntimeLogs(client, projectID, deployment.ID)
 				return nil
 			case "failed", "error", "cancelled":
-				spinner.Fail(fmt.Sprintf("Deployment failed (v%d)", d.VersionNumber))
 				fmt.Println()
-				pterm.Println(pterm.Gray("  View build logs:  createos deployments build-logs"))
+				pterm.Error.Printf("Deployment failed (v%d)\n", d.VersionNumber)
 				return fmt.Errorf("deployment %s failed with status: %s", d.ID, d.Status)
-			default:
-				spinner.UpdateText(fmt.Sprintf("Deploying (v%d) — %s...", d.VersionNumber, d.Status))
 			}
 		}
 	}
 }
 
-// createZip creates a zip archive of the directory, excluding default ignore patterns.
+// streamRuntimeLogs fetches and prints runtime logs after a successful deployment.
+func streamRuntimeLogs(client *api.APIClient, projectID, deploymentID string) {
+	logs, err := client.GetDeploymentLogs(projectID, deploymentID)
+	if err != nil || logs == "" {
+		pterm.Println(pterm.Gray("  View logs:    createos deployments logs"))
+		pterm.Println(pterm.Gray("  Redeploy:     createos deploy"))
+		return
+	}
+	fmt.Println("  Runtime logs:")
+	fmt.Println()
+	for _, line := range strings.Split(strings.TrimRight(logs, "\n"), "\n") {
+		fmt.Println("  " + line)
+	}
+	fmt.Println()
+	pterm.Println(pterm.Gray("  Follow logs:  createos deployments logs --follow"))
+	pterm.Println(pterm.Gray("  Redeploy:     createos deploy"))
+}
+
+// loadGitignorePatterns reads .gitignore from srcDir and returns usable patterns.
+func loadGitignorePatterns(srcDir string) []string {
+	data, err := os.ReadFile(filepath.Join(srcDir, ".gitignore")) //nolint:gosec
+	if err != nil {
+		return nil
+	}
+	var patterns []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		// Skip comments and empty lines
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Skip negations — we don't support re-including files
+		if strings.HasPrefix(line, "!") {
+			continue
+		}
+		// Strip trailing slash (directory marker) — we handle dirs via SkipDir
+		line = strings.TrimSuffix(line, "/")
+		// Strip leading slash (root-anchored) — use basename matching
+		line = strings.TrimPrefix(line, "/")
+		if line != "" {
+			patterns = append(patterns, line)
+		}
+	}
+	return patterns
+}
+
+// createZip creates a zip archive of the directory, excluding default ignore patterns and .gitignore rules.
 func createZip(w io.Writer, srcDir string) error {
 	zw := zip.NewWriter(w)
 	defer zw.Close() //nolint:errcheck
+
+	ignorePatterns := append(defaultIgnorePatterns, loadGitignorePatterns(srcDir)...) //nolint:gocritic
 
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -277,10 +399,12 @@ func createZip(w io.Writer, srcDir string) error {
 			return nil
 		}
 
-		// Check ignore patterns
+		// Check ignore patterns against basename and full relative path
 		baseName := filepath.Base(relPath)
-		for _, pattern := range defaultIgnorePatterns {
-			if matched, _ := filepath.Match(pattern, baseName); matched {
+		for _, pattern := range ignorePatterns {
+			matchedBase, _ := filepath.Match(pattern, baseName)
+			matchedRel, _ := filepath.Match(pattern, filepath.ToSlash(relPath))
+			if matchedBase || matchedRel {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}

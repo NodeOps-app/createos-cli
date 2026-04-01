@@ -83,7 +83,7 @@ func NewApp() *cli.App {
 			}
 
 			cmd := c.Args().First()
-			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "init" || cmd == "upgrade" {
+			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "upgrade" {
 				return nil
 			}
 
