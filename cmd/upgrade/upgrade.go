@@ -170,6 +170,10 @@ func fetchLatestRelease() (*githubRelease, error) {
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
+	// GH sends 403 on rate limit exhaust
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("GitHub API rate limit reached — try again in a few minutes")
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
