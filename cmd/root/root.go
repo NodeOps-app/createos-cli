@@ -11,6 +11,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/ask"
 	"github.com/NodeOps-app/createos-cli/cmd/auth"
 	"github.com/NodeOps-app/createos-cli/cmd/cronjobs"
+	"github.com/NodeOps-app/createos-cli/cmd/deploy"
 	"github.com/NodeOps-app/createos-cli/cmd/deployments"
 	"github.com/NodeOps-app/createos-cli/cmd/domains"
 	"github.com/NodeOps-app/createos-cli/cmd/env"
@@ -139,6 +140,7 @@ func NewApp() *cli.App {
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
 				fmt.Println("  cronjobs       Manage cron jobs for a project")
+				fmt.Println("  deploy         Deploy your project to CreateOS")
 				fmt.Println("  deployments    Manage project deployments")
 				fmt.Println("  domains        Manage custom domains")
 				fmt.Println("  env            Manage environment variables")
@@ -174,6 +176,7 @@ func NewApp() *cli.App {
 			auth.NewLoginCommand(),
 			auth.NewLogoutCommand(),
 			cronjobs.NewCronjobsCommand(),
+			deploy.NewDeployCommand(),
 			deployments.NewDeploymentsCommand(),
 			ask.NewAskCommand(),
 			domains.NewDomainsCommand(),

@@ -660,13 +660,67 @@ func (c *APIClient) GetTemplatePurchaseDownloadURL(purchaseID string) (string, e
 	return result.Data.DownloadURI, nil
 }
 
-// CreateDeployment creates a new deployment for a project.
+// CreateDeployment creates a new deployment for an image-type project.
 func (c *APIClient) CreateDeployment(projectID string, body map[string]any) (*Deployment, error) {
 	var result Response[Deployment]
 	resp, err := c.Client.R().
 		SetResult(&result).
 		SetBody(body).
 		Post("/v1/projects/" + projectID + "/deployments")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// TriggerLatestDeployment triggers a new deployment from the latest commit on
+// the given branch. If branch is empty the repository's default branch is used.
+// Only available for VCS projects.
+func (c *APIClient) TriggerLatestDeployment(projectID, branch string) (*Deployment, error) {
+	body := map[string]any{}
+	if branch != "" {
+		body["branch"] = branch
+	}
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetBody(body).
+		Post("/v1/projects/" + projectID + "/deployments/trigger-latest")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// UploadDeploymentZip creates a new deployment by uploading a ZIP file.
+// Only available for upload-type projects.
+func (c *APIClient) UploadDeploymentZip(projectID, zipPath string) (*Deployment, error) {
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetFile("file", zipPath).
+		Post("/v1/projects/" + projectID + "/deployments/upload/zip")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// GetDeployment returns a single deployment by ID.
+func (c *APIClient) GetDeployment(projectID, deploymentID string) (*Deployment, error) {
+	var result Response[Deployment]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/" + projectID + "/deployments/" + deploymentID)
 	if err != nil {
 		return nil, err
 	}
