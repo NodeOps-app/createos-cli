@@ -109,9 +109,15 @@ resolve_version() {
     info "Fetching latest stable release..."
     LATEST_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
     if command -v curl > /dev/null 2>&1; then
-        VERSION="$(curl -fsSL "${LATEST_URL}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
+        RELEASE_JSON="$(curl -fsSL --retry 3 "${LATEST_URL}" 2>&1)" || {
+            fatal "No stable release found. If you want the nightly build, run:\n  curl -sfL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | CREATEOS_CHANNEL=nightly sh -"
+        }
+        VERSION="$(printf '%s' "${RELEASE_JSON}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
     elif command -v wget > /dev/null 2>&1; then
-        VERSION="$(wget -qO- "${LATEST_URL}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
+        RELEASE_JSON="$(wget -qO- "${LATEST_URL}")" || {
+            fatal "No stable release found. If you want the nightly build, run:\n  curl -sfL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | CREATEOS_CHANNEL=nightly sh -"
+        }
+        VERSION="$(printf '%s' "${RELEASE_JSON}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
     else
         fatal "curl or wget is required to download createos."
     fi
@@ -169,15 +175,30 @@ resolve_install_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# Download helper (curl or wget)
+# Download helpers (curl or wget)
 # ---------------------------------------------------------------------------
-download() {
+
+# download_silent: no progress output — used for small files (checksums, API calls)
+download_silent() {
     URL="$1"
     DEST="$2"
     if command -v curl > /dev/null 2>&1; then
         curl -fsSL --retry 3 --retry-delay 2 -o "${DEST}" "${URL}"
     elif command -v wget > /dev/null 2>&1; then
         wget -qO "${DEST}" "${URL}"
+    else
+        fatal "curl or wget is required."
+    fi
+}
+
+# download_progress: shows progress bar — used for the binary
+download_progress() {
+    URL="$1"
+    DEST="$2"
+    if command -v curl > /dev/null 2>&1; then
+        curl -fL --retry 3 --retry-delay 2 --progress-bar -o "${DEST}" "${URL}"
+    elif command -v wget > /dev/null 2>&1; then
+        wget --show-progress -qO "${DEST}" "${URL}" 2>&1
     else
         fatal "curl or wget is required."
     fi
@@ -230,11 +251,10 @@ install_binary() {
     trap 'rm -rf "${TMP_DIR}"' EXIT
 
     info "Downloading ${ASSET}..."
-    download "${BINARY_URL}" "${TMP_BINARY}" \
+    download_progress "${BINARY_URL}" "${TMP_BINARY}" \
         || fatal "Failed to download binary from ${BINARY_URL}"
 
-    info "Downloading checksum..."
-    download "${CHECKSUM_URL}" "${TMP_CHECKSUM}" \
+    download_silent "${CHECKSUM_URL}" "${TMP_CHECKSUM}" \
         || fatal "Failed to download checksum from ${CHECKSUM_URL}"
 
     EXPECTED_HASH="$(cat "${TMP_CHECKSUM}" | tr -d '[:space:]')"

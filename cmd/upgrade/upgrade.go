@@ -113,16 +113,13 @@ func runUpgrade() error {
 		return fmt.Errorf("checksum URL failed validation: %w", err)
 	}
 
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s...", assetName))
-
-	tmp, err := downloadToTemp(downloadURL)
+	tmp, err := downloadToTemp(downloadURL, assetName)
 	if err != nil {
-		spinner.Fail("Download failed")
 		return fmt.Errorf("could not download update: %w", err)
 	}
 	defer os.Remove(tmp) //nolint:errcheck
 
-	spinner.UpdateText("Verifying checksum...")
+	spinner, _ := pterm.DefaultSpinner.Start("Verifying checksum...")
 
 	expectedHash, err := fetchChecksum(checksumURL)
 	if err != nil {
@@ -135,7 +132,7 @@ func runUpgrade() error {
 		return err
 	}
 
-	spinner.Success("Downloaded and verified")
+	spinner.Success("Checksum verified")
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -208,7 +205,22 @@ func binaryAssetName() string {
 	return name
 }
 
-func downloadToTemp(rawURL string) (string, error) {
+// progressWriter tracks bytes written and updates a pterm progress bar in KB increments.
+type progressWriter struct {
+	bar *pterm.ProgressbarPrinter
+	buf int64
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	pw.buf += int64(len(p))
+	for pw.buf >= 1024 {
+		pw.bar.Add(1)
+		pw.buf -= 1024
+	}
+	return len(p), nil
+}
+
+func downloadToTemp(rawURL, assetName string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
 
@@ -234,7 +246,30 @@ func downloadToTemp(rawURL string) (string, error) {
 	}
 	defer tmp.Close() //nolint:errcheck
 
-	if _, err := io.Copy(tmp, io.LimitReader(resp.Body, maxBinarySize)); err != nil {
+	limited := io.LimitReader(resp.Body, maxBinarySize)
+
+	totalBytes := resp.ContentLength
+	if totalBytes > 0 {
+		totalKB := int(totalBytes / 1024)
+		bar, _ := pterm.DefaultProgressbar.
+			WithTotal(totalKB).
+			WithTitle(fmt.Sprintf("Downloading %s (%.1f MB)", assetName, float64(totalBytes)/1024/1024)).
+			Start()
+		pw := &progressWriter{bar: bar}
+		_, err = io.Copy(tmp, io.TeeReader(limited, pw))
+		_, _ = bar.Stop()
+	} else {
+		// Content-Length unknown — fall back to spinner
+		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s...", assetName))
+		_, err = io.Copy(tmp, limited)
+		if err != nil {
+			spinner.Fail("Download failed")
+		} else {
+			spinner.Success("Downloaded")
+		}
+	}
+
+	if err != nil {
 		_ = os.Remove(tmp.Name())
 		return "", err
 	}
