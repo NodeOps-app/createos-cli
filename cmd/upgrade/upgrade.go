@@ -116,7 +116,7 @@ func runUpgrade() error {
 		spinner.Fail("Download failed")
 		return fmt.Errorf("could not download update: %w", err)
 	}
-	defer os.Remove(tmp)
+	defer os.Remove(tmp) //nolint:errcheck
 
 	spinner.UpdateText("Verifying checksum...")
 
@@ -167,7 +167,7 @@ func fetchLatestRelease() (*githubRelease, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
@@ -218,7 +218,7 @@ func downloadToTemp(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download returned %d", resp.StatusCode)
@@ -228,10 +228,10 @@ func downloadToTemp(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tmp.Close()
+	defer tmp.Close() //nolint:errcheck
 
 	if _, err := io.Copy(tmp, io.LimitReader(resp.Body, maxBinarySize)); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return "", err
 	}
 
@@ -251,7 +251,7 @@ func fetchChecksum(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("checksum download returned %d", resp.StatusCode)
@@ -271,11 +271,11 @@ func fetchChecksum(rawURL string) (string, error) {
 }
 
 func verifyChecksum(path, expected string) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path comes from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("could not open downloaded file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -290,7 +290,7 @@ func verifyChecksum(path, expected string) error {
 }
 
 func replaceExecutable(dst, src string) error {
-	if err := os.Chmod(src, 0o755); err != nil {
+	if err := os.Chmod(src, 0o755); err != nil { //nolint:gosec // executable binary requires 0755
 		return err
 	}
 
