@@ -64,10 +64,15 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           merge-multiple: true
+
+      - name: Set release date
+        run: echo "RELEASE_DATE=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
 
       - name: Delete existing nightly release
         env:
@@ -81,7 +86,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
-          name: "nightly ($(date -u +%Y-%m-%d))"
+          name: "nightly (${{ env.RELEASE_DATE }})"
           prerelease: true
           body: "Automated nightly build from the latest commit on main."
           files: createos-*
