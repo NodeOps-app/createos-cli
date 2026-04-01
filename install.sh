@@ -117,6 +117,13 @@ resolve_version() {
     fi
 
     [ -n "${VERSION}" ] || fatal "Could not determine the latest version. Check your internet connection."
+
+    # Validate format to guard against tampered API responses
+    case "${VERSION}" in
+        v[0-9]*.[0-9]*.[0-9]*) ;;
+        *) fatal "Unexpected version format received: '${VERSION}'. Aborting." ;;
+    esac
+
     info "Latest version: ${VERSION}"
 }
 
@@ -183,13 +190,25 @@ verify_checksum() {
     BINARY_PATH="$1"
     EXPECTED="$2"
 
+    # Validate expected hash is a 64-char hex string before trusting it
+    case "${EXPECTED}" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+        *) fatal "Checksum file contains unexpected content — aborting." ;;
+    esac
+
     if command -v sha256sum > /dev/null 2>&1; then
         ACTUAL="$(sha256sum "${BINARY_PATH}" | awk '{print $1}')"
     elif command -v shasum > /dev/null 2>&1; then
         ACTUAL="$(shasum -a 256 "${BINARY_PATH}" | awk '{print $1}')"
     else
-        warn "No sha256sum or shasum found — skipping checksum verification."
-        return
+        fatal "sha256sum or shasum is required to verify the download. Please install one and retry."
     fi
 
     if [ "${ACTUAL}" != "${EXPECTED}" ]; then

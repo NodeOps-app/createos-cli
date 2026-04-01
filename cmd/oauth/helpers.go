@@ -97,6 +97,9 @@ func validateURI(value string) error {
 	if err != nil || parsed.Scheme == "" {
 		return fmt.Errorf("please enter a valid absolute URI")
 	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("redirect URI must use http or https (got %q)", parsed.Scheme)
+	}
 	return nil
 }
 
