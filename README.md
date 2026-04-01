@@ -14,10 +14,17 @@ The official command-line interface for [CreateOS](https://createos.nodeops.netw
 
 ## Installation
 
-### Stable (recommended)
+### macOS & Linux — install script (recommended)
 
 ```sh
 curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | sh -
+```
+
+### macOS & Linux — Homebrew
+
+```sh
+brew tap nodeops-app/tap
+brew install createos
 ```
 
 ### Nightly
@@ -25,19 +32,29 @@ curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/instal
 Built daily from the latest commit on `main`. May contain unreleased features.
 
 ```sh
+# Install script
 curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | CREATEOS_CHANNEL=nightly sh -
+
+# Homebrew
+brew install createos --HEAD
 ```
 
 ### Pin a specific version
 
 ```sh
-curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | CREATEOS_VERSION=v0.1.0 sh -
+curl -sfL https://raw.githubusercontent.com/NodeOps-app/createos-cli/main/install.sh | CREATEOS_VERSION=v0.0.3 sh -
 ```
 
 ### Upgrade
 
 ```sh
 createos upgrade
+```
+
+Or via Homebrew:
+
+```sh
+brew upgrade createos
 ```
 
 ### Build from source
@@ -228,6 +245,7 @@ createos --help
 | Command               | Description                                             |
 | --------------------- | ------------------------------------------------------- |
 | `createos ask`        | Ask the AI assistant to help manage your infrastructure |
+| `createos upgrade`    | Upgrade createos to the latest version                  |
 | `createos version`    | Print the current version                               |
 
 ## Non-interactive / CI usage
