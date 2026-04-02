@@ -43,7 +43,7 @@ func newEnvPushCommand() *cli.Command {
 				return fmt.Errorf("--file must be a relative path without '..' (got %q)", filePath)
 			}
 
-			data, err := os.ReadFile(filePath) //nolint:gosec
+			data, err := os.ReadFile(filePath) // #nosec G304 -- filePath is validated above (relative, no ..)
 			if err != nil {
 				return fmt.Errorf("could not read %s: %w", filePath, err)
 			}

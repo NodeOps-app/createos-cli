@@ -22,12 +22,12 @@ func SaveProjectConfig(dir string, cfg ProjectConfig) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, projectFile), data, 0644) //nolint:gosec
+	return os.WriteFile(filepath.Join(dir, projectFile), data, 0644) // #nosec G306 -- project config needs to be readable by other tools
 }
 
 // LoadProjectConfig reads .createos.json from the given directory.
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
-	data, err := os.ReadFile(filepath.Join(dir, projectFile)) //nolint:gosec
+	data, err := os.ReadFile(filepath.Join(dir, projectFile)) // #nosec G304 -- dir comes from os.Getwd() walk, projectFile is a constant
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -66,7 +66,7 @@ func FindProjectConfig() (*ProjectConfig, error) {
 // EnsureGitignore adds .createos.json to .gitignore if not already present.
 func EnsureGitignore(dir string) error {
 	gitignorePath := filepath.Join(dir, ".gitignore")
-	data, err := os.ReadFile(gitignorePath) //nolint:gosec
+	data, err := os.ReadFile(gitignorePath) // #nosec G304 -- gitignorePath is filepath.Join(dir, ".gitignore")
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -80,7 +80,7 @@ func EnsureGitignore(dir string) error {
 		content += "\n"
 	}
 	content += projectFile + "\n"
-	return os.WriteFile(gitignorePath, []byte(content), 0644) //nolint:gosec
+	return os.WriteFile(gitignorePath, []byte(content), 0644) // #nosec G306,G703 -- .gitignore must be world-readable; path is from filepath.Join
 }
 
 func splitLines(s string) []string {

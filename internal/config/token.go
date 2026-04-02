@@ -56,7 +56,7 @@ func LoadToken() (string, error) {
 		return "", err
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(path) // #nosec G304 -- path is from tokenPath() under ~/.createos/
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", errors.New("you're not signed in — run 'createos login' to get started")

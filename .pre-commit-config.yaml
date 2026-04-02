@@ -1,0 +1,34 @@
+repos:
+  # Secret detection — Yelp detect-secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+
+  - repo: local
+    hooks:
+      # go vet + go build run in parallel via background jobs
+      - id: go-checks
+        name: go checks (parallel)
+        language: system
+        entry: >-
+          bash -c '
+            go vet ./... &
+            pid_vet=$!
+
+            tmp=$(mktemp -d)
+            go build -o "$tmp/createos" . && rm -rf "$tmp" &
+            pid_build=$!
+
+            wait $pid_vet; rc_vet=$?
+            wait $pid_build; rc_build=$?
+
+            [ $rc_vet -ne 0 ] && echo "go vet failed"
+            [ $rc_build -ne 0 ] && echo "go build failed"
+            exit $(( rc_vet | rc_build ))
+          '
+        pass_filenames: false
+        types: [go]

@@ -104,7 +104,7 @@ func ensureEnvGitignored() {
 		content = pattern + "\n"
 	}
 
-	f, err := os.OpenFile(gitignore, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) //nolint:gosec
+	f, err := os.OpenFile(gitignore, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // #nosec G302 -- .gitignore must be world-readable (0644)
 	if err != nil {
 		return
 	}

@@ -66,7 +66,7 @@ func cachedVersion() string {
 		return ""
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(path) // #nosec G304 -- path is from cacheFilePath() under ~/.createos/
 	if err != nil {
 		return ""
 	}

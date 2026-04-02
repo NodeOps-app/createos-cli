@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,11 +104,15 @@ func newTemplatesUseCommand() *cli.Command {
 				return err
 			}
 
-			if err := os.MkdirAll(absDir, 0750); err != nil { //nolint:gosec
+			if err := os.MkdirAll(absDir, 0750); err != nil {
 				return fmt.Errorf("could not create directory %s: %w", dir, err)
 			}
 
-			resp, err := http.Get(downloadURL) //nolint:gosec,noctx
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, downloadURL, nil)
+			if err != nil {
+				return fmt.Errorf("could not create download request: %w", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("could not download template: %w", err)
 			}
@@ -130,7 +135,7 @@ func newTemplatesUseCommand() *cli.Command {
 }
 
 func downloadToFile(path string, src io.Reader) error {
-	out, err := os.Create(path) //nolint:gosec
+	out, err := os.Create(path) // #nosec G304 -- path is constructed from filepath.Join(absDir, "template.zip")
 	if err != nil {
 		return fmt.Errorf("could not create file: %w", err)
 	}

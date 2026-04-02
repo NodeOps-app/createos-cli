@@ -22,5 +22,5 @@ func Open(rawURL string) error {
 		cmd = "xdg-open"
 		args = []string{rawURL}
 	}
-	return exec.CommandContext(context.Background(), cmd, args...).Start() //nolint:gosec
+	return exec.CommandContext(context.Background(), cmd, args...).Start() // #nosec G204 -- cmd/args are derived from runtime.GOOS, not user input
 }

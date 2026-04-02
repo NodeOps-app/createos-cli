@@ -362,7 +362,7 @@ func fetchChecksum(rawURL string) (string, error) {
 }
 
 func verifyChecksum(path, expected string) error {
-	f, err := os.Open(path) //nolint:gosec // path comes from os.CreateTemp, not user input
+	f, err := os.Open(path) // #nosec G304 -- path comes from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("could not open downloaded file: %w", err)
 	}
@@ -381,7 +381,7 @@ func verifyChecksum(path, expected string) error {
 }
 
 func replaceExecutable(dst, src string) error {
-	if err := os.Chmod(src, 0o755); err != nil { //nolint:gosec // executable binary requires 0755
+	if err := os.Chmod(src, 0o755); err != nil { // #nosec G302 -- executable binary requires 0755
 		return err
 	}
 
