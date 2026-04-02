@@ -59,12 +59,38 @@ brew upgrade createos
 
 ### Build from source
 
-Requires Go 1.21+.
+Requires Go 1.26+.
 
 ```bash
 git clone https://github.com/NodeOps-app/createos-cli
 cd createos-cli
 go build -o createos .
+```
+
+## Contributing
+
+### Pre-commit hooks
+
+The repo ships with [pre-commit](https://pre-commit.com) hooks for secret detection and build verification. Set them up once after cloning:
+
+```bash
+pip install pre-commit detect-secrets
+pre-commit install
+detect-secrets scan > .secrets.baseline
+```
+
+Hooks that run on every commit:
+
+| Hook | Check |
+|------|-------|
+| `detect-secrets` | Scans for accidentally committed secrets |
+| `go-vet` | Runs `go vet ./...` |
+| `go-build-tmp` | Verifies the project builds cleanly |
+
+If `detect-secrets` flags a false positive, audit and update the baseline:
+
+```bash
+detect-secrets audit .secrets.baseline
 ```
 
 ## Getting started

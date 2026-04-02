@@ -4,6 +4,7 @@ package installer
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -69,7 +70,11 @@ func InstallToScope(downloadURL, uniqueName string, scope InstallScope) ([]strin
 	}
 
 	// Download once
-	resp, err := http.Get(downloadURL) //nolint:gosec,noctx
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("download request failed: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
@@ -142,7 +147,7 @@ func unzip(data []byte, destDir string) error {
 			return err
 		}
 
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()) //nolint:gosec
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()) // #nosec G304 -- target is sanitized above with zip-slip check
 		if err != nil {
 			return err
 		}
@@ -153,7 +158,7 @@ func unzip(data []byte, destDir string) error {
 			return err
 		}
 
-		_, err = io.Copy(out, rc) //nolint:gosec
+		_, err = io.Copy(out, io.LimitReader(rc, 100*1024*1024)) // 100 MB per-file limit to prevent decompression bombs
 		if closeErr := rc.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}

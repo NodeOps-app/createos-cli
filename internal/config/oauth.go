@@ -48,7 +48,7 @@ func SaveOAuthSession(session OAuthSession) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(session) //nolint:gosec
+	data, err := json.Marshal(session) // #nosec G117 -- token serialization is the purpose of this function; file is stored with 0600
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func LoadOAuthSession() (*OAuthSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(path) // #nosec G304 -- path is from oauthPath() under ~/.createos/
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

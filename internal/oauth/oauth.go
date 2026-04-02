@@ -41,7 +41,7 @@ type PKCEPair struct {
 // FetchServerMetadata fetches OAuth server metadata from {baseURL}/.well-known/openid-configuration
 func FetchServerMetadata(baseURL string) (*ServerMetadata, error) {
 	metaURL := strings.TrimRight(baseURL, "/") + "/.well-known/openid-configuration"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, metaURL, nil) //nolint:gosec
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, metaURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not build metadata request: %w", err)
 	}
@@ -103,7 +103,7 @@ func ExchangeCode(tokenEndpoint, clientID, code, redirectURI, verifier string) (
 	form.Set("client_id", clientID)
 	form.Set("code_verifier", verifier)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode())) //nolint:gosec
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("could not build token request: %w", err)
 	}
@@ -131,7 +131,7 @@ func RefreshTokens(tokenEndpoint, clientID, refreshToken string) (*TokenResponse
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", clientID)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode())) //nolint:gosec
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("could not build refresh request: %w", err)
 	}

@@ -38,7 +38,7 @@ func findPublicKeys() map[string]string {
 	}
 	keys := make(map[string]string, len(matches))
 	for _, path := range matches {
-		data, err := os.ReadFile(path) //nolint:gosec
+		data, err := os.ReadFile(path) // #nosec G304 -- path is from filepath.Glob on ~/.ssh/*.pub
 		if err != nil {
 			continue
 		}
@@ -231,7 +231,7 @@ func newVMSSHCommand() *cli.Command {
 			}
 			sshArgs = append(sshArgs, target)
 
-			cmd := exec.CommandContext(context.Background(), "ssh", sshArgs...) //nolint:gosec
+			cmd := exec.CommandContext(context.Background(), "ssh", sshArgs...) // #nosec G204 -- binary is hardcoded "ssh", args are constructed internally
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

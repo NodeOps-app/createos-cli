@@ -351,7 +351,7 @@ func streamRuntimeLogs(client *api.APIClient, projectID, deploymentID string) {
 
 // loadGitignorePatterns reads .gitignore from srcDir and returns usable patterns.
 func loadGitignorePatterns(srcDir string) []string {
-	data, err := os.ReadFile(filepath.Join(srcDir, ".gitignore")) //nolint:gosec
+	data, err := os.ReadFile(filepath.Join(srcDir, ".gitignore")) // #nosec G304 -- srcDir is from filepath.Abs, filename is a constant
 	if err != nil {
 		return nil
 	}
@@ -438,7 +438,7 @@ func createZip(w io.Writer, srcDir string) error {
 			return err
 		}
 
-		f, err := os.Open(path) //nolint:gosec
+		f, err := os.Open(path) // #nosec G304,G122 -- path comes from filepath.Walk on a local directory
 		if err != nil {
 			return err
 		}

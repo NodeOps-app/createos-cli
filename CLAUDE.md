@@ -116,6 +116,29 @@ fmt.Println("You don't have any projects yet.")
 
 Always suggest a next action in empty states where applicable.
 
+## Pre-commit Hooks
+
+The repo uses [pre-commit](https://pre-commit.com) with the following hooks:
+
+| Hook | What it does |
+|------|-------------|
+| `detect-secrets` | Scans for accidentally committed secrets (Yelp detect-secrets v1.5.0) |
+| `go-vet` | Runs `go vet ./...` on changed Go files |
+| `go-build-tmp` | Builds the binary to a temp dir and removes it on success |
+
+### First-time setup
+
+```bash
+pre-commit install
+detect-secrets scan > .secrets.baseline
+```
+
+`.secrets.baseline` must be committed. Update it when a false positive is audited:
+
+```bash
+detect-secrets audit .secrets.baseline
+```
+
 ## Adding a New Command Group
 
 1. Create `cmd/<group>/` directory

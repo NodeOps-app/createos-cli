@@ -7,5 +7,5 @@ import (
 )
 
 func runCmd(name string, args ...string) error {
-	return exec.CommandContext(context.Background(), name, args...).Start() //nolint:gosec
+	return exec.CommandContext(context.Background(), name, args...).Start() // #nosec G204 -- args are controlled by internal callers, not user input
 }

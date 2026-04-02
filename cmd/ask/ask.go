@@ -26,7 +26,7 @@ func installAgent() error {
 	}
 
 	agentsDir := filepath.Join(home, ".opencode", "agents")
-	if err := os.MkdirAll(agentsDir, 0750); err != nil { //nolint:gosec // user-owned directory
+	if err := os.MkdirAll(agentsDir, 0750); err != nil {
 		return fmt.Errorf("could not create agents directory: %w", err)
 	}
 
@@ -69,7 +69,7 @@ func NewAskCommand() *cli.Command {
 				args = []string{"--agent", agentName}
 			}
 
-			cmd := exec.CommandContext(context.Background(), opencodeBin, args...) //nolint:gosec
+			cmd := exec.CommandContext(context.Background(), opencodeBin, args...) // #nosec G204 -- opencodeBin is from exec.LookPath, args are hardcoded
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
