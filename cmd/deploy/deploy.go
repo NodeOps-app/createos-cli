@@ -276,8 +276,6 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 	defer ticker.Stop()
 
 	lastBuildLine := 0
-	headerPrinted := false
-
 	for {
 		select {
 		case <-timeout:
@@ -288,11 +286,6 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 			d, err := client.GetDeployment(projectID, deployment.ID)
 			if err != nil {
 				continue // transient error, keep polling
-			}
-
-			if !headerPrinted && d.VersionNumber > 0 {
-				fmt.Printf("  Building v%d...\n\n", d.VersionNumber)
-				headerPrinted = true
 			}
 
 			// Stream new build log lines
@@ -309,7 +302,7 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 			switch d.Status {
 			case "successful", "running", "active", "deployed":
 				fmt.Println()
-				pterm.Success.Printf("Deployed (v%d)\n", d.VersionNumber)
+				pterm.Success.Println("Deployed successfully")
 				fmt.Println()
 				if d.Extra.Endpoint != "" {
 					url := d.Extra.Endpoint
@@ -324,7 +317,7 @@ func waitForDeployment(client *api.APIClient, projectID string, deployment *api.
 				return nil
 			case "failed", "error", "cancelled":
 				fmt.Println()
-				pterm.Error.Printf("Deployment failed (v%d)\n", d.VersionNumber)
+				pterm.Error.Println("Deployment failed")
 				return fmt.Errorf("deployment %s failed with status: %s", d.ID, d.Status)
 			}
 		}

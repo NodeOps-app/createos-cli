@@ -147,7 +147,7 @@ func NewStatusCommand() *cli.Command {
 				}
 				for _, d := range deployments[:limit] {
 					icon := deployStatusIcon(d.Status)
-					fmt.Printf("    %s  v%d  %s  %s\n", icon, d.VersionNumber, relativeTime(d.CreatedAt), d.Status)
+					fmt.Printf("    %s  %s  %s\n", icon, relativeTime(d.CreatedAt), d.Status)
 				}
 			}
 

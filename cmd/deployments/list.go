@@ -40,12 +40,11 @@ func newDeploymentsListCommand() *cli.Command {
 				}
 
 				tableData := pterm.TableData{
-					{"ID", "Version", "Status", "URL", "Created At"},
+					{"ID", "Status", "URL", "Created At"},
 				}
 				for _, d := range deployments {
 					tableData = append(tableData, []string{
 						d.ID,
-						fmt.Sprintf("v%d", d.VersionNumber),
 						d.Status,
 						d.Extra.Endpoint,
 						d.CreatedAt.Format("2006-01-02 15:04:05"),
