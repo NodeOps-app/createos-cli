@@ -10,6 +10,7 @@ func NewProjectsCommand() *cli.Command {
 		Name:  "projects",
 		Usage: "Manage projects",
 		Subcommands: []*cli.Command{
+			newAddCommand(),
 			newDeleteCommand(),
 			newGetCommand(),
 			newListCommand(),
