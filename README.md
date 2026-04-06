@@ -149,11 +149,33 @@ createos --help
 
 ### Projects
 
-| Command                    | Description         |
-| -------------------------- | ------------------- |
-| `createos projects list`   | List all projects   |
-| `createos projects get`    | Get project details |
-| `createos projects delete` | Delete a project    |
+| Command                    | Description            |
+| -------------------------- | ---------------------- |
+| `createos projects add`    | Create a new project   |
+| `createos projects list`   | List all projects      |
+| `createos projects get`    | Get project details    |
+| `createos projects delete` | Delete a project       |
+
+**`projects add` flags:**
+
+| Flag                 | Description                                                      |
+| -------------------- | ---------------------------------------------------------------- |
+| `--name`             | Display name for the project                                     |
+| `--unique-name`      | Unique name (lowercase, 4-32 chars)                              |
+| `--type`             | Project type: `vcs`, `image`, or `upload`                        |
+| `--description`      | Project description                                              |
+| `--framework`        | Framework (e.g. `nextjs`, `reactjs-spa`, `vite-spa`)             |
+| `--runtime`          | Runtime (e.g. `node:20`, `golang:1.25`, `dockerfile`)            |
+| `--port`             | Port the application listens on                                  |
+| `--install-command`  | Install command (e.g. `npm install`)                             |
+| `--build-command`    | Build command (e.g. `npm run build`)                             |
+| `--run-command`      | Run command (e.g. `npm run start`)                               |
+| `--build-dir`        | Build output directory                                           |
+| `--build-flag`       | Build flags                                                      |
+| `--run-flag`         | Run flags                                                        |
+| `--directory-path`   | Root directory path (default: `.`)                               |
+| `--github-owner`     | GitHub account/org name (VCS projects, non-interactive)          |
+| `--repo`             | GitHub repository full name, e.g. `owner/repo` (VCS, non-interactive) |
 
 ### Deploy
 
@@ -311,6 +333,17 @@ createos deploy                                      # upload project — zips c
 createos deploy --dir ./dist                         # upload project — zip a specific dir
 createos deploy --branch main                        # VCS project — deploy from main
 createos deploy --image nginx:latest                 # image project
+
+# Create projects
+createos projects add --name "My API" --unique-name my-api \
+  --type image --port 8080
+
+createos projects add --name "My App" --unique-name my-app \
+  --type upload --framework nextjs --runtime node:20
+
+createos projects add --name "My App" --unique-name my-app \
+  --type vcs --framework nextjs --runtime node:20 \
+  --github-owner myorg --repo myorg/my-app
 
 # Projects
 createos projects get --project <id>

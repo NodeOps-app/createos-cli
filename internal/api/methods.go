@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -16,6 +17,111 @@ type Project struct {
 	Type        string    `json:"type"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// CreateProjectRequest is the request body for creating a new project.
+type CreateProjectRequest struct {
+	DisplayName string          `json:"displayName"`
+	UniqueName  string          `json:"uniqueName"`
+	Type        string          `json:"type"`
+	Description *string         `json:"description,omitempty"`
+	Source      json.RawMessage `json:"source,omitempty"`
+	Settings    json.RawMessage `json:"settings"`
+}
+
+// CreateProject creates a new project and returns the new project ID.
+func (c *APIClient) CreateProject(req CreateProjectRequest) (string, error) {
+	var result Response[struct {
+		ID string `json:"id"`
+	}]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetBody(req).
+		Post("/v1/projects")
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.ID, nil
+}
+
+// GithubInstallation represents a connected GitHub account.
+type GithubInstallation struct {
+	InstallationID int64  `json:"installationId"`
+	Username       string `json:"username"`
+	OwnerID        int64  `json:"ownerId"`
+	AvatarURL      string `json:"avatarUrl"`
+}
+
+// ListGithubInstallations returns the user's connected GitHub accounts.
+func (c *APIClient) ListGithubInstallations() ([]GithubInstallation, error) {
+	var result Response[[]GithubInstallation]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/app-installations/github/installations")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data, nil
+}
+
+// GithubRepo represents a GitHub repository accessible via an installation.
+type GithubRepo struct {
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	FullName      string `json:"full_name"`
+	Private       bool   `json:"private"`
+	DefaultBranch string `json:"default_branch"`
+}
+
+// ListGithubRepos returns all repositories for a GitHub installation.
+func (c *APIClient) ListGithubRepos(installationID string) ([]GithubRepo, error) {
+	var result Response[[]GithubRepo]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/app-installations/github/accounts/" + installationID + "/repositories")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data, nil
+}
+
+// EditableField describes a configurable setting for a framework/runtime.
+type EditableField struct {
+	Type     string `json:"type"`
+	Default  any    `json:"default"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// SupportedProjectType represents a framework or runtime supported by CreateOS.
+type SupportedProjectType struct {
+	Type      string                   `json:"type"`
+	Name      string                   `json:"name"`
+	Runtimes  []string                 `json:"runtimes"`
+	Editables map[string]EditableField `json:"editables"`
+}
+
+// ListSupportedProjectTypes returns the available frameworks and runtimes.
+func (c *APIClient) ListSupportedProjectTypes() ([]SupportedProjectType, error) {
+	var result Response[[]SupportedProjectType]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		Get("/v1/projects/supported")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data, nil
 }
 
 // ListProjects returns all projects for the authenticated user.
