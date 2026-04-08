@@ -125,7 +125,10 @@ all required flags:
 					if err != nil {
 						return fmt.Errorf("could not read input: %w", err)
 					}
-					displayName = result
+					displayName = strings.TrimSpace(result)
+					if displayName == "" {
+						return fmt.Errorf("display name is required — please provide a name for your project")
+					}
 				}
 
 				if uniqueName == "" {
@@ -135,7 +138,22 @@ all required flags:
 					if err != nil {
 						return fmt.Errorf("could not read input: %w", err)
 					}
-					uniqueName = result
+					uniqueName = strings.TrimSpace(result)
+					if uniqueName == "" {
+						return fmt.Errorf("unique name is required — must be lowercase, 4-32 characters")
+					}
+					if len(uniqueName) < 4 || len(uniqueName) > 32 {
+						return fmt.Errorf("unique name must be between 4 and 32 characters (got %d)", len(uniqueName))
+					}
+					if uniqueName != strings.ToLower(uniqueName) {
+						return fmt.Errorf("unique name must be lowercase — try %q", strings.ToLower(uniqueName))
+					}
+					available, err := client.CheckUniqueNameAvailable(uniqueName)
+					if err != nil {
+						pterm.Warning.Printf("Could not verify name availability: %s\n", err)
+					} else if !available {
+						return fmt.Errorf("the unique name %q is already taken — please choose a different one", uniqueName)
+					}
 				}
 
 				if projectType == "" {
@@ -519,11 +537,12 @@ func promptFrameworkRuntime(client *api.APIClient, projectType string) (framewor
 	}
 	sel.runtime = runtimeValue
 
-	// For upload projects, standalone runtimes (dockerfile, build-ai) are fine alone.
-	// Regular runtimes need a framework too.
+	// For upload projects, some runtimes (like nodejs) have compatible frameworks.
+	// If compatible frameworks exist, prompt the user to pick one.
+	// Standalone runtimes (dockerfile, build-ai) and runtimes with no compatible
+	// frameworks (golang, rust, python, bun) are fine alone.
 	standaloneRuntimes := map[string]bool{"dockerfile": true, "build-ai": true}
 	if projectType == "upload" && !standaloneRuntimes[entry.Name] {
-		// Need to also pick a framework that's compatible with this runtime
 		var frameworks []api.SupportedProjectType
 		for _, s := range supported {
 			if s.Type != "framework" {
@@ -537,30 +556,28 @@ func promptFrameworkRuntime(client *api.APIClient, projectType string) (framewor
 			}
 		}
 
-		if len(frameworks) == 0 {
-			return frameworkSelection{}, fmt.Errorf("no compatible frameworks found for runtime %q\n\n  For upload projects, try selecting a framework instead", entry.Name)
-		}
+		if len(frameworks) > 0 {
+			fwOptions := make([]string, len(frameworks))
+			for i, fw := range frameworks {
+				fwOptions[i] = fw.Name
+			}
 
-		fwOptions := make([]string, len(frameworks))
-		for i, fw := range frameworks {
-			fwOptions[i] = fw.Name
-		}
+			fwSelected, err := pterm.DefaultInteractiveSelect.
+				WithDefaultText("Framework (required for upload projects)").
+				WithOptions(fwOptions).
+				WithFilter(true).
+				Show()
+			if err != nil {
+				return frameworkSelection{}, fmt.Errorf("could not read input: %w", err)
+			}
 
-		fwSelected, err := pterm.DefaultInteractiveSelect.
-			WithDefaultText("Framework (required for upload projects)").
-			WithOptions(fwOptions).
-			WithFilter(true).
-			Show()
-		if err != nil {
-			return frameworkSelection{}, fmt.Errorf("could not read input: %w", err)
-		}
-
-		sel.framework = fwSelected
-		// Use the framework's editables since they're more specific
-		for _, fw := range frameworks {
-			if fw.Name == fwSelected {
-				sel.editables = fw.Editables
-				break
+			sel.framework = fwSelected
+			// Use the framework's editables since they're more specific
+			for _, fw := range frameworks {
+				if fw.Name == fwSelected {
+					sel.editables = fw.Editables
+					break
+				}
 			}
 		}
 	}
