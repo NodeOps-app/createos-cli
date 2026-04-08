@@ -9,14 +9,21 @@ import (
 
 // Project represents a CreateOS project
 type Project struct {
-	ID          string    `json:"id"`
-	UniqueName  string    `json:"uniqueName"`
-	DisplayName string    `json:"displayName"`
-	Description *string   `json:"description"`
-	Status      string    `json:"status"`
-	Type        string    `json:"type"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          string          `json:"id"`
+	UniqueName  string          `json:"uniqueName"`
+	DisplayName string          `json:"displayName"`
+	Description *string         `json:"description"`
+	Status      string          `json:"status"`
+	Type        string          `json:"type"`
+	Source      json.RawMessage `json:"source,omitempty"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+}
+
+// VCSSource represents the source details for a VCS project.
+type VCSSource struct {
+	VCSName     string `json:"vcsName"`
+	VCSFullName string `json:"vcsFullName"`
 }
 
 // CreateProjectRequest is the request body for creating a new project.
@@ -45,6 +52,24 @@ func (c *APIClient) CreateProject(req CreateProjectRequest) (string, error) {
 		return "", ParseAPIError(resp.StatusCode(), resp.Body())
 	}
 	return result.Data.ID, nil
+}
+
+// CheckUniqueNameAvailable checks whether a project unique name is available.
+func (c *APIClient) CheckUniqueNameAvailable(uniqueName string) (bool, error) {
+	var result Response[struct {
+		IsAvailable bool `json:"isAvailable"`
+	}]
+	resp, err := c.Client.R().
+		SetResult(&result).
+		SetBody(map[string]string{"uniqueName": uniqueName}).
+		Post("/v1/projects/available-unique-name")
+	if err != nil {
+		return false, err
+	}
+	if resp.IsError() {
+		return false, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return result.Data.IsAvailable, nil
 }
 
 // GithubInstallation represents a connected GitHub account.

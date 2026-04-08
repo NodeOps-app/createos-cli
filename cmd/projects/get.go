@@ -13,6 +13,18 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
+// parseVCSSource extracts the repository full name from a VCS project's source field.
+func parseVCSSource(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var src api.VCSSource
+	if err := json.Unmarshal(raw, &src); err != nil {
+		return ""
+	}
+	return src.VCSFullName
+}
+
 func newGetCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "get",
@@ -51,6 +63,13 @@ func newGetCommand() *cli.Command {
 			cyan.Printf("Type:        ")
 			fmt.Println(project.Type)
 
+			if project.Type == "vcs" {
+				if repo := parseVCSSource(project.Source); repo != "" {
+					cyan.Printf("Repository:  ")
+					fmt.Println(repo)
+				}
+			}
+
 			cyan.Printf("Description: ")
 			if project.Description != nil {
 				fmt.Println(*project.Description)
@@ -63,9 +82,6 @@ func newGetCommand() *cli.Command {
 
 			cyan.Printf("Created At:  ")
 			fmt.Println(project.CreatedAt.Format("2006-01-02 15:04:05"))
-
-			cyan.Printf("Updated At:  ")
-			fmt.Println(project.UpdatedAt.Format("2006-01-02 15:04:05"))
 
 			return nil
 		},
