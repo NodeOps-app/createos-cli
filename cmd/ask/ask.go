@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 //go:embed agent.md
@@ -53,7 +56,33 @@ func NewAskCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			opencodeBin, err := exec.LookPath("opencode")
 			if err != nil {
-				return fmt.Errorf("opencode is not installed or not in PATH\n\n  Install it from: https://opencode.ai")
+				if !terminal.IsInteractive() {
+					return fmt.Errorf("opencode is not installed\n\n  Install it with:\n    curl -fsSL https://opencode.ai/install | bash")
+				}
+
+				install, _ := pterm.DefaultInteractiveConfirm.
+					WithDefaultText("opencode is not installed. Install it now?").
+					WithDefaultValue(true).
+					Show()
+				if !install {
+					return fmt.Errorf("opencode is required for the ask command\n\n  Install it manually:\n    curl -fsSL https://opencode.ai/install | bash")
+				}
+
+				pterm.Info.Println("Installing opencode...")
+				installCmd := exec.Command("bash", "-c", "curl -fsSL https://opencode.ai/install | bash") // #nosec G204 -- install URL is hardcoded
+				installCmd.Stdin = os.Stdin
+				installCmd.Stdout = os.Stdout
+				installCmd.Stderr = os.Stderr
+				if err := installCmd.Run(); err != nil {
+					return fmt.Errorf("failed to install opencode: %w", err)
+				}
+
+				opencodeBin, err = exec.LookPath("opencode")
+				if err != nil {
+					return fmt.Errorf("opencode was installed but not found in PATH\n\n  Try restarting your terminal and running this command again")
+				}
+				pterm.Success.Println("opencode installed successfully")
+				fmt.Println()
 			}
 
 			if err := installAgent(); err != nil {
