@@ -69,7 +69,7 @@ func NewAskCommand() *cli.Command {
 				}
 
 				pterm.Info.Println("Installing opencode...")
-				installCmd := exec.Command("bash", "-c", "curl -fsSL https://opencode.ai/install | bash") // #nosec G204 -- install URL is hardcoded
+				installCmd := exec.CommandContext(context.Background(), "bash", "-c", "curl -fsSL https://opencode.ai/install | bash") // #nosec G204 -- install URL is hardcoded
 				installCmd.Stdin = os.Stdin
 				installCmd.Stdout = os.Stdout
 				installCmd.Stderr = os.Stderr
