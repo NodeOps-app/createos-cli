@@ -53,7 +53,7 @@ jobs:
           go build -trimpath -ldflags="${LDFLAGS}" -o "${BINARY}" .
           sha256sum "${BINARY}" | awk '{print $1}' > "${BINARY}.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: createos-*
