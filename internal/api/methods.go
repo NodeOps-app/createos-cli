@@ -192,6 +192,32 @@ func (c *APIClient) DeleteProject(id string) error {
 	return nil
 }
 
+// SuspendProject suspends a running project.
+func (c *APIClient) SuspendProject(id string) error {
+	resp, err := c.Client.R().
+		Put("/v1/projects/" + id + "/suspend")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
+// UnsuspendProject resumes a suspended project.
+func (c *APIClient) UnsuspendProject(id string) error {
+	resp, err := c.Client.R().
+		Put("/v1/projects/" + id + "/unsuspend")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
 // GetUser returns the currently authenticated user.
 func (c *APIClient) GetUser() (*User, error) {
 	var result Response[User]
