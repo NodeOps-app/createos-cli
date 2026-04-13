@@ -14,6 +14,8 @@ func NewProjectsCommand() *cli.Command {
 			newDeleteCommand(),
 			newGetCommand(),
 			newListCommand(),
+			newSuspendCommand(),
+			newUnsuspendCommand(),
 		},
 	}
 }

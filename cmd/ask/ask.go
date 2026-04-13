@@ -57,8 +57,12 @@ func NewAskCommand() *cli.Command {
 			opencodeBin, err := exec.LookPath("opencode")
 			if err != nil {
 				if !terminal.IsInteractive() {
-					return fmt.Errorf("opencode is not installed\n\n  Install it with:\n    curl -fsSL https://opencode.ai/install | bash")
+					return fmt.Errorf("opencode is not installed\n\n  The 'ask' command uses OpenCode (https://opencode.ai), an open-source AI coding\n  assistant, to power the CreateOS AI agent. It lets you manage your infrastructure\n  using natural language right from the terminal.\n\n  Install it with:\n    curl -fsSL https://opencode.ai/install | bash")
 				}
+
+				fmt.Println()
+				pterm.Info.Println("The 'ask' command uses OpenCode (https://opencode.ai), an open-source AI coding\nassistant, to power the CreateOS AI agent. It lets you manage your infrastructure\nusing natural language right from the terminal.")
+				fmt.Println()
 
 				install, _ := pterm.DefaultInteractiveConfirm.
 					WithDefaultText("opencode is not installed. Install it now?").
