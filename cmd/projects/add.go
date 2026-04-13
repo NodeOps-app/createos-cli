@@ -11,6 +11,7 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
+	"github.com/NodeOps-app/createos-cli/cmd/deploy"
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
@@ -217,7 +218,7 @@ all required flags:
 
 				// Prompt for editable settings based on the selected framework/runtime
 				if sel.editables != nil {
-					prompted, err := promptEditableSettings(c, sel.editables)
+					prompted, err := promptEditableSettings(c, sel.framework, sel.editables)
 					if err != nil {
 						return err
 					}
@@ -321,42 +322,25 @@ all required flags:
 			pterm.Success.Printf("Project created successfully!\n")
 			pterm.Println(pterm.Gray("  ID: " + id))
 
-			// Prompt to link the current directory to the new project
-			if terminal.IsInteractive() {
-				fmt.Println()
-				link, err := pterm.DefaultInteractiveConfirm.
-					WithDefaultText("Link this directory to the new project?").
-					WithDefaultValue(true).
-					Show()
-				if err == nil && link {
-					dir, err := os.Getwd()
-					if err != nil {
-						return fmt.Errorf("could not determine current directory: %w", err)
-					}
-
-					cfg := config.ProjectConfig{
-						ProjectID:   id,
-						ProjectName: displayName,
-					}
-
-					envs, err := client.ListEnvironments(id)
-					if err == nil && len(envs) == 1 {
-						cfg.EnvironmentID = envs[0].ID
-					}
-
-					if err := config.SaveProjectConfig(dir, cfg); err != nil {
-						return fmt.Errorf("could not save project config: %w", err)
-					}
-					_ = config.EnsureGitignore(dir)
-
-					pterm.Success.Printf("Linked to %s\n", displayName)
-				} else {
-					pterm.Println(pterm.Gray("  To link this directory, run:"))
-					pterm.Println(pterm.Gray("    createos init --project " + id))
+			// Auto-link the current directory to the new project
+			dir, err := os.Getwd()
+			if err == nil {
+				cfg := config.ProjectConfig{
+					ProjectID:   id,
+					ProjectName: displayName,
 				}
-			} else {
-				pterm.Println(pterm.Gray("  To link this directory, run:"))
-				pterm.Println(pterm.Gray("    createos init --project " + id))
+
+				envs, err := client.ListEnvironments(id)
+				if err == nil && len(envs) == 1 {
+					cfg.EnvironmentID = envs[0].ID
+				}
+
+				if err := config.SaveProjectConfig(dir, cfg); err != nil {
+					pterm.Warning.Printf("Could not link directory: %s\n", err)
+				} else {
+					_ = config.EnsureGitignore(dir)
+					pterm.Success.Printf("Linked to %s\n", displayName)
+				}
 			}
 
 			// Prompt to trigger first deployment for VCS and image projects
@@ -407,7 +391,18 @@ all required flags:
 				}
 			}
 
-			if (projectType == "vcs" || projectType == "image") && !terminal.IsInteractive() {
+			if projectType == "upload" && terminal.IsInteractive() {
+				fmt.Println()
+				deployNow, err := pterm.DefaultInteractiveConfirm.
+					WithDefaultText("Deploy current directory now?").
+					WithDefaultValue(true).
+					Show()
+				if err == nil && deployNow {
+					return deploy.UploadDir(client, id, displayName, ".")
+				}
+			}
+
+			if !terminal.IsInteractive() {
 				pterm.Println(pterm.Gray("  To trigger a deployment, run:"))
 				pterm.Println(pterm.Gray("    createos deploy --project " + id))
 			}
@@ -588,8 +583,9 @@ func promptFrameworkRuntime(client *api.APIClient, projectType string) (framewor
 // promptEditableSettings prompts the user for each editable setting of the
 // selected framework/runtime. It skips object-type fields (buildVars, runEnvs)
 // and any field already set via a CLI flag.
-func promptEditableSettings(c *cli.Context, editables map[string]api.EditableField) (map[string]any, error) {
+func promptEditableSettings(c *cli.Context, framework string, editables map[string]api.EditableField) (map[string]any, error) {
 	result := map[string]any{}
+	isVanillaJS := framework == "vanilla-js"
 
 	for _, field := range promptOrder {
 		editable, ok := editables[field]
@@ -611,6 +607,22 @@ func promptEditableSettings(c *cli.Context, editables map[string]api.EditableFie
 		defaultVal := ""
 		if editable.Default != nil {
 			defaultVal = fmt.Sprintf("%v", editable.Default)
+		}
+
+		// For vanilla-js, skip all prompts — use defaults silently (null defaults are skipped).
+		if isVanillaJS {
+			if defaultVal != "" {
+				switch editable.Type {
+				case "number":
+					n, err := strconv.Atoi(defaultVal)
+					if err == nil {
+						result[field] = n
+					}
+				case "string":
+					result[field] = defaultVal
+				}
+			}
+			continue
 		}
 
 		promptLabel := label

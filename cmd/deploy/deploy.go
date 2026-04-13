@@ -127,29 +127,71 @@ func NewDeployCommand() *cli.Command {
 				}
 			}
 
-			// If still no project, try to auto-detect from git remote
-			if projectID == "" {
+			// If still no project, try auto-detect then interactive picker
+			if projectID == "" && terminal.IsInteractive() {
+				projects, err := client.ListProjects()
+				if err != nil {
+					return err
+				}
+
+				// Filter to active projects
+				activeProjects := make([]api.Project, 0, len(projects))
+				for _, p := range projects {
+					if p.Status == "active" {
+						activeProjects = append(activeProjects, p)
+					}
+				}
+
+				if len(activeProjects) == 0 {
+					return fmt.Errorf("you don't have any active projects yet\n\n  Create one first:\n    createos projects add")
+				}
+
+				// Try to auto-detect from git remote
 				dir, _ := os.Getwd()
 				repoFullName := git.GetRemoteFullName(dir)
 				if repoFullName != "" {
-					projects, err := client.ListProjects()
-					if err == nil {
-						for _, p := range projects {
-							if p.Status != "active" {
-								continue
-							}
-							if p.Type != "vcs" && p.Type != "githubImport" {
-								continue
-							}
-							var src api.VCSSource
-							if err := json.Unmarshal(p.Source, &src); err != nil {
-								continue
-							}
-							if src.VCSFullName == repoFullName {
-								pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
+					for _, p := range activeProjects {
+						if p.Type != "vcs" && p.Type != "githubImport" {
+							continue
+						}
+						var src api.VCSSource
+						if err := json.Unmarshal(p.Source, &src); err != nil {
+							continue
+						}
+						if src.VCSFullName == repoFullName {
+							pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
+							useDetected, _ := pterm.DefaultInteractiveConfirm.
+								WithDefaultText(fmt.Sprintf("Deploy %s?", p.DisplayName)).
+								WithDefaultValue(true).
+								Show()
+							if useDetected {
 								projectID = p.ID
-								break
 							}
+							break
+						}
+					}
+				}
+
+				// Fall back to interactive selection
+				if projectID == "" {
+					options := make([]string, len(activeProjects))
+					for i, p := range activeProjects {
+						options[i] = fmt.Sprintf("%s (%s) [%s]", p.DisplayName, p.ID, p.Type)
+					}
+
+					selected, err := pterm.DefaultInteractiveSelect.
+						WithDefaultText("Select a project to deploy").
+						WithOptions(options).
+						WithFilter(true).
+						Show()
+					if err != nil {
+						return fmt.Errorf("selection cancelled")
+					}
+
+					for i, opt := range options {
+						if opt == selected {
+							projectID = activeProjects[i].ID
+							break
 						}
 					}
 				}
@@ -215,6 +257,59 @@ func deployVCS(c *cli.Context, client *api.APIClient, project *api.Project) erro
 	}
 
 	return waitForDeployment(client, project.ID, deployment)
+}
+
+// UploadDir zips a directory and uploads it as a deployment.
+// Exported so other packages (e.g. projects add) can trigger an upload deploy.
+func UploadDir(client *api.APIClient, projectID, displayName, dir string) error {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("directory %q not found", dir)
+	}
+
+	pterm.Info.Printf("Deploying %s from %s...\n", displayName, absDir)
+
+	zipFile, err := os.CreateTemp("", "createos-deploy-*.zip")
+	if err != nil {
+		return fmt.Errorf("could not create temp file: %w", err)
+	}
+	defer os.Remove(zipFile.Name()) //nolint:errcheck
+	defer zipFile.Close()           //nolint:errcheck
+
+	spinner, _ := pterm.DefaultSpinner.Start("Packaging files...")
+
+	if err := createZip(zipFile, absDir); err != nil {
+		spinner.Fail("Packaging failed")
+		return err
+	}
+
+	stat, _ := zipFile.Stat()
+	if stat != nil && stat.Size() > maxZipSize {
+		spinner.Fail("Package too large")
+		return fmt.Errorf("deployment package is %d MB (max %d MB)\n\n  Tip: check that node_modules, .git, and build artifacts are excluded",
+			stat.Size()/(1024*1024), maxZipSize/(1024*1024))
+	}
+
+	spinner.UpdateText("Uploading...")
+
+	if err := zipFile.Close(); err != nil { //nolint:govet
+		return fmt.Errorf("could not flush deployment package: %w", err)
+	}
+
+	deployment, err := client.UploadDeploymentZip(projectID, zipFile.Name())
+	if err != nil {
+		spinner.Fail("Upload failed")
+		return err
+	}
+
+	spinner.Success("Uploaded")
+
+	return waitForDeployment(client, projectID, deployment)
 }
 
 // deployUpload zips the local directory and uploads it.
