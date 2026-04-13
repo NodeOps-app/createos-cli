@@ -410,10 +410,7 @@ func (c *APIClient) RetriggerDeployment(projectID, deploymentID, branch string) 
 // TriggerLatestDeployment triggers a new deployment from the latest commit.
 // branch is optional — passed as a query param; omit to use the project's default branch.
 func (c *APIClient) TriggerLatestDeployment(projectID, branch string) (*Deployment, error) {
-	var result Response[struct {
-		ID string `json:"id"`
-	}]
-	req := c.Client.R().SetResult(&result)
+	req := c.Client.R()
 	if branch != "" {
 		req = req.SetQueryParam("branch", branch)
 	}
@@ -424,7 +421,31 @@ func (c *APIClient) TriggerLatestDeployment(projectID, branch string) (*Deployme
 	if resp.IsError() {
 		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
 	}
-	return c.GetDeployment(projectID, result.Data.ID)
+
+	// The API returns either {"data": {"id": "..."}} for a new deployment
+	// or {"data": "deployment already triggered"} when the latest commit is already deployed.
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body(), &envelope); err != nil {
+		return nil, fmt.Errorf("unexpected response from server")
+	}
+
+	// Try to parse as an object with an ID
+	var idResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(envelope.Data, &idResp); err == nil && idResp.ID != "" {
+		return c.GetDeployment(projectID, idResp.ID)
+	}
+
+	// Otherwise it's a plain string message (e.g. "deployment already triggered")
+	var msg string
+	if err := json.Unmarshal(envelope.Data, &msg); err == nil && msg != "" {
+		return nil, fmt.Errorf("%s", msg)
+	}
+
+	return nil, fmt.Errorf("unexpected response from server")
 }
 
 // CancelDeployment cancels a running deployment.

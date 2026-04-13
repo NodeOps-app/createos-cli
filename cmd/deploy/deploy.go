@@ -3,6 +3,7 @@ package deploy
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/git"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -120,10 +122,41 @@ func NewDeployCommand() *cli.Command {
 				if err != nil {
 					return err
 				}
-				if cfg == nil {
-					return fmt.Errorf("no project linked to this directory\n\n  Link a project first:\n    createos init\n\n  Or specify one:\n    createos deploy --project <id>")
+				if cfg != nil {
+					projectID = cfg.ProjectID
 				}
-				projectID = cfg.ProjectID
+			}
+
+			// If still no project, try to auto-detect from git remote
+			if projectID == "" {
+				dir, _ := os.Getwd()
+				repoFullName := git.GetRemoteFullName(dir)
+				if repoFullName != "" {
+					projects, err := client.ListProjects()
+					if err == nil {
+						for _, p := range projects {
+							if p.Status != "active" {
+								continue
+							}
+							if p.Type != "vcs" && p.Type != "githubImport" {
+								continue
+							}
+							var src api.VCSSource
+							if err := json.Unmarshal(p.Source, &src); err != nil {
+								continue
+							}
+							if src.VCSFullName == repoFullName {
+								pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
+								projectID = p.ID
+								break
+							}
+						}
+					}
+				}
+			}
+
+			if projectID == "" {
+				return fmt.Errorf("no project linked to this directory\n\n  Link a project first:\n    createos init\n\n  Or specify one:\n    createos deploy --project <id>")
 			}
 
 			project, err := client.GetProject(projectID)

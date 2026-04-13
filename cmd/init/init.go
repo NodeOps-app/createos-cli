@@ -2,6 +2,7 @@
 package initcmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/git"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -75,29 +77,72 @@ func NewInitCommand() *cli.Command {
 					return nil
 				}
 
-				options := make([]string, len(projects))
-				for i, p := range projects {
-					desc := ""
-					if p.Description != nil && *p.Description != "" {
-						desc = " — " + *p.Description
+				// Filter out non-active projects
+				activeProjects := make([]api.Project, 0, len(projects))
+				for _, p := range projects {
+					if p.Status == "active" {
+						activeProjects = append(activeProjects, p)
 					}
-					options[i] = fmt.Sprintf("%s (%s)%s", p.DisplayName, p.ID, desc)
+				}
+				projects = activeProjects
+
+				if len(projects) == 0 {
+					fmt.Println("You don't have any active projects yet.")
+					return nil
 				}
 
-				selected, err := pterm.DefaultInteractiveSelect.
-					WithDefaultText("Select a project to link").
-					WithOptions(options).
-					Show()
-				if err != nil {
-					return fmt.Errorf("selection cancelled")
+				// Try to auto-detect the matching VCS project from git remote
+				repoFullName := git.GetRemoteFullName(dir)
+				if repoFullName != "" {
+					for _, p := range projects {
+						if p.Type != "vcs" && p.Type != "githubImport" {
+							continue
+						}
+						var src api.VCSSource
+						if err := json.Unmarshal(p.Source, &src); err != nil {
+							continue
+						}
+						if src.VCSFullName == repoFullName {
+							pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
+							useDetected, _ := pterm.DefaultInteractiveConfirm.
+								WithDefaultText(fmt.Sprintf("Link to %s?", p.DisplayName)).
+								WithDefaultValue(true).
+								Show()
+							if useDetected {
+								projectID = p.ID
+								projectName = p.DisplayName
+							}
+							break
+						}
+					}
 				}
 
-				// Find the selected project
-				for i, opt := range options {
-					if opt == selected {
-						projectID = projects[i].ID
-						projectName = projects[i].DisplayName
-						break
+				// Fall back to interactive selection if no match found
+				if projectID == "" {
+					options := make([]string, len(projects))
+					for i, p := range projects {
+						desc := ""
+						if p.Description != nil && *p.Description != "" {
+							desc = " — " + *p.Description
+						}
+						options[i] = fmt.Sprintf("%s (%s)%s", p.DisplayName, p.ID, desc)
+					}
+
+					selected, err := pterm.DefaultInteractiveSelect.
+						WithDefaultText("Select a project to link").
+						WithOptions(options).
+						Show()
+					if err != nil {
+						return fmt.Errorf("selection cancelled")
+					}
+
+					// Find the selected project
+					for i, opt := range options {
+						if opt == selected {
+							projectID = projects[i].ID
+							projectName = projects[i].DisplayName
+							break
+						}
 					}
 				}
 			}
