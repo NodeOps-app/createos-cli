@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  image-build-push:
+  lint-and-test:
     permissions:
       contents: read
     runs-on: ubuntu-latest
