@@ -27,7 +27,7 @@ jobs:
             goarch: amd64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-go@v6
         with:
@@ -65,7 +65,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: NodeOps-app/homebrew-tap
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
