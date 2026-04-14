@@ -37,7 +37,7 @@ func newDeploymentBuildLogsCommand() *cli.Command {
 				return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 			}
 
-			projectID, deploymentID, err := resolveDeployment(c, client)
+			projectID, deploymentID, err := resolveDeployment(c, client, nil)
 			if err != nil {
 				return err
 			}

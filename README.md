@@ -208,20 +208,23 @@ Sensitive and noisy files are always excluded: `.env`, `.env.*`, secrets/keys (`
 
 ### Deployments
 
-| Command                           | Description                          |
-| --------------------------------- | ------------------------------------ |
-| `createos deployments list`       | List deployments for a project       |
-| `createos deployments logs`       | Stream runtime logs for a deployment |
-| `createos deployments build-logs` | Stream build logs for a deployment   |
-| `createos deployments retrigger`  | Retrigger a deployment               |
-| `createos deployments wakeup`     | Wake up a sleeping deployment        |
-| `createos deployments cancel`     | Cancel a running deployment          |
+| Command                               | Description                            |
+| ------------------------------------- | -------------------------------------- |
+| `createos deployments list`           | List deployments for a project         |
+| `createos deployments logs`           | Stream runtime logs for a deployment   |
+| `createos deployments build-logs`     | Stream build logs for a deployment     |
+| `createos deployments promote`        | Promote a deployment to an environment |
+| `createos deployments retrigger`      | Retrigger a deployment                 |
+| `createos deployments sleep`          | Put a running deployment to sleep      |
+| `createos deployments wakeup`         | Wake up a sleeping deployment          |
+| `createos deployments cancel-build`   | Cancel a deployment that is building   |
 
 ### Environments
 
 | Command                        | Description                     |
 | ------------------------------ | ------------------------------- |
 | `createos environments list`   | List environments for a project |
+| `createos environments create` | Create a new environment        |
 | `createos environments delete` | Delete an environment           |
 
 ### Environment Variables
@@ -357,12 +360,15 @@ createos projects unsuspend --project <id> --force
 createos deployments list --project <id>
 createos deployments logs --project <id> --deployment <id>
 createos deployments build-logs --project <id> --deployment <id>
+createos deployments promote --project <id> --deployment <id> --environment <id>
 createos deployments retrigger --project <id> --deployment <id>
+createos deployments sleep --project <id> --deployment <id> --force
 createos deployments wakeup --project <id> --deployment <id>
-createos deployments cancel --project <id> --deployment <id> --force
+createos deployments cancel-build --project <id> --deployment <id> --force
 
 # Environments
 createos environments list --project <id>
+createos environments create --project <id> --name "Staging" --unique-name staging --branch develop
 createos environments delete --project <id> --environment <id> --force
 
 # Environment variables

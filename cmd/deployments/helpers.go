@@ -13,7 +13,8 @@ import (
 
 // resolveDeployment resolves projectID and deploymentID from flags or interactively.
 // Uses --project and --deployment flags; falls back to config and interactive select.
-func resolveDeployment(c *cli.Context, client *api.APIClient) (string, string, error) {
+// Optional statusFilter limits which deployments are shown; pass nil to show all.
+func resolveDeployment(c *cli.Context, client *api.APIClient, statusFilter []string) (string, string, error) {
 	projectID, err := cmdutil.ResolveProjectID(c.String("project"))
 	if err != nil {
 		return "", "", err
@@ -23,24 +24,66 @@ func resolveDeployment(c *cli.Context, client *api.APIClient) (string, string, e
 		return projectID, deploymentID, nil
 	}
 
-	deploymentID, err := pickDeployment(client, projectID)
+	deploymentID, err := pickDeployment(client, projectID, statusFilter)
 	if err != nil {
 		return "", "", err
 	}
 	return projectID, deploymentID, nil
 }
 
-func pickDeployment(client *api.APIClient, projectID string) (string, error) {
-	deployments, err := client.ListDeployments(projectID)
+func pickDeployment(client *api.APIClient, projectID string, statusFilter []string) (string, error) {
+	allDeployments, err := client.ListDeployments(projectID)
 	if err != nil {
 		return "", err
 	}
-	if len(deployments) == 0 {
+	if len(allDeployments) == 0 {
 		return "", fmt.Errorf("no deployments found for this project")
 	}
-	if len(deployments) == 1 {
-		return deployments[0].ID, nil
+
+	// Filter by status if a filter is provided
+	deployments := allDeployments
+	if len(statusFilter) > 0 {
+		allowed := make(map[string]bool, len(statusFilter))
+		for _, s := range statusFilter {
+			allowed[s] = true
+		}
+		filtered := make([]api.Deployment, 0, len(allDeployments))
+		for _, d := range allDeployments {
+			if allowed[d.Status] {
+				filtered = append(filtered, d)
+			}
+		}
+		deployments = filtered
 	}
+
+	if len(deployments) == 0 {
+		return "", fmt.Errorf("no eligible deployments found for this action")
+	}
+
+	// Non-interactive: auto-pick single, error on multiple
+	if !terminal.IsInteractive() {
+		if len(deployments) == 1 {
+			return deployments[0].ID, nil
+		}
+		return "", fmt.Errorf("multiple deployments found — use --deployment <id> to specify one\n\n  To see your deployments, run:\n    createos deployments list")
+	}
+
+	// Interactive: show table then let user pick
+	tableData := pterm.TableData{
+		{"#", "ID", "Status", "URL", "Created At"},
+	}
+	for i, d := range deployments {
+		tableData = append(tableData, []string{
+			fmt.Sprintf("%d", i+1),
+			d.ID,
+			d.Status,
+			d.Extra.Endpoint,
+			d.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	fmt.Println()
+	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+	fmt.Println()
 
 	options := make([]string, len(deployments))
 	for i, d := range deployments {
@@ -62,9 +105,7 @@ func pickDeployment(client *api.APIClient, projectID string) (string, error) {
 		}
 		options[i] = label
 	}
-	if !terminal.IsInteractive() {
-		return "", fmt.Errorf("multiple deployments found — use --deployment <id> to specify one\n\n  To see your deployments, run:\n    createos deployments list")
-	}
+
 	selected, err := pterm.DefaultInteractiveSelect.
 		WithOptions(options).
 		WithDefaultText("Select a deployment").

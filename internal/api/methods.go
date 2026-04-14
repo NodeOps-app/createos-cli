@@ -487,6 +487,19 @@ func (c *APIClient) CancelDeployment(projectID, deploymentID string) error {
 	return nil
 }
 
+// SleepDeployment puts a deployment to sleep (terminates it).
+func (c *APIClient) SleepDeployment(projectID, deploymentID string) error {
+	resp, err := c.Client.R().
+		Delete("/v1/projects/" + projectID + "/deployments/" + deploymentID)
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}
+
 // WakeupDeployment wakes up a sleeping deployment.
 func (c *APIClient) WakeupDeployment(projectID, deploymentID string) error {
 	resp, err := c.Client.R().
@@ -669,6 +682,47 @@ func (c *APIClient) ListEnvironments(projectID string) ([]Environment, error) {
 		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
 	}
 	return result.Data, nil
+}
+
+// CreateEnvironmentRequest is the request body for creating a new environment.
+type CreateEnvironmentRequest struct {
+	DisplayName          string            `json:"displayName"`
+	UniqueName           string            `json:"uniqueName"`
+	Description          *string           `json:"description,omitempty"`
+	Branch               *string           `json:"branch,omitempty"`
+	Settings             map[string]any    `json:"settings"`
+	Resources            ResourceSettings  `json:"resources"`
+	IsAutoPromoteEnabled bool              `json:"isAutoPromoteEnabled"`
+}
+
+// CreateEnvironment creates a new environment for a project.
+func (c *APIClient) CreateEnvironment(projectID string, req CreateEnvironmentRequest) (*Environment, error) {
+	var result Response[Environment]
+	resp, err := c.Client.R().
+		SetBody(req).
+		SetResult(&result).
+		Post("/v1/projects/" + projectID + "/environments")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &result.Data, nil
+}
+
+// PromoteDeployment assigns a deployment to an environment.
+func (c *APIClient) PromoteDeployment(projectID, environmentID, deploymentID string) error {
+	resp, err := c.Client.R().
+		SetBody(map[string]string{"deploymentId": deploymentID}).
+		Post("/v1/projects/" + projectID + "/environments/" + environmentID + "/assign-deployment")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
 }
 
 // DeleteEnvironment deletes an environment from a project.

@@ -9,6 +9,7 @@ func NewEnvironmentsCommand() *cli.Command {
 		Name:  "environments",
 		Usage: "Manage environments for a project",
 		Subcommands: []*cli.Command{
+			newEnvironmentsCreateCommand(),
 			newEnvironmentsDeleteCommand(),
 			newEnvironmentsListCommand(),
 		},
