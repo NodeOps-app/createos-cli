@@ -686,13 +686,13 @@ func (c *APIClient) ListEnvironments(projectID string) ([]Environment, error) {
 
 // CreateEnvironmentRequest is the request body for creating a new environment.
 type CreateEnvironmentRequest struct {
-	DisplayName          string            `json:"displayName"`
-	UniqueName           string            `json:"uniqueName"`
-	Description          *string           `json:"description,omitempty"`
-	Branch               *string           `json:"branch,omitempty"`
-	Settings             map[string]any    `json:"settings"`
-	Resources            ResourceSettings  `json:"resources"`
-	IsAutoPromoteEnabled bool              `json:"isAutoPromoteEnabled"`
+	DisplayName          string           `json:"displayName"`
+	UniqueName           string           `json:"uniqueName"`
+	Description          *string          `json:"description,omitempty"`
+	Branch               *string          `json:"branch,omitempty"`
+	Settings             map[string]any   `json:"settings"`
+	Resources            ResourceSettings `json:"resources"`
+	IsAutoPromoteEnabled bool             `json:"isAutoPromoteEnabled"`
 }
 
 // CreateEnvironment creates a new environment for a project.
