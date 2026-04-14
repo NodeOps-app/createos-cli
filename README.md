@@ -149,12 +149,14 @@ createos --help
 
 ### Projects
 
-| Command                    | Description            |
-| -------------------------- | ---------------------- |
-| `createos projects add`    | Create a new project   |
-| `createos projects list`   | List all projects      |
-| `createos projects get`    | Get project details    |
-| `createos projects delete` | Delete a project       |
+| Command                        | Description              |
+| ------------------------------ | ------------------------ |
+| `createos projects add`        | Create a new project     |
+| `createos projects list`       | List all projects        |
+| `createos projects get`        | Get project details      |
+| `createos projects delete`     | Delete a project         |
+| `createos projects suspend`    | Pause a running project  |
+| `createos projects unsuspend`  | Resume a suspended project |
 
 **`projects add` flags:**
 
@@ -348,6 +350,8 @@ createos projects add --name "My App" --unique-name my-app \
 # Projects
 createos projects get --project <id>
 createos projects delete --project <id> --force
+createos projects suspend --project <id> --force
+createos projects unsuspend --project <id> --force
 
 # Deployments
 createos deployments list --project <id>
