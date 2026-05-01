@@ -6,6 +6,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	"github.com/NodeOps-app/createos-cli/internal/telemetry"
 )
 
 // NewLogoutCommand creates the logout command
@@ -23,6 +24,16 @@ func NewLogoutCommand() *cli.Command {
 			}
 			if err := config.DeleteOAuthSession(); err != nil {
 				return fmt.Errorf("could not clear your session: %w", err)
+			}
+			// Phase 4: clear identity binding so the next login can re-Alias
+			// against the post-login user_id without inheriting stale state.
+			_ = config.DeleteIdentity()
+
+			if telemetry.Default != nil {
+				telemetry.Default.Capture("auth_event", map[string]any{
+					"action":  "logout",
+					"success": true,
+				})
 			}
 
 			fmt.Println("You've been signed out successfully.")

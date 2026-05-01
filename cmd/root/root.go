@@ -116,6 +116,14 @@ func NewApp() *cli.App {
 							session.RefreshToken,
 						)
 						if err != nil {
+							if telemetry.Default != nil {
+								telemetry.Default.Capture("auth_event", map[string]any{
+									"action":         "refresh",
+									"method":         "refresh",
+									"success":        false,
+									"failure_reason": err.Error(),
+								})
+							}
 							return fmt.Errorf("your session has expired and could not be renewed — run 'createos login' to sign in again")
 						}
 						session.AccessToken = refreshed.AccessToken
@@ -126,7 +134,22 @@ func NewApp() *cli.App {
 							session.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn)
 						}
 						if err := config.SaveOAuthSession(*session); err != nil {
+							if telemetry.Default != nil {
+								telemetry.Default.Capture("auth_event", map[string]any{
+									"action":         "refresh",
+									"method":         "refresh",
+									"success":        false,
+									"failure_reason": err.Error(),
+								})
+							}
 							return fmt.Errorf("could not save refreshed session: %w", err)
+						}
+						if telemetry.Default != nil {
+							telemetry.Default.Capture("auth_event", map[string]any{
+								"action":  "refresh",
+								"method":  "refresh",
+								"success": true,
+							})
 						}
 					}
 					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"))

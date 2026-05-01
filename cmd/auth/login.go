@@ -8,8 +8,10 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
+	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
+	"github.com/NodeOps-app/createos-cli/internal/telemetry"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -17,6 +19,51 @@ const (
 	oauthCallbackPort = 65341
 	oauthCallbackURI  = "http://localhost:65341/callback"
 )
+
+// captureLoginFailure emits an auth_event with success=false. Called BEFORE
+// identity is rebound, so distinct_id is still the machine_id_hash — that's
+// expected and correct.
+func captureLoginFailure(method string, err error) {
+	if telemetry.Default == nil {
+		return
+	}
+	reason := ""
+	if err != nil {
+		reason = err.Error()
+	}
+	telemetry.Default.Capture("auth_event", map[string]any{
+		"action":         "login",
+		"method":         method,
+		"success":        false,
+		"failure_reason": reason,
+	})
+}
+
+// bindIdentityAndCapture runs the post-credential-save identity flow:
+// fetch /me, persist Identity (preserving AliasedForUserID for same user),
+// rebind telemetry distinct_id to user_id, then emit success auth_event.
+// All identity fetching is best-effort — a failure here must NOT fail login.
+func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
+	if apiClient != nil {
+		if u, err := apiClient.GetUser(); err == nil && u != nil && u.ID != "" {
+			id := config.Identity{UserID: u.ID}
+			if existing, _ := config.LoadIdentity(); existing != nil && existing.UserID == u.ID {
+				id.AliasedForUserID = existing.AliasedForUserID
+			}
+			_ = config.SaveIdentity(id)
+		}
+		// Silent on /me failure — login still succeeds without user_id.
+	}
+
+	if telemetry.Default != nil {
+		telemetry.Default.RebindIdentity()
+		telemetry.Default.Capture("auth_event", map[string]any{
+			"action":  "login",
+			"method":  method,
+			"success": true,
+		})
+	}
+}
 
 // NewLoginCommand creates the login command.
 func NewLoginCommand() *cli.Command {
@@ -34,15 +81,21 @@ func NewLoginCommand() *cli.Command {
 			// --token flag: API key flow (works in both TTY and non-TTY)
 			if token := c.String("token"); token != "" {
 				if err := config.SaveToken(token); err != nil {
-					return fmt.Errorf("could not save your token: %w", err)
+					wrapped := fmt.Errorf("could not save your token: %w", err)
+					captureLoginFailure("token", wrapped)
+					return wrapped
 				}
+				client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
+				bindIdentityAndCapture(&client, "token")
 				pterm.Success.Println("You're signed in.")
 				return nil
 			}
 
 			// Non-interactive (CI/script): require --token flag
 			if !terminal.IsInteractive() {
-				return fmt.Errorf("non-interactive mode: use --token flag to sign in\n\n  Example:\n    createos login --token <your-api-token>")
+				err := fmt.Errorf("non-interactive mode: use --token flag to sign in\n\n  Example:\n    createos login --token <your-api-token>")
+				captureLoginFailure("token", err)
+				return err
 			}
 
 			// Interactive: let user choose auth method
@@ -54,30 +107,40 @@ func NewLoginCommand() *cli.Command {
 				WithOptions(options).
 				Show("How would you like to sign in?")
 			if err != nil {
-				return fmt.Errorf("sign in cancelled")
+				cancel := fmt.Errorf("sign in cancelled")
+				// Method unknown at this point — choice was never made. Pick
+				// "browser" since that's the default selection in the picker.
+				captureLoginFailure("browser", cancel)
+				return cancel
 			}
 
 			if selected == options[1] {
-				return loginWithAPIToken()
+				return loginWithAPIToken(c)
 			}
-			return loginWithBrowser()
+			return loginWithBrowser(c)
 		},
 	}
 }
 
-func loginWithAPIToken() error {
+func loginWithAPIToken(c *cli.Context) error {
 	token, err := pterm.DefaultInteractiveTextInput.WithMask("*").Show("Paste your API token")
 	if err != nil || token == "" {
-		return fmt.Errorf("sign in cancelled")
+		cancel := fmt.Errorf("sign in cancelled")
+		captureLoginFailure("token", cancel)
+		return cancel
 	}
 	if err := config.SaveToken(token); err != nil {
-		return fmt.Errorf("could not save your token: %w", err)
+		wrapped := fmt.Errorf("could not save your token: %w", err)
+		captureLoginFailure("token", wrapped)
+		return wrapped
 	}
+	client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
+	bindIdentityAndCapture(&client, "token")
 	pterm.Success.Println("You're signed in.")
 	return nil
 }
 
-func loginWithBrowser() error {
+func loginWithBrowser(c *cli.Context) error {
 	pterm.Info.Println("Starting browser login...")
 
 	port := oauthCallbackPort
@@ -86,17 +149,23 @@ func loginWithBrowser() error {
 	pterm.Info.Println("Fetching authorization server info...")
 	meta, err := internaloauth.FetchServerMetadata(config.OAuthIssuerURL)
 	if err != nil {
-		return fmt.Errorf("could not reach authorization server: %w", err)
+		wrapped := fmt.Errorf("could not reach authorization server: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	pkce, err := internaloauth.GeneratePKCE()
 	if err != nil {
-		return fmt.Errorf("could not generate security parameters: %w", err)
+		wrapped := fmt.Errorf("could not generate security parameters: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	state, err := internaloauth.GenerateState()
 	if err != nil {
-		return fmt.Errorf("could not generate state: %w", err)
+		wrapped := fmt.Errorf("could not generate state: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	authURL := internaloauth.BuildAuthURL(
@@ -120,11 +189,15 @@ func loginWithBrowser() error {
 
 	code, returnedState, err := internaloauth.StartCallbackServer(port)
 	if err != nil {
-		return fmt.Errorf("login was not completed: %w", err)
+		wrapped := fmt.Errorf("login was not completed: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	if returnedState != state {
-		return fmt.Errorf("invalid state parameter — possible CSRF attack, login aborted")
+		wrapped := fmt.Errorf("invalid state parameter — possible CSRF attack, login aborted")
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	pterm.Info.Println("Completing sign in...")
@@ -136,7 +209,9 @@ func loginWithBrowser() error {
 		pkce.Verifier,
 	)
 	if err != nil {
-		return fmt.Errorf("could not complete sign in: %w", err)
+		wrapped := fmt.Errorf("could not complete sign in: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
 
 	expiresAt := time.Now().Unix() + int64(tokenResp.ExpiresIn)
@@ -150,8 +225,13 @@ func loginWithBrowser() error {
 		TokenEndpoint: meta.TokenEndpoint,
 	}
 	if err := config.SaveOAuthSession(session); err != nil {
-		return fmt.Errorf("could not save your session: %w", err)
+		wrapped := fmt.Errorf("could not save your session: %w", err)
+		captureLoginFailure("browser", wrapped)
+		return wrapped
 	}
+
+	client := api.NewClientWithAccessToken(tokenResp.AccessToken, c.String("api-url"), c.Bool("debug"))
+	bindIdentityAndCapture(&client, "browser")
 
 	fmt.Println()
 	pterm.Success.Println("You're signed in.")
