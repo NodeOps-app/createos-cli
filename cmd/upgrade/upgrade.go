@@ -20,6 +20,7 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
+	"github.com/NodeOps-app/createos-cli/internal/telemetry"
 )
 
 const (
@@ -55,17 +56,52 @@ func NewUpgradeCommand() *cli.Command {
 	}
 }
 
-func runUpgrade() error {
+func runUpgrade() (retErr error) {
 	pterm.Info.Printf("Current version: %s (channel: %s)\n", version.Version, version.Channel)
+
+	fromVersion := version.Version
+	// toVersion is "latest" until the release tag is resolved. Captured by
+	// the deferred emit below if we fail before resolution.
+	toVersion := "latest"
+	// upgradeAttempted is set true only when we cross the "no-op / already
+	// up-to-date" boundary and actually try to swap the binary. Successful
+	// no-op paths must NOT emit upgrade_event.
+	upgradeAttempted := false
+	upgradeSucceeded := false
+
+	// Single deferred emit handles every return path. Note: the runUpgrade
+	// Action returns normally to main.go which calls FinalizeTelemetry +
+	// telemetry.Shutdown before os.Exit, so the event flushes naturally — no
+	// Flush() call needed here.
+	defer func() {
+		if !upgradeAttempted {
+			return
+		}
+		if telemetry.Default == nil {
+			return
+		}
+		props := map[string]any{
+			"from_version": fromVersion,
+			"to_version":   toVersion,
+			"success":      upgradeSucceeded,
+		}
+		if !upgradeSucceeded && retErr != nil {
+			props["failure_reason"] = retErr.Error()
+		}
+		telemetry.Default.Capture("upgrade_event", props)
+	}()
 
 	release, err := fetchLatestRelease()
 	if err != nil {
+		upgradeAttempted = true
 		return fmt.Errorf("could not check for updates: %w", err)
 	}
+	toVersion = release.TagName
 
 	if version.Channel == "nightly" {
 		remoteCommit, err := fetchNightlyCommit(release)
 		if err != nil {
+			upgradeAttempted = true
 			return fmt.Errorf("could not check nightly commit: %w", err)
 		}
 		if remoteCommit == version.Commit {
@@ -84,6 +120,9 @@ func runUpgrade() error {
 			return nil
 		}
 	}
+
+	// Past this point we are committed to attempting the upgrade.
+	upgradeAttempted = true
 
 	pterm.Info.Printf("New version available: %s\n", release.TagName)
 
@@ -143,6 +182,7 @@ func runUpgrade() error {
 		return fmt.Errorf("could not replace binary: %w", err)
 	}
 
+	upgradeSucceeded = true
 	pterm.Success.Printf("Upgraded to %s. Run 'createos version' to confirm.\n", release.TagName)
 	return nil
 }
