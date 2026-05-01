@@ -9,7 +9,9 @@
 // Order of checks (first match wins):
 //  1. *api.APIError → category by HTTP status.
 //  2. context.DeadlineExceeded / net.Error → "network".
-//  3. local sentinel substrings → "auth" or "user_input".
+//  3. local sentinel substrings → "user_input" first, then "auth".
+//     user_input is checked first because some validation messages contain
+//     auth-shaped phrases (e.g. "use --token flag to sign in").
 //  4. default → "unknown".
 package telemetry
 
@@ -57,15 +59,17 @@ func CategorizeError(err error) (category string, apiStatusCode int) {
 	}
 
 	// 3. Locally-raised sentinels — string match on err.Error().
+	// user_input first: some validation messages embed "sign in" wording
+	// (e.g. "non-interactive mode: use --token flag to sign in").
 	msg := err.Error()
-	for _, needle := range authNeedles {
-		if strings.Contains(msg, needle) {
-			return "auth", 0
-		}
-	}
 	for _, needle := range userInputNeedles {
 		if strings.Contains(msg, needle) {
 			return "user_input", 0
+		}
+	}
+	for _, needle := range authNeedles {
+		if strings.Contains(msg, needle) {
+			return "auth", 0
 		}
 	}
 

@@ -470,6 +470,9 @@ createos environments list --project <id> -o json
 
 ## Telemetry
 
-The CLI sends anonymous usage data (commands run, version, OS, error categories)
-to help us improve the product. No file paths, command output, or secrets are
+The CLI sends usage telemetry (commands run, version, OS, error categories)
+to help us improve the product. Before you run `createos login`, events are
+anonymous and tied only to a one-way machine hash. After login, events are
+associated with your account ID and may include the project ID for
+project-scoped commands. No file paths, command output, or secrets are
 collected. To disable, set `CREATEOS_DO_NOT_TRACK=1` in your environment.

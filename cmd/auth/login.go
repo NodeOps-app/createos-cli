@@ -43,20 +43,35 @@ func captureLoginFailure(method string, err error) {
 // fetch /me, persist Identity (preserving AliasedForUserID for same user),
 // rebind telemetry distinct_id to user_id, then emit success auth_event.
 // All identity fetching is best-effort — a failure here must NOT fail login.
+//
+// If /me fails OR SaveIdentity fails, we DELETE any pre-existing .identity
+// file and skip RebindIdentity — otherwise stale identity from a previous
+// account on this machine would mis-attribute the new login's telemetry.
 func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
+	identityFresh := false
 	if apiClient != nil {
 		if u, err := apiClient.GetUser(); err == nil && u != nil && u.ID != "" {
 			id := config.Identity{UserID: u.ID}
 			if existing, _ := config.LoadIdentity(); existing != nil && existing.UserID == u.ID {
 				id.AliasedForUserID = existing.AliasedForUserID
 			}
-			_ = config.SaveIdentity(id)
+			if saveErr := config.SaveIdentity(id); saveErr == nil {
+				identityFresh = true
+			}
 		}
 		// Silent on /me failure — login still succeeds without user_id.
 	}
 
+	if !identityFresh {
+		// /me or SaveIdentity failed; drop any stale identity so that a later
+		// command does not attribute events to a previous user_id.
+		_ = config.DeleteIdentity()
+	}
+
 	if telemetry.Default != nil {
-		telemetry.Default.RebindIdentity()
+		if identityFresh {
+			telemetry.Default.RebindIdentity()
+		}
 		telemetry.Default.Capture("auth_event", map[string]any{
 			"action":  "login",
 			"method":  method,
