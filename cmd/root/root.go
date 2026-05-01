@@ -3,6 +3,7 @@ package root
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
+	"github.com/NodeOps-app/createos-cli/internal/telemetry"
 )
 
 // NewApp creates and configures the root CLI application.
@@ -206,11 +208,48 @@ func NewApp() *cli.App {
 		},
 	}
 
+	// Phase 3: store app pointer so HelpPrinter override (which has no
+	// cli.Context) can reach App.Metadata via CurrentApp().
+	currentAppPtr.Store(app)
+
 	// Phase 2 telemetry wiring. Wrap every subcommand Action AND the
 	// home-screen Action so command_invoked fires with the correct
 	// FullName() AFTER cli/v2 has dispatched into the subcommand.
 	wrapActions(app.Commands)
 	wrapAppAction(app)
+
+	// Phase 3: HelpPrinter / VersionPrinter overrides emit command_invoked
+	// for `--help` and `--version` paths where the Action never runs. We
+	// defer to the original printer so user output is never delayed by
+	// telemetry. NO Flush — Close is terminal and runs in finalizeTelemetry.
+	originalHelp := cli.HelpPrinter
+	cli.HelpPrinter = func(w io.Writer, templ string, data interface{}) {
+		defer originalHelp(w, templ, data)
+		if !helpEmittedThisProcess.CompareAndSwap(false, true) {
+			return
+		}
+		client := telemetry.Default
+		if client == nil {
+			return
+		}
+		props := map[string]any{"command": "--help"}
+		if appRef := CurrentApp(); appRef != nil {
+			appRef.Metadata["telemetry_invoked_props"] = props
+		}
+		client.Capture("command_invoked", props)
+	}
+
+	originalVersion := cli.VersionPrinter
+	cli.VersionPrinter = func(c *cli.Context) {
+		defer originalVersion(c)
+		client := telemetry.Default
+		if client == nil {
+			return
+		}
+		props := map[string]any{"command": "--version"}
+		c.App.Metadata["telemetry_invoked_props"] = props
+		client.Capture("command_invoked", props)
+	}
 
 	return app
 }

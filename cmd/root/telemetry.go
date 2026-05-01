@@ -19,6 +19,14 @@ import (
 // fire (e.g. `createos projects --help`).
 var helpEmittedThisProcess atomic.Bool
 
+// currentAppPtr holds a process-wide pointer to the active *cli.App so the
+// HelpPrinter override (which has no cli.Context access) can stash invoked
+// props into App.Metadata for the finalizer to pair with.
+var currentAppPtr atomic.Pointer[cli.App]
+
+// CurrentApp returns the active app pointer set by NewApp, or nil if not set.
+func CurrentApp() *cli.App { return currentAppPtr.Load() }
+
 // valueFlags lists global flags that take a value. Must be kept in sync with
 // NewApp's Flags slice. Bools (--debug, -d) take no value, so omitted.
 var valueFlags = map[string]bool{
