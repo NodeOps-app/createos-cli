@@ -467,3 +467,9 @@ createos environments list --project <id> -o json
 - OAuth session tokens are stored at `~/.createos/.oauth` with `600` permissions (readable only by you).
 - Debug mode masks your token in output — only the first 6 and last 4 characters are shown.
 - Never share your token or commit it to version control.
+
+## Telemetry
+
+The CLI sends anonymous usage data (commands run, version, OS, error categories)
+to help us improve the product. No file paths, command output, or secrets are
+collected. To disable, set `CREATEOS_DO_NOT_TRACK=1` in your environment.

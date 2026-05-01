@@ -43,8 +43,9 @@ jobs:
           VERSION="nightly-$(date -u +%Y-%m-%d)"
           PKG="github.com/NodeOps-app/createos-cli/internal/pkg/version"
           CFG="github.com/NodeOps-app/createos-cli/internal/config"
+          TEL="github.com/NodeOps-app/createos-cli/internal/telemetry"
           COMMIT="${{ github.sha }}"
-          LDFLAGS="-s -w -X ${PKG}.Version=${VERSION} -X ${PKG}.Channel=nightly -X ${PKG}.Commit=${COMMIT} -X ${CFG}.OAuthClientID=${{ secrets.OAUTH_CLIENT_ID }}"
+          LDFLAGS="-s -w -X ${PKG}.Version=${VERSION} -X ${PKG}.Channel=nightly -X ${PKG}.Commit=${COMMIT} -X ${CFG}.OAuthClientID=${{ secrets.OAUTH_CLIENT_ID }} -X ${TEL}.PostHogAPIKey=${{ secrets.POSTHOG_API_KEY }} -X ${TEL}.PostHogHost=https://us.i.posthog.com"
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY="createos-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
           else
