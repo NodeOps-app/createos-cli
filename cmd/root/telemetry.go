@@ -39,7 +39,7 @@ var valueFlags = map[string]bool{
 // active cli.Context.
 func buildInvokedProps(c *cli.Context) map[string]any {
 	props := map[string]any{
-		"command":   c.Command.FullName(),
+		"command":   commandPath(c),
 		"flags":     telemetry.FlagsFromContext(c),
 		"arg_count": c.Args().Len(),
 	}
@@ -47,6 +47,39 @@ func buildInvokedProps(c *cli.Context) map[string]any {
 		props["project_id"] = pid
 	}
 	return props
+}
+
+// commandPath returns the space-joined command name including all parent
+// subcommand names (e.g. "projects list"). urfave/cli/v2 v2.27.7's
+// c.Command.FullName() returns only the leaf name, so we walk c.Lineage()
+// from root → leaf, skipping the synthesized root command whose Name
+// equals the App.Name.
+func commandPath(c *cli.Context) string {
+	if c == nil || c.Command == nil {
+		return ""
+	}
+	lineage := c.Lineage()
+	rootName := ""
+	if c.App != nil {
+		rootName = c.App.Name
+	}
+	parts := make([]string, 0, len(lineage))
+	for i := len(lineage) - 1; i >= 0; i-- {
+		ctx := lineage[i]
+		if ctx.Command == nil || ctx.Command.Name == "" {
+			continue
+		}
+		// Skip the synthesized root command unless it is the only entry
+		// (i.e. this IS the home-screen Action and "createos" is the name).
+		if ctx.Command.Name == rootName && len(lineage) > 1 {
+			continue
+		}
+		parts = append(parts, ctx.Command.Name)
+	}
+	if len(parts) == 0 {
+		return c.Command.Name
+	}
+	return strings.Join(parts, " ")
 }
 
 // resolveProjectID picks (in order): --project flag, --project-id flag, then
@@ -181,7 +214,7 @@ func finalizeTelemetry(app *cli.App, err error) {
 		client.Capture("command_completed", props)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	client.Shutdown(ctx)
 	cancel()
 }
