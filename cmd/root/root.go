@@ -64,6 +64,14 @@ func NewApp() *cli.App {
 			},
 		},
 		Before: func(c *cli.Context) error {
+			// Telemetry stashes (Phase 2) — must run BEFORE any validation that
+			// may return early, so the finalizer always sees a start time and
+			// the resolved subcommand name. NO event emission here:
+			// c.Command.FullName() returns "createos" at this point because
+			// urfave/cli has not yet dispatched into the subcommand.
+			c.App.Metadata["telemetry_start"] = time.Now()
+			c.App.Metadata["telemetry_arg_first"] = c.Args().First()
+
 			// Store the output format in metadata
 			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
 
@@ -197,6 +205,12 @@ func NewApp() *cli.App {
 			versioncmd.NewVersionCommand(),
 		},
 	}
+
+	// Phase 2 telemetry wiring. Wrap every subcommand Action AND the
+	// home-screen Action so command_invoked fires with the correct
+	// FullName() AFTER cli/v2 has dispatched into the subcommand.
+	wrapActions(app.Commands)
+	wrapAppAction(app)
 
 	return app
 }
