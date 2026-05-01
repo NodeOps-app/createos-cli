@@ -5,9 +5,10 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/posthog/posthog-go"
+
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
-	"github.com/posthog/posthog-go"
 )
 
 // telSchemaVersion is bumped when the property shape changes in an

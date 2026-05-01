@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/posthog/posthog-go"
+
+	"github.com/NodeOps-app/createos-cli/internal/config"
 )
 
 // Default is the package-global Client. Written once by Init. Other packages
