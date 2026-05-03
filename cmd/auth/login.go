@@ -49,6 +49,7 @@ func captureLoginFailure(method string, err error) {
 // account on this machine would mis-attribute the new login's telemetry.
 func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
 	identityFresh := false
+	var personProps map[string]any
 	if apiClient != nil {
 		if u, err := apiClient.GetUser(); err == nil && u != nil && u.ID != "" {
 			id := config.Identity{UserID: u.ID}
@@ -57,6 +58,7 @@ func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
 			}
 			if saveErr := config.SaveIdentity(id); saveErr == nil {
 				identityFresh = true
+				personProps = userToPersonProps(u)
 			}
 		}
 		// Silent on /me failure — login still succeeds without user_id.
@@ -70,6 +72,7 @@ func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
 
 	if telemetry.Default != nil {
 		if identityFresh {
+			telemetry.Default.SetPersonProperties(personProps)
 			telemetry.Default.RebindIdentity()
 		}
 		telemetry.Default.Capture("auth_event", map[string]any{
@@ -78,6 +81,27 @@ func bindIdentityAndCapture(apiClient *api.APIClient, method string) {
 			"success": true,
 		})
 	}
+}
+
+// userToPersonProps maps the API User struct to PostHog Person-level
+// properties. These go ONLY to the Person record via Identify; they are
+// NOT included in any Capture event payload. Pointer fields are dereferenced
+// only when non-nil.
+func userToPersonProps(u *api.User) map[string]any {
+	p := map[string]any{
+		"email": u.Email,
+	}
+	if u.DisplayName != nil && *u.DisplayName != "" {
+		p["name"] = *u.DisplayName
+	}
+	if u.Username != nil && *u.Username != "" {
+		p["username"] = *u.Username
+	}
+	if u.CreatedAt != "" {
+		// signup_date is immutable — Client uses $set_once for this key.
+		p["signup_date"] = u.CreatedAt
+	}
+	return p
 }
 
 // NewLoginCommand creates the login command.

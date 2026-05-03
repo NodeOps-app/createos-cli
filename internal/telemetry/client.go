@@ -28,10 +28,11 @@ type Client struct {
 	machineIDHash string // anonymous distinct_id; never overwritten after Init
 	globalProps   posthog.Properties
 
-	mu         sync.Mutex
-	userID     string // empty pre-login
-	distinctID string // == machineIDHash pre-login, == userID post-login
-	disabled   bool
+	mu          sync.Mutex
+	userID      string // empty pre-login
+	distinctID  string // == machineIDHash pre-login, == userID post-login
+	disabled    bool
+	personProps map[string]any // sent on Identify only; never on Capture events
 }
 
 // silentLogger satisfies posthog.Logger but drops all output. Telemetry must
@@ -120,6 +121,26 @@ func (c *Client) Capture(event string, props map[string]any) {
 	})
 }
 
+// SetPersonProperties stores PostHog Person-level properties (email, name,
+// signup_date, ...) that will be attached to the next Identify event sent
+// by RebindIdentity. The map is held in memory only — it is never persisted
+// to disk and never appears on Capture event payloads.
+//
+// Callers (the login flow) MUST call this BEFORE RebindIdentity for the
+// props to land on the corresponding Identify.
+func (c *Client) SetPersonProperties(props map[string]any) {
+	if c == nil || c.disabled {
+		return
+	}
+	cp := make(map[string]any, len(props))
+	for k, v := range props {
+		cp[k] = v
+	}
+	c.mu.Lock()
+	c.personProps = cp
+	c.mu.Unlock()
+}
+
 // RebindIdentity reads the on-disk Identity and aligns the client state.
 // Idempotent — repeated calls do nothing extra once user is bound.
 //
@@ -153,6 +174,26 @@ func (c *Client) RebindIdentity() {
 	}
 	if v, ok := c.globalProps["channel"]; ok {
 		identifyProps.Set("channel", v)
+	}
+	// Attach Person props (email, name, signup_date, ...) supplied by the
+	// login flow. They go ONLY to PostHog's person record via Identify; they
+	// are NOT included in any Capture event payload.
+	c.mu.Lock()
+	personProps := c.personProps
+	c.mu.Unlock()
+	setOnce := map[string]any{}
+	for k, v := range personProps {
+		switch k {
+		case "signup_date", "created_at":
+			// Immutable Person fields — only set on first identify per
+			// person, never overwritten on subsequent logins.
+			setOnce[k] = v
+		default:
+			identifyProps.Set(k, v)
+		}
+	}
+	if len(setOnce) > 0 {
+		identifyProps.Set("$set_once", setOnce)
 	}
 	_ = c.inner.Enqueue(posthog.Identify{
 		DistinctId: id.UserID,
