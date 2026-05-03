@@ -24,6 +24,8 @@ When adding a new command:
 1. Create the file under `cmd/<group>/`
 2. Register it in the group's `NewXxxCommand()` subcommands slice
 3. Add it to the manual list in `root.go` Action (the home screen) in alphabetical order
+4. Telemetry is automatic — @docs/telemetry.md
+
 
 ## API Client
 
