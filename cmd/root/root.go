@@ -20,6 +20,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
 	"github.com/NodeOps-app/createos-cli/cmd/open"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
+	"github.com/NodeOps-app/createos-cli/cmd/sandbox"
 	"github.com/NodeOps-app/createos-cli/cmd/scale"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/status"
@@ -55,6 +56,18 @@ func NewApp() *cli.App {
 				Usage:   "Override the API base URL",
 				EnvVars: []string{"CREATEOS_API_URL"},
 				Value:   api.DefaultBaseURL,
+			},
+			&cli.StringFlag{
+				Name:    "sandbox-api-url",
+				Usage:   "Override the sandbox (fc-spawn) base URL",
+				EnvVars: []string{"CREATEOS_SANDBOX_URL"},
+				Value:   api.DefaultSandboxBaseURL,
+			},
+			&cli.StringFlag{
+				Name:    "sandbox-gateway",
+				Usage:   "SSH gateway address (<host:port>) used by `sandbox shell`",
+				EnvVars: []string{"CREATEOS_SANDBOX_GATEWAY"},
+				Value:   "65.109.104.247:2222",
 			},
 			&cli.StringFlag{
 				Name:    "output",
@@ -121,6 +134,11 @@ func NewApp() *cli.App {
 					}
 					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"))
 					c.App.Metadata[api.ClientKey] = &client
+					// Sandbox API (fc-spawn) reuses the same access token —
+					// the token is validated against the shared NodeOps
+					// auth service on the server side.
+					sandboxClient := api.NewSandboxClient(session.AccessToken, c.String("sandbox-api-url"), c.Bool("debug"))
+					c.App.Metadata[api.SandboxClientKey] = &sandboxClient
 					return nil
 				}
 			}
@@ -132,6 +150,8 @@ func NewApp() *cli.App {
 			}
 			client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
 			c.App.Metadata[api.ClientKey] = &client
+			sandboxClient := api.NewSandboxClient(token, c.String("sandbox-api-url"), c.Bool("debug"))
+			c.App.Metadata[api.SandboxClientKey] = &sandboxClient
 			return nil
 		},
 		Action: func(_ *cli.Context) error {
@@ -151,6 +171,7 @@ func NewApp() *cli.App {
 				fmt.Println("  oauth-clients  Manage OAuth clients")
 				fmt.Println("  open           Open project URL or dashboard in browser")
 				fmt.Println("  projects       Manage projects")
+				fmt.Println("  sandbox        Manage sandboxes")
 				fmt.Println("  scale          Adjust replicas and resources")
 				fmt.Println("  skills         Manage skills")
 				fmt.Println("  status         Show project health and deployment status")
@@ -186,6 +207,7 @@ func NewApp() *cli.App {
 			oauth.NewOAuthCommand(),
 			open.NewOpenCommand(),
 			projects.NewProjectsCommand(),
+			sandbox.NewSandboxCommand(),
 			scale.NewScaleCommand(),
 			skills.NewSkillsCommand(),
 			status.NewStatusCommand(),
