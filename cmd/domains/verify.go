@@ -33,7 +33,7 @@ func newDomainsVerifyCommand() *cli.Command {
 				return err
 			}
 
-			_ = client.RefreshDomain(projectID, domainID)
+			_ = client.RefreshDomain(projectID, domainID) //nolint:errcheck
 
 			domain, err := findDomain(client, projectID, domainID)
 			if err != nil {
@@ -78,7 +78,7 @@ func newDomainsVerifyCommand() *cli.Command {
 						return nil
 					}
 
-					_ = client.RefreshDomain(projectID, domainID)
+					_ = client.RefreshDomain(projectID, domainID) //nolint:errcheck
 					domains, err := client.ListDomains(projectID)
 					if err != nil {
 						continue

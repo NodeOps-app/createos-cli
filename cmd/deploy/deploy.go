@@ -147,7 +147,10 @@ func NewDeployCommand() *cli.Command {
 				}
 
 				// Try to auto-detect from git remote
-				dir, _ := os.Getwd()
+				dir, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("couldn't determine your current directory — please try again from a valid working directory")
+				}
 				repoFullName := git.GetRemoteFullName(dir)
 				if repoFullName != "" {
 					for _, p := range activeProjects {
@@ -160,10 +163,10 @@ func NewDeployCommand() *cli.Command {
 						}
 						if src.VCSFullName == repoFullName {
 							pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
-							useDetected, _ := pterm.DefaultInteractiveConfirm.
+							confirm := pterm.DefaultInteractiveConfirm.
 								WithDefaultText(fmt.Sprintf("Deploy %s?", p.DisplayName)).
-								WithDefaultValue(true).
-								Show()
+								WithDefaultValue(true)
+							useDetected, _ := confirm.Show() //nolint:errcheck
 							if useDetected {
 								projectID = p.ID
 							}
@@ -281,15 +284,15 @@ func UploadDir(client *api.APIClient, projectID, displayName, dir string) error 
 	defer os.Remove(zipFile.Name()) //nolint:errcheck
 	defer zipFile.Close()           //nolint:errcheck
 
-	spinner, _ := pterm.DefaultSpinner.Start("Packaging files...")
+	spinner, _ := pterm.DefaultSpinner.Start("Packaging files...") //nolint:errcheck
 
-	if err := createZip(zipFile, absDir); err != nil {
+	if err = createZip(zipFile, absDir); err != nil {
 		spinner.Fail("Packaging failed")
 		return err
 	}
 
-	stat, _ := zipFile.Stat()
-	if stat != nil && stat.Size() > maxZipSize {
+	stat, statErr := zipFile.Stat()
+	if statErr == nil && stat.Size() > maxZipSize {
 		spinner.Fail("Package too large")
 		return fmt.Errorf("deployment package is %d MB (max %d MB)\n\n  Tip: check that node_modules, .git, and build artifacts are excluded",
 			stat.Size()/(1024*1024), maxZipSize/(1024*1024))
@@ -297,7 +300,7 @@ func UploadDir(client *api.APIClient, projectID, displayName, dir string) error 
 
 	spinner.UpdateText("Uploading...")
 
-	if err := zipFile.Close(); err != nil { //nolint:govet
+	if err = zipFile.Close(); err != nil {
 		return fmt.Errorf("could not flush deployment package: %w", err)
 	}
 
@@ -335,15 +338,15 @@ func deployUpload(c *cli.Context, client *api.APIClient, project *api.Project) e
 	defer os.Remove(zipFile.Name()) //nolint:errcheck
 	defer zipFile.Close()           //nolint:errcheck
 
-	spinner, _ := pterm.DefaultSpinner.Start("Packaging files...")
+	spinner, _ := pterm.DefaultSpinner.Start("Packaging files...") //nolint:errcheck
 
-	if err := createZip(zipFile, absDir); err != nil {
+	if err = createZip(zipFile, absDir); err != nil {
 		spinner.Fail("Packaging failed")
 		return err
 	}
 
-	stat, _ := zipFile.Stat()
-	if stat != nil && stat.Size() > maxZipSize {
+	stat, statErr := zipFile.Stat()
+	if statErr == nil && stat.Size() > maxZipSize {
 		spinner.Fail("Package too large")
 		return fmt.Errorf("deployment package is %d MB (max %d MB)\n\n  Tip: check that node_modules, .git, and build artifacts are excluded",
 			stat.Size()/(1024*1024), maxZipSize/(1024*1024))
@@ -352,7 +355,7 @@ func deployUpload(c *cli.Context, client *api.APIClient, project *api.Project) e
 	spinner.UpdateText("Uploading...")
 
 	// Close before uploading so the file is flushed
-	if err := zipFile.Close(); err != nil { //nolint:govet
+	if err = zipFile.Close(); err != nil {
 		return fmt.Errorf("could not flush deployment package: %w", err)
 	}
 
@@ -523,8 +526,15 @@ func createZip(w io.Writer, srcDir string) error {
 		// Check ignore patterns against basename and full relative path
 		baseName := filepath.Base(relPath)
 		for _, pattern := range ignorePatterns {
-			matchedBase, _ := filepath.Match(pattern, baseName)
-			matchedRel, _ := filepath.Match(pattern, filepath.ToSlash(relPath))
+			var matchedBase, matchedRel bool
+			matchedBase, err = filepath.Match(pattern, baseName)
+			if err != nil {
+				return fmt.Errorf("invalid ignore pattern %q: %w", pattern, err)
+			}
+			matchedRel, err = filepath.Match(pattern, filepath.ToSlash(relPath))
+			if err != nil {
+				return fmt.Errorf("invalid ignore pattern %q: %w", pattern, err)
+			}
 			if matchedBase || matchedRel {
 				if info.IsDir() {
 					return filepath.SkipDir

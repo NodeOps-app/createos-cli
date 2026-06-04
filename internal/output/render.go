@@ -3,6 +3,7 @@ package output
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -26,7 +27,9 @@ func Render(c *cli.Context, data any, tableRenderer func()) {
 	if IsJSON(c) {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(data)
+		if err := enc.Encode(data); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		return
 	}
 	tableRenderer()
@@ -39,12 +42,14 @@ func RenderError(c *cli.Context, code string, message string) bool {
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(map[string]any{
+	if err := enc.Encode(map[string]any{
 		"error": map[string]string{
 			"code":    code,
 			"message": message,
 		},
-	})
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
 	return true
 }
 

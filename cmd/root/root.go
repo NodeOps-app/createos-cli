@@ -20,6 +20,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/oauth"
 	"github.com/NodeOps-app/createos-cli/cmd/open"
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
+	"github.com/NodeOps-app/createos-cli/cmd/sandbox"
 	"github.com/NodeOps-app/createos-cli/cmd/scale"
 	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/status"
@@ -55,6 +56,18 @@ func NewApp() *cli.App {
 				Usage:   "Override the API base URL",
 				EnvVars: []string{"CREATEOS_API_URL"},
 				Value:   api.DefaultBaseURL,
+			},
+			&cli.StringFlag{
+				Name:    "sandbox-api-url",
+				Usage:   "Override the sandbox (fc-spawn) base URL",
+				EnvVars: []string{"CREATEOS_SANDBOX_URL"},
+				Value:   api.DefaultSandboxBaseURL,
+			},
+			&cli.StringFlag{
+				Name:    "sandbox-gateway",
+				Usage:   "SSH gateway address (<host:port>) used by `sandbox shell`",
+				EnvVars: []string{"CREATEOS_SANDBOX_GATEWAY"},
+				Value:   "65.109.104.247:2222",
 			},
 			&cli.StringFlag{
 				Name:    "output",
@@ -94,33 +107,28 @@ func NewApp() *cli.App {
 					return fmt.Errorf("could not load your session: %w", err)
 				}
 				if session != nil {
-					// Auto-refresh if expired
+					// Pre-flight refresh when the token is expired (or
+					// about to be). A hard failure here means the refresh
+					// token is dead — the user must sign in again.
 					if config.IsTokenExpired(session) {
-						tokenEndpoint := session.TokenEndpoint
-						if tokenEndpoint == "" {
-							tokenEndpoint = config.OAuthIssuerURL + "/oauth2/token"
-						}
-						refreshed, err := internaloauth.RefreshTokens(
-							tokenEndpoint,
-							config.OAuthClientID,
-							session.RefreshToken,
-						)
-						if err != nil {
+						if _, err := refreshOAuthSession(session); err != nil {
 							return fmt.Errorf("your session has expired and could not be renewed — run 'createos login' to sign in again")
 						}
-						session.AccessToken = refreshed.AccessToken
-						if refreshed.RefreshToken != "" {
-							session.RefreshToken = refreshed.RefreshToken
-						}
-						if refreshed.ExpiresIn > 0 {
-							session.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn)
-						}
-						if err := config.SaveOAuthSession(*session); err != nil {
-							return fmt.Errorf("could not save refreshed session: %w", err)
-						}
 					}
-					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"))
+					// Reactive refresher: if the server rejects the token
+					// mid-command with a 401 (revoked server-side, or our
+					// clock was wrong), the clients refresh and retry once.
+					refresher := func() (string, error) {
+						return refreshOAuthSession(session)
+					}
+					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"), refresher)
 					c.App.Metadata[api.ClientKey] = &client
+					// Sandbox API (fc-spawn) reuses the same OAuth access
+					// token, but it must go in the X-Access-Token header —
+					// fc-spawn rejects a JWT sent as X-Api-Key with
+					// "invalid api key".
+					sandboxClient := api.NewSandboxClientWithAccessToken(session.AccessToken, c.String("sandbox-api-url"), c.Bool("debug"), refresher)
+					c.App.Metadata[api.SandboxClientKey] = &sandboxClient
 					return nil
 				}
 			}
@@ -132,6 +140,8 @@ func NewApp() *cli.App {
 			}
 			client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
 			c.App.Metadata[api.ClientKey] = &client
+			sandboxClient := api.NewSandboxClient(token, c.String("sandbox-api-url"), c.Bool("debug"))
+			c.App.Metadata[api.SandboxClientKey] = &sandboxClient
 			return nil
 		},
 		Action: func(_ *cli.Context) error {
@@ -151,6 +161,7 @@ func NewApp() *cli.App {
 				fmt.Println("  oauth-clients  Manage OAuth clients")
 				fmt.Println("  open           Open project URL or dashboard in browser")
 				fmt.Println("  projects       Manage projects")
+				fmt.Println("  sandbox        Manage sandboxes")
 				fmt.Println("  scale          Adjust replicas and resources")
 				fmt.Println("  skills         Manage skills")
 				fmt.Println("  status         Show project health and deployment status")
@@ -186,6 +197,7 @@ func NewApp() *cli.App {
 			oauth.NewOAuthCommand(),
 			open.NewOpenCommand(),
 			projects.NewProjectsCommand(),
+			sandbox.NewSandboxCommand(),
 			scale.NewScaleCommand(),
 			skills.NewSkillsCommand(),
 			status.NewStatusCommand(),
@@ -199,4 +211,36 @@ func NewApp() *cli.App {
 	}
 
 	return app
+}
+
+// refreshOAuthSession exchanges the session's refresh token for a new
+// access token, updates the session in place, and persists it to
+// ~/.createos/.oauth. It returns the new access token. This is shared by
+// the pre-flight (expiry-based) refresh in the Before hook and the
+// reactive on-401 retry wired into the API clients, so both paths rotate
+// and store tokens identically.
+func refreshOAuthSession(session *config.OAuthSession) (string, error) {
+	tokenEndpoint := session.TokenEndpoint
+	if tokenEndpoint == "" {
+		tokenEndpoint = config.OAuthIssuerURL + "/oauth2/token"
+	}
+	refreshed, err := internaloauth.RefreshTokens(
+		tokenEndpoint,
+		config.OAuthClientID,
+		session.RefreshToken,
+	)
+	if err != nil {
+		return "", err
+	}
+	session.AccessToken = refreshed.AccessToken
+	if refreshed.RefreshToken != "" {
+		session.RefreshToken = refreshed.RefreshToken
+	}
+	if refreshed.ExpiresIn > 0 {
+		session.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn)
+	}
+	if err := config.SaveOAuthSession(*session); err != nil {
+		return "", err
+	}
+	return session.AccessToken, nil
 }

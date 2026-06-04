@@ -76,18 +76,18 @@ func generateTempSSHKeypair() (publicKey string, privateKeyPath string, cleanup 
 		return "", "", nil, fmt.Errorf("could not create temp key file: %w", err)
 	}
 	if err := os.Chmod(f.Name(), 0600); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
+		_ = f.Close()           //nolint:errcheck
+		_ = os.Remove(f.Name()) //nolint:errcheck
 		return "", "", nil, fmt.Errorf("could not set key file permissions: %w", err)
 	}
 	if _, err := f.Write(privBytes); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
+		_ = f.Close()           //nolint:errcheck
+		_ = os.Remove(f.Name()) //nolint:errcheck
 		return "", "", nil, fmt.Errorf("could not write private key: %w", err)
 	}
-	_ = f.Close()
+	_ = f.Close() //nolint:errcheck
 
-	cleanup = func() { _ = os.Remove(f.Name()) }
+	cleanup = func() { _ = os.Remove(f.Name()) } //nolint:errcheck
 	return pubKeyStr, f.Name(), cleanup, nil
 }
 

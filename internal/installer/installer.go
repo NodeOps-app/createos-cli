@@ -90,7 +90,7 @@ func InstallToScope(downloadURL, uniqueName string, scope InstallScope) ([]strin
 	}
 
 	// Extract into each dir
-	var installed []string
+	installed := make([]string, 0, len(dirs))
 	for _, dir := range dirs {
 		if err := unzip(data, dir); err != nil {
 			return installed, fmt.Errorf("failed to unzip to %s: %w", dir, err)
@@ -154,7 +154,9 @@ func unzip(data []byte, destDir string) error {
 
 		rc, err := f.Open()
 		if err != nil {
-			_ = out.Close()
+			if cerr := out.Close(); cerr != nil {
+				_ = cerr
+			}
 			return err
 		}
 

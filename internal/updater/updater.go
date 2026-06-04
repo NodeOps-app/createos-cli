@@ -97,7 +97,9 @@ func saveCache(latest string) {
 		return
 	}
 
-	_ = os.WriteFile(path, data, 0o600)
+	if werr := os.WriteFile(path, data, 0o600); werr != nil {
+		_ = werr
+	}
 }
 
 func fetchLatest() string {

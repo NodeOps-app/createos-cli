@@ -82,6 +82,6 @@ func printDNSRecords(d api.Domain) {
 		tableData = append(tableData, []string{"TXT", txt.Name + "." + d.Name, txt.Value})
 	}
 
-	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
 	fmt.Println()
 }

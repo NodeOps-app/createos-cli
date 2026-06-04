@@ -63,10 +63,10 @@ func newEnvPushCommand() *cli.Command {
 					fmt.Printf("  %s\n", k)
 				}
 				fmt.Println()
-				result, _ := pterm.DefaultInteractiveConfirm.
+				prompt := pterm.DefaultInteractiveConfirm.
 					WithDefaultText("Continue?").
-					WithDefaultValue(true).
-					Show()
+					WithDefaultValue(true)
+				result, _ := prompt.Show() //nolint:errcheck //nolint:errcheck
 				if !result {
 					return nil
 				}

@@ -64,7 +64,8 @@ func runUpgrade() error {
 	}
 
 	if version.Channel == "nightly" {
-		remoteCommit, err := fetchNightlyCommit(release)
+		var remoteCommit string
+		remoteCommit, err = fetchNightlyCommit(release)
 		if err != nil {
 			return fmt.Errorf("could not check nightly commit: %w", err)
 		}
@@ -106,10 +107,10 @@ func runUpgrade() error {
 		return fmt.Errorf("no checksum file found for %s in release %s", assetName, release.TagName)
 	}
 
-	if err := validateDownloadURL(downloadURL); err != nil {
+	if err = validateDownloadURL(downloadURL); err != nil {
 		return fmt.Errorf("release asset URL failed validation: %w", err)
 	}
-	if err := validateDownloadURL(checksumURL); err != nil {
+	if err = validateDownloadURL(checksumURL); err != nil {
 		return fmt.Errorf("checksum URL failed validation: %w", err)
 	}
 
@@ -119,7 +120,7 @@ func runUpgrade() error {
 	}
 	defer os.Remove(tmp) //nolint:errcheck
 
-	spinner, _ := pterm.DefaultSpinner.Start("Verifying checksum...")
+	spinner, _ := pterm.DefaultSpinner.Start("Verifying checksum...") //nolint:errcheck
 
 	expectedHash, err := fetchChecksum(checksumURL)
 	if err != nil {
@@ -127,7 +128,7 @@ func runUpgrade() error {
 		return fmt.Errorf("could not fetch checksum: %w", err)
 	}
 
-	if err := verifyChecksum(tmp, expectedHash); err != nil {
+	if err = verifyChecksum(tmp, expectedHash); err != nil {
 		spinner.Fail("Checksum mismatch")
 		return err
 	}
@@ -255,16 +256,16 @@ func downloadToTemp(rawURL, assetName string) (string, error) {
 	totalBytes := resp.ContentLength
 	if totalBytes > 0 {
 		totalKB := int(totalBytes / 1024)
-		bar, _ := pterm.DefaultProgressbar.
+		pb := pterm.DefaultProgressbar.
 			WithTotal(totalKB).
-			WithTitle(fmt.Sprintf("Downloading %s (%.1f MB)", assetName, float64(totalBytes)/1024/1024)).
-			Start()
+			WithTitle(fmt.Sprintf("Downloading %s (%.1f MB)", assetName, float64(totalBytes)/1024/1024))
+		bar, _ := pb.Start() //nolint:errcheck
 		pw := &progressWriter{bar: bar}
 		_, err = io.Copy(tmp, io.TeeReader(limited, pw))
-		_, _ = bar.Stop()
+		_, _ = bar.Stop() //nolint:errcheck
 	} else {
 		// Content-Length unknown — fall back to spinner
-		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s...", assetName))
+		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s...", assetName)) //nolint:errcheck
 		_, err = io.Copy(tmp, limited)
 		if err != nil {
 			spinner.Fail("Download failed")
@@ -274,7 +275,7 @@ func downloadToTemp(rawURL, assetName string) (string, error) {
 	}
 
 	if err != nil {
-		_ = os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name()) //nolint:errcheck
 		return "", err
 	}
 
@@ -389,7 +390,7 @@ func replaceExecutable(dst, src string) error {
 	// rename it away first then rename the new one into place.
 	if strings.EqualFold(runtime.GOOS, "windows") {
 		old := dst + ".old"
-		_ = os.Remove(old)
+		_ = os.Remove(old) //nolint:errcheck
 		if err := os.Rename(dst, old); err != nil {
 			return err
 		}

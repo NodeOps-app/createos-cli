@@ -37,17 +37,22 @@ func NewInitCommand() *cli.Command {
 				return fmt.Errorf("could not determine current directory: %w", err)
 			}
 
-			// Check if already linked
-			existing, _ := config.LoadProjectConfig(dir)
-			if existing != nil {
+			// Check if already linked. A load error means the directory
+			// isn't linked yet (or the config is unreadable), so we treat
+			// it as "not linked" and continue.
+			existing, loadErr := config.LoadProjectConfig(dir)
+			if loadErr == nil && existing != nil {
 				pterm.Warning.Printf("This directory is already linked to project %s\n", existing.ProjectName)
 				if !terminal.IsInteractive() {
 					return fmt.Errorf("directory already linked — use --project <id> to re-link non-interactively")
 				}
-				result, _ := pterm.DefaultInteractiveConfirm.
+				result, confirmErr := pterm.DefaultInteractiveConfirm.
 					WithDefaultText("Overwrite existing link?").
 					WithDefaultValue(false).
 					Show()
+				if confirmErr != nil {
+					return fmt.Errorf("could not read confirmation: %w", confirmErr)
+				}
 				if !result {
 					return nil
 				}
@@ -57,9 +62,9 @@ func NewInitCommand() *cli.Command {
 
 			if pid := c.String("project"); pid != "" {
 				// Non-interactive: validate the project exists
-				project, err := client.GetProject(pid)
-				if err != nil {
-					return err
+				project, getErr := client.GetProject(pid)
+				if getErr != nil {
+					return getErr
 				}
 				projectID = project.ID
 				projectName = project.DisplayName
@@ -68,7 +73,8 @@ func NewInitCommand() *cli.Command {
 					return fmt.Errorf("no project specified — use --project <id> to link non-interactively\n\n  To see your projects, run:\n    createos projects list")
 				}
 				// Interactive: list projects and let user pick
-				projects, err := client.ListProjects()
+				var projects []api.Project
+				projects, err = client.ListProjects()
 				if err != nil {
 					return err
 				}
@@ -99,15 +105,18 @@ func NewInitCommand() *cli.Command {
 							continue
 						}
 						var src api.VCSSource
-						if err := json.Unmarshal(p.Source, &src); err != nil {
+						if unmarshalErr := json.Unmarshal(p.Source, &src); unmarshalErr != nil {
 							continue
 						}
 						if src.VCSFullName == repoFullName {
 							pterm.Info.Printf("Detected project %s from git remote (%s)\n", p.DisplayName, repoFullName)
-							useDetected, _ := pterm.DefaultInteractiveConfirm.
+							useDetected, confirmErr := pterm.DefaultInteractiveConfirm.
 								WithDefaultText(fmt.Sprintf("Link to %s?", p.DisplayName)).
 								WithDefaultValue(true).
 								Show()
+							if confirmErr != nil {
+								return fmt.Errorf("could not read confirmation: %w", confirmErr)
+							}
 							if useDetected {
 								projectID = p.ID
 								projectName = p.DisplayName
@@ -128,7 +137,8 @@ func NewInitCommand() *cli.Command {
 						options[i] = fmt.Sprintf("%s (%s)%s", p.DisplayName, p.ID, desc)
 					}
 
-					selected, err := pterm.DefaultInteractiveSelect.
+					var selected string
+					selected, err = pterm.DefaultInteractiveSelect.
 						WithDefaultText("Select a project to link").
 						WithOptions(options).
 						Show()
@@ -183,8 +193,11 @@ func NewInitCommand() *cli.Command {
 				return fmt.Errorf("could not save project config: %w", err)
 			}
 
-			// Add to .gitignore
-			_ = config.EnsureGitignore(dir)
+			// Add to .gitignore (best effort — a failure here shouldn't
+			// undo the successful link).
+			if gitignoreErr := config.EnsureGitignore(dir); gitignoreErr != nil {
+				pterm.Warning.Printf("Could not update .gitignore: %v\n", gitignoreErr)
+			}
 
 			pterm.Success.Printf("Linked to %s\n", projectName)
 			return nil
