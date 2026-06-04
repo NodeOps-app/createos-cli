@@ -56,7 +56,7 @@ func runPauseByID(c *cli.Context, client *api.SandboxClient, ref, id string) err
 	if _, err := client.PauseSandbox(c.Context, id); err != nil {
 		return err
 	}
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Pausing %s…", refLabel(ref, id)))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Pausing %s…", refLabel(ref, id))) //nolint:errcheck
 	sb, err := waitForStatus(c.Context, client, id, "paused")
 	if err != nil {
 		spinner.Fail("Pause did not complete")

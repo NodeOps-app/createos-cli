@@ -64,10 +64,13 @@ func NewAskCommand() *cli.Command {
 				pterm.Info.Println("The 'ask' command uses OpenCode (https://opencode.ai), an open-source AI coding\nassistant, to power the CreateOS AI agent. It lets you manage your infrastructure\nusing natural language right from the terminal.")
 				fmt.Println()
 
-				install, _ := pterm.DefaultInteractiveConfirm.
+				install, err := pterm.DefaultInteractiveConfirm.
 					WithDefaultText("opencode is not installed. Install it now?").
 					WithDefaultValue(true).
 					Show()
+				if err != nil {
+					return err
+				}
 				if !install {
 					return fmt.Errorf("opencode is required for the ask command\n\n  Install it manually:\n    curl -fsSL https://opencode.ai/install | bash")
 				}
@@ -77,7 +80,7 @@ func NewAskCommand() *cli.Command {
 				installCmd.Stdin = os.Stdin
 				installCmd.Stdout = os.Stdout
 				installCmd.Stderr = os.Stderr
-				if err := installCmd.Run(); err != nil {
+				if err = installCmd.Run(); err != nil {
 					return fmt.Errorf("failed to install opencode: %w", err)
 				}
 

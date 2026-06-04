@@ -120,7 +120,7 @@ func runList(c *cli.Context) error {
 				r.CreatedAt.Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+		_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
 	})
 	return nil
 }

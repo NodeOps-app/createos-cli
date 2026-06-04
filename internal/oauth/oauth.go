@@ -114,7 +114,10 @@ func ExchangeCode(tokenEndpoint, clientID, code, redirectURI, verifier string) (
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, string(b))
 	}
 	var token TokenResponse
@@ -142,7 +145,10 @@ func RefreshTokens(tokenEndpoint, clientID, refreshToken string) (*TokenResponse
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("token refresh returned status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("token refresh returned status %d: %s", resp.StatusCode, string(b))
 	}
 	var token TokenResponse
@@ -201,7 +207,9 @@ func StartCallbackServer(port int) (code string, state string, err error) {
 	result := <-codeCh
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_ = srv.Shutdown(ctx)
+	if shutdownErr := srv.Shutdown(ctx); shutdownErr != nil && result.err == nil {
+		result.err = fmt.Errorf("could not shut down callback server: %w", shutdownErr)
+	}
 
 	return result.code, result.state, result.err
 }
@@ -231,7 +239,16 @@ func FindFreePort() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("could not find a free port: %w", err)
 	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		if closeErr := ln.Close(); closeErr != nil {
+			return 0, fmt.Errorf("could not determine a free port: %w", closeErr)
+		}
+		return 0, fmt.Errorf("could not determine a free port")
+	}
+	port := addr.Port
+	if err = ln.Close(); err != nil {
+		return 0, fmt.Errorf("could not release temporary port: %w", err)
+	}
 	return port, nil
 }

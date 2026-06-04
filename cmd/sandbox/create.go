@@ -105,15 +105,15 @@ func runCreate(c *cli.Context) error {
 	// remembering every flag. Headless callers continue to get the
 	// "use --shape" error.
 	if shape == "" {
-		w, err := runCreateWizard(c, client, wizardSeed{
+		w, werr := runCreateWizard(c, client, wizardSeed{
 			name:    name,
 			rootfs:  rootfs,
 			ingress: ingress,
 			netIDs:  netIDs,
 			sshKeys: sshKeys,
 		})
-		if err != nil {
-			return err
+		if werr != nil {
+			return werr
 		}
 		if w == nil {
 			// User cancelled mid-wizard — exit quietly, no error.
@@ -143,8 +143,8 @@ func runCreate(c *cli.Context) error {
 		IngressEnabled: ingress,
 	}
 
-	if envs, err := parseEnvFlags(c.StringSlice("env")); err != nil {
-		return err
+	if envs, envErr := parseEnvFlags(c.StringSlice("env")); envErr != nil {
+		return envErr
 	} else if len(envs) > 0 {
 		req.Envs = envs
 	}
@@ -165,14 +165,14 @@ func runCreate(c *cli.Context) error {
 	}
 
 	if rawDisks := c.StringSlice("disk"); len(rawDisks) > 0 {
-		disks, err := parseDiskFlags(rawDisks)
-		if err != nil {
-			return err
+		disks, derr := parseDiskFlags(rawDisks)
+		if derr != nil {
+			return derr
 		}
 		req.Disks = disks
 	}
 
-	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…")
+	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck
 	resp, err := client.CreateSandbox(c.Context, req)
 	if err != nil {
 		spinner.Fail("Could not create sandbox")
@@ -239,7 +239,7 @@ func readSSHPubkeys(paths []string) ([]string, error) {
 		if p == "" {
 			continue
 		}
-		b, err := os.ReadFile(p)
+		b, err := os.ReadFile(p) // #nosec G304 -- p is a user-supplied SSH public-key path
 		if err != nil {
 			return nil, fmt.Errorf("could not read SSH public key %s: %w", p, err)
 		}

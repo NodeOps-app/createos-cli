@@ -82,9 +82,16 @@ func (c *SandboxClient) DownloadFile(ctx context.Context, id, remote string, dst
 		return 0, err
 	}
 	body := resp.RawBody()
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			_ = cerr
+		}
+	}()
 	if resp.IsError() {
-		raw, _ := io.ReadAll(body)
+		raw, readErr := io.ReadAll(body)
+		if readErr != nil {
+			raw = nil
+		}
 		return 0, ParseAPIError(resp.StatusCode(), raw)
 	}
 	return io.Copy(dst, body)
@@ -127,11 +134,18 @@ func (c *SandboxClient) ExecSandboxStream(ctx context.Context, id string, req Sa
 		return -1, err
 	}
 	body := resp.RawBody()
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			_ = cerr
+		}
+	}()
 
 	// Non-2xx bodies are JSend envelopes, not NDJSON — read and parse.
 	if resp.IsError() {
-		raw, _ := io.ReadAll(body)
+		raw, readErr := io.ReadAll(body)
+		if readErr != nil {
+			raw = nil
+		}
 		return -1, ParseAPIError(resp.StatusCode(), raw)
 	}
 
@@ -747,7 +761,11 @@ func (c *SandboxClient) StreamTemplateLogs(ctx context.Context, ref string, foll
 	}
 	if resp.IsError() {
 		body := resp.RawBody()
-		defer body.Close()
+		defer func() {
+			if cerr := body.Close(); cerr != nil {
+				_ = cerr
+			}
+		}()
 		return nil, ParseAPIError(resp.StatusCode(), nil)
 	}
 	return resp, nil

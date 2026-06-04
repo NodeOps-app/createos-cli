@@ -176,10 +176,10 @@ type RootfsCatalog struct {
 
 // DiskCreateReq is the body of POST /v1/disks.
 type DiskCreateReq struct {
-	Name        string           `json:"name"`
-	Kind        string           `json:"kind"` // "s3" today
-	Config      DiskConfig       `json:"config"`
-	Credentials DiskCredentials  `json:"credentials"`
+	Name        string          `json:"name"`
+	Kind        string          `json:"kind"` // "s3" today
+	Config      DiskConfig      `json:"config"`
+	Credentials DiskCredentials `json:"credentials"`
 }
 
 // DiskConfig is the non-secret S3 endpoint description.
@@ -199,11 +199,11 @@ type DiskCredentials struct {
 
 // DiskView is the user-facing projection returned by all read endpoints.
 type DiskView struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Kind      string    `json:"kind"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Kind      string     `json:"kind"`
 	Config    DiskConfig `json:"config"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // DiskList is the paginated list shape.
@@ -215,14 +215,14 @@ type DiskList struct {
 // SandboxDiskView is one attachment of a disk to a running sandbox,
 // shape of GET /v1/sandboxes/:id/disks rows.
 type SandboxDiskView struct {
-	DiskID      string `json:"disk_id"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
+	DiskID      string     `json:"disk_id"`
+	Name        string     `json:"name"`
+	Kind        string     `json:"kind"`
 	Config      DiskConfig `json:"config"`
-	MountPath   string `json:"mount_path"`
-	SubPath     string `json:"sub_path,omitempty"`
-	MountStatus string `json:"mount_status"`
-	MountError  string `json:"mount_error,omitempty"`
+	MountPath   string     `json:"mount_path"`
+	SubPath     string     `json:"sub_path,omitempty"`
+	MountStatus string     `json:"mount_status"`
+	MountError  string     `json:"mount_error,omitempty"`
 }
 
 // SandboxDiskList is the paginated list shape under data.

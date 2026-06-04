@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,12 +35,12 @@ const mutagenVersion = "v0.18.1"
 //
 // Bump mutagenVersion → also refresh these.
 var mutagenSHA256 = map[string]string{
-	"mutagen_linux_amd64_v0.18.1.tar.gz":   "7735286c778cc438418209f24d03a64f3a0151c8065ef0fe079cfaf093af6f8f",
-	"mutagen_linux_arm64_v0.18.1.tar.gz":   "bcba735aebf8cbc11da9b3742118a665599ac697fa06bc5751cac8dcd540db8a",
-	"mutagen_darwin_amd64_v0.18.1.tar.gz":  "7d06f7d8fcfe90bc7e55cc834a2f2f20c2e0af9ea9bc35911fc4341ad56a9bbf",
-	"mutagen_darwin_arm64_v0.18.1.tar.gz":  "6f810416d9e5fc4fd5e18431146f8b3c5a2056ba5a24f76c1e66da86eb3257e2",
-	"mutagen_windows_amd64_v0.18.1.zip":    "76f8223d5e6b607efdd9516473669ae5492e4f142887352d59bc6934d1f07a2d",
-	"mutagen_windows_arm64_v0.18.1.zip":    "d0dd95b60f6077f0c02baee3128f754c1507bc4abfa63ae0bcae12e01a3d45f1",
+	"mutagen_linux_amd64_v0.18.1.tar.gz":  "7735286c778cc438418209f24d03a64f3a0151c8065ef0fe079cfaf093af6f8f",
+	"mutagen_linux_arm64_v0.18.1.tar.gz":  "bcba735aebf8cbc11da9b3742118a665599ac697fa06bc5751cac8dcd540db8a",
+	"mutagen_darwin_amd64_v0.18.1.tar.gz": "7d06f7d8fcfe90bc7e55cc834a2f2f20c2e0af9ea9bc35911fc4341ad56a9bbf",
+	"mutagen_darwin_arm64_v0.18.1.tar.gz": "6f810416d9e5fc4fd5e18431146f8b3c5a2056ba5a24f76c1e66da86eb3257e2",
+	"mutagen_windows_amd64_v0.18.1.zip":   "76f8223d5e6b607efdd9516473669ae5492e4f142887352d59bc6934d1f07a2d",
+	"mutagen_windows_arm64_v0.18.1.zip":   "d0dd95b60f6077f0c02baee3128f754c1507bc4abfa63ae0bcae12e01a3d45f1",
 }
 
 // ensureMutagen returns an absolute path to a working `mutagen`
@@ -66,10 +67,10 @@ func ensureMutagen() (string, error) {
 		return "", err
 	}
 	target := filepath.Join(dir, mutagenBinaryName())
-	if _, err := os.Stat(target); err == nil {
+	if _, err = os.Stat(target); err == nil {
 		return target, nil
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return "", fmt.Errorf("create mutagen cache dir: %w", err)
 	}
 	url, ext, err := mutagenReleaseURL()
@@ -166,7 +167,7 @@ func downloadAndExtractMutagen(url, ext, target string) error {
 	if err != nil {
 		return fmt.Errorf("fetch %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("fetch %s: HTTP %d", url, resp.StatusCode)
 	}
@@ -221,11 +222,11 @@ func downloadAndExtractMutagen(url, ext, target string) error {
 	if len(bundle) == 0 {
 		return fmt.Errorf("%s not found inside archive at %s", mutagenAgentBundleName, url)
 	}
-	if err := os.WriteFile(target, bin, 0o755); err != nil {
+	if err := os.WriteFile(target, bin, 0o755); err != nil { // #nosec G306 -- mutagen agent binary must be executable
 		return fmt.Errorf("write %s: %w", target, err)
 	}
 	bundlePath := filepath.Join(filepath.Dir(target), mutagenAgentBundleName)
-	if err := os.WriteFile(bundlePath, bundle, 0o644); err != nil {
+	if err := os.WriteFile(bundlePath, bundle, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", bundlePath, err)
 	}
 	return nil
@@ -316,11 +317,11 @@ func extractMutagenFromTarGz(blob []byte, binName, bundleName string) (bin, bund
 	if err != nil {
 		return nil, nil, fmt.Errorf("gzip open: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }() //nolint:errcheck
 	tr := tar.NewReader(gz)
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return bin, bundle, nil
 		}
 		if err != nil {
@@ -366,7 +367,7 @@ func extractMutagenFromZip(blob []byte, binName, bundleName string) (bin, bundle
 			return nil, nil, fmt.Errorf("zip entry open: %w", err)
 		}
 		buf, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close() //nolint:errcheck
 		if err != nil {
 			return nil, nil, fmt.Errorf("read %s: %w", name, err)
 		}

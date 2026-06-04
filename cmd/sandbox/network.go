@@ -108,7 +108,7 @@ func runNetworkList(c *cli.Context) error {
 				n.CreatedAt.Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render()
+		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
 	})
 	return nil
 }
@@ -166,7 +166,8 @@ func runNetworkShow(c *cli.Context) error {
 		if len(n.Members) > 0 {
 			pterm.Println()
 			pterm.Println(pterm.Gray("  Attached sandboxes:"))
-			table := pterm.TableData{{"Sandbox", "Name", "Status", "IP", "Reachable as"}}
+			table := make(pterm.TableData, 0, 1+len(n.Members))
+			table = append(table, []string{"Sandbox", "Name", "Status", "IP", "Reachable as"})
 			for _, m := range n.Members {
 				reachable := m.SandboxID
 				if m.Name != "" {
@@ -174,7 +175,7 @@ func runNetworkShow(c *cli.Context) error {
 				}
 				table = append(table, []string{m.SandboxID, m.Name, m.Status, m.IP, reachable})
 			}
-			_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render()
+			_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
 			pterm.Println(pterm.Gray("  Tip: inside any of these sandboxes you can `ping <name>` or curl by name."))
 		}
 	})

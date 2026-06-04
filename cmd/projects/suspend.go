@@ -28,7 +28,7 @@ func newSuspendCommand() *cli.Command {
 
 			// Try linked project config
 			if projectID == "" {
-				cfg, _ := config.FindProjectConfig()
+				cfg, _ := config.FindProjectConfig() //nolint:errcheck
 				if cfg != nil {
 					projectID = cfg.ProjectID
 				}

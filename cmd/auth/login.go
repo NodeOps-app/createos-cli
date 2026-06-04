@@ -112,7 +112,7 @@ func loginWithBrowser() error {
 	pterm.Println(pterm.Gray("  " + authURL))
 	fmt.Println()
 
-	if err := internaloauth.OpenBrowser(authURL); err != nil {
+	if err = internaloauth.OpenBrowser(authURL); err != nil {
 		pterm.Warning.Println("Could not open browser automatically. Please open the URL above.")
 	} else {
 		pterm.Info.Println("Waiting for you to complete login in your browser...")

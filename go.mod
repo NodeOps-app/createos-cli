@@ -1,6 +1,6 @@
 module github.com/NodeOps-app/createos-cli
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10

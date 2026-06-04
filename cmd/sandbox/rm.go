@@ -164,7 +164,7 @@ func pickSandboxesForDelete(c *cli.Context, client *api.SandboxClient) ([]string
 	options := make([]string, 0, len(rows))
 	idByOption := make(map[string]string, len(rows))
 	for _, r := range rows {
-		label := r.ID
+		var label string
 		if r.Name != nil && *r.Name != "" {
 			label = *r.Name + "   " + r.ID + "   " + r.Status
 		} else {

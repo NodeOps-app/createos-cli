@@ -27,7 +27,10 @@ func PickShape(shapes []api.Shape) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := finalModel.(shapePickerModel)
+	out, ok := finalModel.(shapePickerModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected picker result")
+	}
 	if out.quit {
 		return "", nil
 	}
@@ -45,8 +48,7 @@ type shapePickerModel struct {
 func (m shapePickerModel) Init() tea.Cmd { return nil }
 
 func (m shapePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			m.quit = true
@@ -127,15 +129,6 @@ var (
 	_ = selectedStyle
 	_ = normalStyle
 )
-
-// max in Go 1.21+ stdlib — written explicitly here so we don't depend
-// on the build toolchain having generics-friendly builtins enabled.
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // Compile-time guard so we notice if lipgloss is removed upstream.
 var _ = lipgloss.NewStyle

@@ -58,13 +58,15 @@ func newVMDeployCommand() *cli.Command {
 
 			if isInteractive && !hasFlags {
 				// Fetch zones from API
-				zones, err := client.GetDOZones()
+				var zones []api.DOZone
+				zones, err = client.GetDOZones()
 				if err != nil {
 					return fmt.Errorf("could not fetch available zones: %w", err)
 				}
 
 				// Name
-				nameInput, err := pterm.DefaultInteractiveTextInput.
+				var nameInput string
+				nameInput, err = pterm.DefaultInteractiveTextInput.
 					WithDefaultText("VM name (optional, press Enter to skip)").
 					Show()
 				if err != nil {
@@ -77,7 +79,8 @@ func newVMDeployCommand() *cli.Command {
 				for i, z := range zones {
 					zoneOptions[i] = fmt.Sprintf("%-6s  %s, %s", z.Name, z.Region, z.Country)
 				}
-				zoneSelected, err := pterm.DefaultInteractiveSelect.
+				var zoneSelected string
+				zoneSelected, err = pterm.DefaultInteractiveSelect.
 					WithOptions(zoneOptions).
 					WithDefaultText("Select a zone").
 					Show()
@@ -91,7 +94,8 @@ func newVMDeployCommand() *cli.Command {
 				for i, s := range sizes {
 					sizeOptions[i] = formatVMSize(i+1, s)
 				}
-				sizeSelected, err := pterm.DefaultInteractiveSelect.
+				var sizeSelected string
+				sizeSelected, err = pterm.DefaultInteractiveSelect.
 					WithOptions(sizeOptions).
 					WithDefaultText("Select a VM size").
 					Show()
@@ -101,7 +105,8 @@ func newVMDeployCommand() *cli.Command {
 				size = sizes[indexFromOption(sizeSelected, sizeOptions)]
 
 				// SSH keys (optional)
-				addKey, err := pterm.DefaultInteractiveConfirm.
+				var addKey bool
+				addKey, err = pterm.DefaultInteractiveConfirm.
 					WithDefaultText("Add an SSH public key?").
 					WithDefaultValue(false).
 					Show()
@@ -109,7 +114,8 @@ func newVMDeployCommand() *cli.Command {
 					return fmt.Errorf("could not read confirmation: %w", err)
 				}
 				for addKey {
-					keyInput, err := pterm.DefaultInteractiveTextInput.
+					var keyInput string
+					keyInput, err = pterm.DefaultInteractiveTextInput.
 						WithDefaultText("Paste your SSH public key").
 						Show()
 					if err != nil {

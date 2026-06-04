@@ -81,13 +81,14 @@ func runCreateWizard(c *cli.Context, client *api.SandboxClient, seed wizardSeed)
 	// ── 3. Rootfs (optional; default = host default) ────────────────
 	if out.rootfs == "" {
 		picked, err := wizardPickRootfs(c, client)
-		if err != nil {
+		switch {
+		case err != nil:
 			// Non-fatal — log and continue with the server default.
 			pterm.Println(pterm.Gray("  Could not load image list — using the default."))
-		} else if picked == "" {
+		case picked == "":
 			// User cancelled the rootfs step specifically — keep going
 			// with the default rather than aborting the whole wizard.
-		} else {
+		default:
 			out.rootfs = picked
 		}
 	}
@@ -129,9 +130,9 @@ func runCreateWizard(c *cli.Context, client *api.SandboxClient, seed wizardSeed)
 
 // wizardPickShape — bubbletea picker over GET /v1/shapes.
 func wizardPickShape(c *cli.Context, client *api.SandboxClient) (string, error) {
-	spinner, _ := pterm.DefaultSpinner.Start("Loading sizes…")
+	spinner, _ := pterm.DefaultSpinner.Start("Loading sizes…") //nolint:errcheck
 	shapes, err := client.ListShapes(c.Context)
-	spinner.Stop()
+	_ = spinner.Stop() //nolint:errcheck
 	if err != nil {
 		return "", err
 	}
@@ -146,16 +147,16 @@ func wizardPickShape(c *cli.Context, client *api.SandboxClient) (string, error) 
 // (GET /v1/templates, status=ready). Empty return = user cancelled
 // the step; caller falls back to the default.
 func wizardPickRootfs(c *cli.Context, client *api.SandboxClient) (string, error) {
-	spinner, _ := pterm.DefaultSpinner.Start("Loading images…")
+	spinner, _ := pterm.DefaultSpinner.Start("Loading images…") //nolint:errcheck
 	cat, err := client.ListRootfs(c.Context)
 	if err != nil {
-		spinner.Stop()
+		_ = spinner.Stop() //nolint:errcheck
 		return "", err
 	}
 	// Templates are best-effort: a fetch failure shouldn't kill the
 	// create flow. Same forgiveness the UI shows.
-	tpls, _ := client.ListTemplates(c.Context)
-	spinner.Stop()
+	tpls, _ := client.ListTemplates(c.Context) //nolint:errcheck
+	_ = spinner.Stop()                         //nolint:errcheck
 	if cat == nil || len(cat.Rootfs) == 0 {
 		return "", nil
 	}
@@ -200,9 +201,9 @@ func wizardPickRootfs(c *cli.Context, client *api.SandboxClient) (string, error)
 // wizardPickNetworks — multi-select over GET /v1/networks. Returns []
 // empty when the user has no networks or skips the prompt.
 func wizardPickNetworks(c *cli.Context, client *api.SandboxClient) ([]string, error) {
-	spinner, _ := pterm.DefaultSpinner.Start("Loading networks…")
+	spinner, _ := pterm.DefaultSpinner.Start("Loading networks…") //nolint:errcheck
 	nets, err := client.ListNetworks(c.Context)
-	spinner.Stop()
+	_ = spinner.Stop() //nolint:errcheck
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +261,8 @@ func wizardPickSSHKeys() ([]string, error) {
 
 	if len(candidates) == 0 {
 		// Nothing auto-detected. Offer a one-shot manual path entry.
-		path, err := pterm.DefaultInteractiveTextInput.
+		var path string
+		path, err = pterm.DefaultInteractiveTextInput.
 			WithDefaultText("Path to a public-key file to install (leave empty to skip)").
 			Show()
 		if err != nil {
@@ -293,8 +295,8 @@ func wizardPickSSHKeys() ([]string, error) {
 	}
 	paths := make([]string, 0, len(picked))
 	for _, p := range picked {
-		if real, ok := pathByOpt[p]; ok {
-			paths = append(paths, real)
+		if realPath, ok := pathByOpt[p]; ok {
+			paths = append(paths, realPath)
 		}
 	}
 	return readSSHPubkeys(paths)
@@ -314,7 +316,7 @@ func discoverSSHPubkeys(sshDir string) []string {
 			continue
 		}
 		path := filepath.Join(sshDir, e.Name())
-		head, err := os.ReadFile(path)
+		head, err := os.ReadFile(path) // #nosec G304 -- path is from os.ReadDir over the user's ~/.ssh
 		if err != nil || len(head) == 0 {
 			continue
 		}

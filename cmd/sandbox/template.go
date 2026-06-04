@@ -64,12 +64,12 @@ func runTemplateSubmit(c *cli.Context) error {
 	if name == "" {
 		return fmt.Errorf("template name required\n\n  Example:\n    createos sandbox template submit my-rails -f Dockerfile")
 	}
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) // #nosec G304 -- path is a user-supplied Dockerfile path
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 	if len(body) == 0 {
-		return fmt.Errorf("Dockerfile %s is empty", path)
+		return fmt.Errorf("the Dockerfile at %s is empty", path)
 	}
 
 	view, err := client.CreateTemplate(c.Context, api.TemplateCreateReq{
@@ -155,7 +155,7 @@ func runTemplateList(c *cli.Context) error {
 				t.CreatedAt.Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render()
+		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
 		pterm.Println()
 		pterm.Println(pterm.Gray("  Spawn from a ready template: createos sandbox create --rootfs <name>"))
 	})
@@ -212,10 +212,11 @@ func runTemplateShow(c *cli.Context) error {
 		if t.BuiltAt != nil {
 			row("Built", t.BuiltAt.Format("2006-01-02 15:04:05"))
 		}
-		if t.Status == "failed" {
+		switch t.Status {
+		case "failed":
 			pterm.Println()
 			pterm.Println(pterm.Gray(fmt.Sprintf("  Build failed. See logs:  createos sandbox template logs %s", t.Name)))
-		} else if t.Status == "ready" {
+		case "ready":
 			pterm.Println()
 			pterm.Println(pterm.Gray(fmt.Sprintf("  Spawn from it:  createos sandbox create --rootfs %s", t.Name)))
 		}
@@ -258,8 +259,8 @@ func runTemplateLogs(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.RawBody().Close()
-	_, _ = io.Copy(os.Stdout, resp.RawBody())
+	defer func() { _ = resp.RawBody().Close() }() //nolint:errcheck
+	_, _ = io.Copy(os.Stdout, resp.RawBody())     //nolint:errcheck
 	return nil
 }
 
@@ -271,15 +272,15 @@ func streamTemplateLogs(c *cli.Context, client *api.SandboxClient, ref string) e
 	if err != nil {
 		return err
 	}
-	defer resp.RawBody().Close()
+	defer func() { _ = resp.RawBody().Close() }() //nolint:errcheck
 
 	var spinner *pterm.SpinnerPrinter
 	if terminal.IsInteractive() {
-		spinner, _ = pterm.DefaultSpinner.Start("template build queued…")
+		spinner, _ = pterm.DefaultSpinner.Start("template build queued…") //nolint:errcheck
 	}
 	stopSpinner := func() {
 		if spinner != nil {
-			_ = spinner.Stop()
+			_ = spinner.Stop() //nolint:errcheck
 			spinner = nil
 		}
 	}
@@ -304,7 +305,7 @@ func streamTemplateLogs(c *cli.Context, client *api.SandboxClient, ref string) e
 				pterm.Success.Println("Build succeeded.")
 			case "failed":
 				pterm.Error.Println("Build failed.")
-				os.Exit(1)
+				return cli.Exit("", 1)
 			default:
 				pterm.Println(pterm.Gray("(stream ended)"))
 			}
@@ -312,8 +313,8 @@ func streamTemplateLogs(c *cli.Context, client *api.SandboxClient, ref string) e
 		}
 		if ev.Line != "" {
 			stopSpinner()
-			os.Stdout.WriteString(ev.Line)
-			os.Stdout.WriteString("\n")
+			_, _ = os.Stdout.WriteString(ev.Line) //nolint:errcheck
+			_, _ = os.Stdout.WriteString("\n")    //nolint:errcheck
 		}
 	}
 	return scanner.Err()

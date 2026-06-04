@@ -55,7 +55,7 @@ func runResumeByID(c *cli.Context, client *api.SandboxClient, ref, id string) er
 	if _, err := client.ResumeSandbox(c.Context, id); err != nil {
 		return err
 	}
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Resuming %s…", refLabel(ref, id)))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Resuming %s…", refLabel(ref, id))) //nolint:errcheck
 	sb, err := waitForStatus(c.Context, client, id, "running")
 	if err != nil {
 		spinner.Fail("Resume did not complete")

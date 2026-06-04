@@ -46,14 +46,14 @@ func newEnvPullCommand() *cli.Command {
 
 			// Check if file exists
 			if !c.Bool("force") {
-				if _, err := os.Stat(filePath); err == nil {
+				if _, err = os.Stat(filePath); err == nil {
 					if !terminal.IsInteractive() {
 						return fmt.Errorf("%s already exists — use --force to overwrite", filePath)
 					}
-					result, _ := pterm.DefaultInteractiveConfirm.
+					prompt := pterm.DefaultInteractiveConfirm.
 						WithDefaultText(fmt.Sprintf("%s already exists. Overwrite?", filePath)).
-						WithDefaultValue(false).
-						Show()
+						WithDefaultValue(false)
+					result, _ := prompt.Show() //nolint:errcheck //nolint:errcheck
 					if !result {
 						return nil
 					}

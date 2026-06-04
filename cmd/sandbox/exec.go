@@ -151,9 +151,9 @@ func runExecStream(c *cli.Context, client *api.SandboxClient, id string, req api
 	exit, err := client.ExecSandboxStream(c.Context, id, req, func(ev api.SandboxExecStreamEvent) {
 		switch {
 		case ev.Stdout != "":
-			_, _ = io.WriteString(os.Stdout, ev.Stdout)
+			_, _ = io.WriteString(os.Stdout, ev.Stdout) //nolint:errcheck
 		case ev.Stderr != "":
-			_, _ = io.WriteString(os.Stderr, ev.Stderr)
+			_, _ = io.WriteString(os.Stderr, ev.Stderr) //nolint:errcheck
 		case ev.Error != "":
 			pterm.Error.Println(ev.Error)
 		}
@@ -174,10 +174,10 @@ func runExecStream(c *cli.Context, client *api.SandboxClient, id string, req api
 //
 // Both forms work:
 //
-//   createos sandbox exec my-box -- ls -la   # explicit separator
-//   createos sandbox exec my-box ls -la      # implicit (first token = ref)
-//   createos sandbox exec -- ls -la          # no ref, picker on TTY
-//   createos sandbox exec                    # nothing — picker + prompt
+//	createos sandbox exec my-box -- ls -la   # explicit separator
+//	createos sandbox exec my-box ls -la      # implicit (first token = ref)
+//	createos sandbox exec -- ls -la          # no ref, picker on TTY
+//	createos sandbox exec                    # nothing — picker + prompt
 //
 // urfave/cli v2 strips a LEADING `--` (it interprets that as
 // "end-of-flags" and consumes the token). To distinguish

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -118,7 +119,7 @@ func runShellSSH(c *cli.Context, client *api.SandboxClient, id, ref string) erro
 	if err != nil {
 		return err
 	}
-	pubBytes, err := os.ReadFile(pubPath)
+	pubBytes, err := os.ReadFile(pubPath) // #nosec G304 -- pubPath is the user's own SSH public key, chosen via --identity
 	if err != nil {
 		return fmt.Errorf("could not read public key %s: %w", pubPath, err)
 	}
@@ -132,7 +133,7 @@ func runShellSSH(c *cli.Context, client *api.SandboxClient, id, ref string) erro
 	//    file API. sshd refuses keys unless ~/.ssh is 0700 and the
 	//    file is 0600 — we chmod in the next step.
 	authPath := authorizedKeysPath(user)
-	if err := client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
+	if err = client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
 		return fmt.Errorf("could not install your SSH key: %w", err)
 	}
 
@@ -170,24 +171,41 @@ fi
 		return fmt.Errorf("sshd prep failed: %s", strings.TrimSpace(resp.Result.Stderr))
 	}
 
-	// 3. Open a local TCP listener that bridges every accepted
-	//    connection through the control plane to the sandbox's :22.
+	// 3. Open the tunnel and hand off to system ssh. Kept in a helper
+	//    so its deferred cleanup (tunnel + context) runs before we may
+	//    os.Exit with ssh's exit code below — os.Exit skips defers.
+	exitCode, err := sshHandoff(c, id, ref, privPath, user)
+	if err != nil {
+		return err
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
+	return nil
+}
+
+// sshHandoff opens a local TCP bridge to the sandbox's :22 and hands
+// control to system 'ssh' for a real PTY, returning ssh's exit code.
+func sshHandoff(c *cli.Context, id, ref, privPath, user string) (int, error) {
+	// Open a local TCP listener that bridges every accepted connection
+	// through the control plane to the sandbox's :22.
 	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 	bridge, err := startTunnelBridge(ctx, c, id, 22)
 	if err != nil {
-		return fmt.Errorf("could not open tunnel to the sandbox: %w", err)
+		return 0, fmt.Errorf("could not open tunnel to the sandbox: %w", err)
 	}
 	defer bridge.close()
 
-	if err := waitForTCP(bridge.localAddr, 5*time.Second); err != nil {
-		return fmt.Errorf("sshd did not start in time: %w", err)
+	if err = waitForTCP(ctx, bridge.localAddr, 5*time.Second); err != nil {
+		return 0, fmt.Errorf("sshd did not start in time: %w", err)
 	}
 
-	// 4. Hand off to system ssh through the local tunnel for a real PTY.
-	_, port, _ := net.SplitHostPort(bridge.localAddr)
+	// Hand off to system ssh through the local tunnel for a real PTY.
+	_, port, _ := net.SplitHostPort(bridge.localAddr) //nolint:errcheck
 	pterm.Println(pterm.Gray(fmt.Sprintf("  connecting to %s as %s…", refLabel(ref, id), user)))
-	sshCmd := exec.Command(
+	sshCmd := exec.CommandContext( // #nosec G204 -- fixed "ssh" binary; args are flags plus the resolved key path and tunnel port
+		ctx,
 		"ssh",
 		"-p", port,
 		"-i", privPath,
@@ -209,10 +227,11 @@ fi
 	sshCmd.Stdout = os.Stdout
 	sshCmd.Stderr = os.Stderr
 	err = sshCmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		os.Exit(exitErr.ExitCode())
+	exitErr := &exec.ExitError{}
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), nil
 	}
-	return err
+	return 0, err
 }
 
 // ── Keyless PTY path ──────────────────────────────────────────────
@@ -231,7 +250,7 @@ const (
 // runShellPTY puts the local terminal in raw mode and pumps a real PTY
 // session that runs inside the sandbox. Auth is the API token only.
 func runShellPTY(c *cli.Context, id, ref string) error {
-	stdinFd := int(os.Stdin.Fd())
+	stdinFd := int(os.Stdin.Fd()) // #nosec G115 -- a file descriptor always fits in an int
 	if !term.IsTerminal(stdinFd) {
 		return fmt.Errorf("shell needs a real terminal — re-run interactively, or pass --ssh for the SSH path")
 	}
@@ -249,7 +268,7 @@ func runShellPTY(c *cli.Context, id, ref string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() //nolint:errcheck
 
 	pterm.Println(pterm.Gray(fmt.Sprintf("  connecting to %s…", refLabel(ref, id))))
 
@@ -257,7 +276,7 @@ func runShellPTY(c *cli.Context, id, ref string) error {
 	if err != nil {
 		return fmt.Errorf("could not switch terminal to raw mode: %w", err)
 	}
-	defer func() { _ = term.Restore(stdinFd, oldState) }()
+	defer func() { _ = term.Restore(stdinFd, oldState) }() //nolint:errcheck
 
 	// frameMu serialises writes to conn — the stdin pump and the
 	// SIGWINCH handler both emit frames, and an interleaved write would
@@ -277,7 +296,7 @@ func runShellPTY(c *cli.Context, id, ref string) error {
 	done := make(chan struct{}, 2)
 	// remote → local screen
 	go func() {
-		_, _ = io.Copy(os.Stdout, conn)
+		_, _ = io.Copy(os.Stdout, conn) //nolint:errcheck
 		done <- struct{}{}
 	}()
 	// local keystrokes → framed stdin
@@ -307,16 +326,16 @@ func sendResize(conn io.Writer, mu *sync.Mutex, fd int) {
 		return
 	}
 	var p [4]byte
-	binary.BigEndian.PutUint16(p[0:2], uint16(rows))
-	binary.BigEndian.PutUint16(p[2:4], uint16(cols))
-	_ = writeFrame(conn, mu, ptyFrameResize, p[:])
+	binary.BigEndian.PutUint16(p[0:2], uint16(rows)) // #nosec G115 -- terminal dimensions fit in uint16
+	binary.BigEndian.PutUint16(p[2:4], uint16(cols)) // #nosec G115 -- terminal dimensions fit in uint16
+	_ = writeFrame(conn, mu, ptyFrameResize, p[:])   //nolint:errcheck
 }
 
 // writeFrame emits one [type:1][len:4 BE][payload] frame under mu.
 func writeFrame(w io.Writer, mu *sync.Mutex, typ byte, payload []byte) error {
 	var hdr [5]byte
 	hdr[0] = typ
-	binary.BigEndian.PutUint32(hdr[1:5], uint32(len(payload)))
+	binary.BigEndian.PutUint32(hdr[1:5], uint32(len(payload))) // #nosec G115 -- frame payloads are far smaller than uint32 max
 	mu.Lock()
 	defer mu.Unlock()
 	if _, err := w.Write(hdr[:]); err != nil {
@@ -346,11 +365,12 @@ func dialControlUpgrade(ctx context.Context, ctrlURL, token, path string) (net.C
 		if !strings.Contains(host, ":") {
 			host += ":443"
 		}
-		sni, _, _ := net.SplitHostPort(host)
-		conn, err = tls.DialWithDialer(d, "tcp", host, &tls.Config{
+		sni, _, _ := net.SplitHostPort(host) //nolint:errcheck
+		td := &tls.Dialer{NetDialer: d, Config: &tls.Config{
 			ServerName: sni,
 			NextProtos: []string{"http/1.1"},
-		})
+		}}
+		conn, err = td.DialContext(ctx, "tcp", host)
 	} else {
 		if !strings.Contains(host, ":") {
 			host += ":80"
@@ -367,21 +387,21 @@ func dialControlUpgrade(ctx context.Context, ctrlURL, token, path string) (net.C
 		"Connection: Upgrade\r\n" +
 		"Upgrade: tcp-tunnel\r\n" +
 		"Content-Length: 0\r\n\r\n"
-	if _, err := conn.Write([]byte(req)); err != nil {
-		conn.Close()
+	if _, err = conn.Write([]byte(req)); err != nil {
+		_ = conn.Close() //nolint:errcheck
 		return nil, err
 	}
 
 	br := bufio.NewReader(conn)
 	status, err := br.ReadString('\n')
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("read upgrade response: %w", err)
 	}
 	if !strings.Contains(status, " 101 ") {
 		// Read up to a few KB so we can show the server's error message.
-		body, _ := io.ReadAll(io.LimitReader(br, 4096))
-		conn.Close()
+		body, _ := io.ReadAll(io.LimitReader(br, 4096)) //nolint:errcheck
+		_ = conn.Close()                                //nolint:errcheck
 		msg := strings.TrimSpace(string(body))
 		if msg == "" {
 			msg = strings.TrimSpace(status)
@@ -391,7 +411,7 @@ func dialControlUpgrade(ctx context.Context, ctrlURL, token, path string) (net.C
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			return nil, fmt.Errorf("read upgrade headers: %w", err)
 		}
 		if line == "\r\n" || line == "\n" {
@@ -429,7 +449,7 @@ func (b *tunnelBridge) close() {
 		b.stop()
 	}
 	if b.listener != nil {
-		_ = b.listener.Close()
+		_ = b.listener.Close() //nolint:errcheck
 	}
 }
 
@@ -442,7 +462,8 @@ func startTunnelBridge(parent context.Context, c *cli.Context, sandboxID string,
 	if err != nil {
 		return nil, err
 	}
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	l, err := lc.Listen(parent, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("local listen: %w", err)
 	}
@@ -484,12 +505,12 @@ func loadAPIToken() (string, error) {
 // peers, and closing early on a transient half-drain truncates the
 // handshake mid-flight and looks like an auth failure.
 func bridgeOne(ctx context.Context, ctrlURL, token, id string, port int, local net.Conn) {
-	defer local.Close()
+	defer func() { _ = local.Close() }() //nolint:errcheck
 	remote, err := dialControlTunnel(ctx, ctrlURL, token, id, port)
 	if err != nil {
 		return
 	}
-	defer remote.Close()
+	defer func() { _ = remote.Close() }() //nolint:errcheck
 	// closeWrite when one direction reaches EOF so the peer sees a
 	// proper half-close instead of either side hanging on the read.
 	// We still wait for the other goroutine before returning.
@@ -497,16 +518,16 @@ func bridgeOne(ctx context.Context, ctrlURL, token, id string, port int, local n
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(remote, local)
+		_, _ = io.Copy(remote, local) //nolint:errcheck
 		if cw, ok := remote.(interface{ CloseWrite() error }); ok {
-			_ = cw.CloseWrite()
+			_ = cw.CloseWrite() //nolint:errcheck
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(local, remote)
+		_, _ = io.Copy(local, remote) //nolint:errcheck
 		if cw, ok := local.(interface{ CloseWrite() error }); ok {
-			_ = cw.CloseWrite()
+			_ = cw.CloseWrite() //nolint:errcheck
 		}
 	}()
 	doneCh := make(chan struct{})
@@ -533,14 +554,15 @@ func dialControlTunnel(ctx context.Context, ctrlURL, token, id string, port int)
 		if !strings.Contains(host, ":") {
 			host += ":443"
 		}
-		sni, _, _ := net.SplitHostPort(host)
+		sni, _, _ := net.SplitHostPort(host) //nolint:errcheck
 		// Force HTTP/1.1 via ALPN. HTTP/2 doesn't expose the
 		// hop-by-hop `Upgrade` header we rely on; if the server picks
 		// h2 the tunnel handshake silently falls apart.
-		conn, err = tls.DialWithDialer(d, "tcp", host, &tls.Config{
+		td := &tls.Dialer{NetDialer: d, Config: &tls.Config{
 			ServerName: sni,
 			NextProtos: []string{"http/1.1"},
-		})
+		}}
+		conn, err = td.DialContext(ctx, "tcp", host)
 	} else {
 		if !strings.Contains(host, ":") {
 			host += ":80"
@@ -555,25 +577,25 @@ func dialControlTunnel(ctx context.Context, ctrlURL, token, id string, port int)
 		"Host: %s\r\nX-Api-Key: %s\r\n"+
 		"Connection: Upgrade\r\nUpgrade: tcp-tunnel\r\nContent-Length: 0\r\n\r\n",
 		id, port, u.Host, token)
-	if _, err := conn.Write([]byte(req)); err != nil {
-		conn.Close()
+	if _, err = conn.Write([]byte(req)); err != nil {
+		_ = conn.Close() //nolint:errcheck
 		return nil, err
 	}
 
 	br := bufio.NewReader(conn)
 	status, err := br.ReadString('\n')
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("read tunnel response: %w", err)
 	}
 	if !strings.Contains(status, " 101 ") {
-		conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("server rejected the tunnel: %s", strings.TrimSpace(status))
 	}
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			return nil, fmt.Errorf("read tunnel headers: %w", err)
 		}
 		if line == "\r\n" || line == "\n" {
@@ -595,12 +617,13 @@ func (b *bufferedConn) Read(p []byte) (int, error) { return b.r.Read(p) }
 
 // ── tiny helpers ────────────────────────────────────────────────────
 
-func waitForTCP(addr string, timeout time.Duration) error {
+func waitForTCP(ctx context.Context, addr string, timeout time.Duration) error {
+	d := net.Dialer{Timeout: 250 * time.Millisecond}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		c, err := net.DialTimeout("tcp", addr, 250*time.Millisecond)
+		c, err := d.DialContext(ctx, "tcp", addr)
 		if err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint:errcheck
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)

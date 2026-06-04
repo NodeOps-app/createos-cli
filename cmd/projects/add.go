@@ -338,7 +338,7 @@ all required flags:
 				if err := config.SaveProjectConfig(dir, cfg); err != nil {
 					pterm.Warning.Printf("Could not link directory: %s\n", err)
 				} else {
-					_ = config.EnsureGitignore(dir)
+					_ = config.EnsureGitignore(dir) //nolint:errcheck
 					pterm.Success.Printf("Linked to %s\n", displayName)
 				}
 			}

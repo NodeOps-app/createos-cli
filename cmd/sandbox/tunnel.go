@@ -153,11 +153,12 @@ func runTunnel(c *cli.Context) error {
 	//    opens its own HTTP-Upgrade tunnel through control to the
 	//    sandbox's `remote` port.
 	listenAddr := net.JoinHostPort(bind, strconv.Itoa(local))
-	listener, err := net.Listen("tcp", listenAddr)
+	var lc net.ListenConfig
+	listener, err := lc.Listen(c.Context, "tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("could not bind %s: %w", listenAddr, err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }() //nolint:errcheck
 
 	ctrlURL := strings.TrimSpace(c.String("sandbox-api-url"))
 	if ctrlURL == "" {
@@ -177,7 +178,7 @@ func runTunnel(c *cli.Context) error {
 	defer signal.Stop(sigCh)
 	go func() {
 		<-sigCh
-		_ = listener.Close()
+		_ = listener.Close() //nolint:errcheck
 	}()
 
 	// 4. Accept loop. Each connection runs in its own goroutine via

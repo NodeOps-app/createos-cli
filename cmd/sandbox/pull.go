@@ -51,21 +51,21 @@ func runPull(c *cli.Context) error {
 
 	// "-" writes to stdout. Anything else is a real file we create.
 	if local == "-" {
-		_, err := client.DownloadFile(c.Context, id, remote, os.Stdout)
+		_, err = client.DownloadFile(c.Context, id, remote, os.Stdout)
 		return err
 	}
 
-	f, err := os.Create(local)
+	f, err := os.Create(local) // #nosec G304 -- local is a user-supplied destination path
 	if err != nil {
 		return fmt.Errorf("could not create %s: %w", local, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() //nolint:errcheck
 
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s:%s → %s", refLabel(ref, id), remote, local))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Downloading %s:%s → %s", refLabel(ref, id), remote, local)) //nolint:errcheck
 	n, err := client.DownloadFile(c.Context, id, remote, f)
 	if err != nil {
 		spinner.Fail("Download failed")
-		_ = os.Remove(local) // don't leave a half-written file behind
+		_ = os.Remove(local) //nolint:errcheck // don't leave a half-written file behind
 		return err
 	}
 	spinner.Success(fmt.Sprintf("Downloaded %s:%s → %s (%s)", refLabel(ref, id), remote, local, humanBytes(n)))

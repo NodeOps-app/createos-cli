@@ -62,7 +62,9 @@ func newEnvironmentsListCommand() *cli.Command {
 						env.CreatedAt.Format("2006-01-02 15:04:05"),
 					})
 				}
-				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+					pterm.Error.Println(err)
+				}
 				fmt.Println()
 			})
 			return nil

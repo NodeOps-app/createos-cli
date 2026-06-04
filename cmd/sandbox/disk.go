@@ -123,7 +123,7 @@ func runDiskCreate(c *cli.Context) error {
 		return fmt.Errorf("missing required values\n\n  Need: <name>, --bucket, --endpoint, --access-key, --secret-key\n  Optional: --region, --path-style")
 	}
 
-	spinner, _ := pterm.DefaultSpinner.Start("Checking the bucket…")
+	spinner, _ := pterm.DefaultSpinner.Start("Checking the bucket…") //nolint:errcheck
 	d, err := client.CreateDisk(c.Context, api.DiskCreateReq{
 		Name: name,
 		Kind: "s3",
@@ -181,7 +181,7 @@ func runDiskList(c *cli.Context) error {
 				d.CreatedAt.Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render()
+		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
 	})
 	return nil
 }
@@ -444,7 +444,8 @@ func runDiskAttach(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("usage: createos sandbox disk attach <sandbox> <disk> <mount-path>")
 		}
-		picked, err := pickDisk(c, client, "Attach which disk?")
+		var picked string
+		picked, err = pickDisk(c, client, "Attach which disk?")
 		if err != nil {
 			return err
 		}
@@ -459,7 +460,8 @@ func runDiskAttach(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("usage: createos sandbox disk attach <sandbox> <disk> <mount-path>")
 		}
-		v, err := pterm.DefaultInteractiveTextInput.
+		var v string
+		v, err = pterm.DefaultInteractiveTextInput.
 			WithDefaultText("Where in the sandbox should it mount (absolute path, e.g. /mnt/data)").
 			WithDefaultValue("/mnt/" + diskRef).
 			Show()
@@ -472,7 +474,7 @@ func runDiskAttach(c *cli.Context) error {
 		return fmt.Errorf("mount path must be absolute (start with '/'), got %q", mountPath)
 	}
 
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Attaching %s → %s:%s", diskRef, refLabel(sandboxRef, sandboxID), mountPath))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Attaching %s → %s:%s", diskRef, refLabel(sandboxRef, sandboxID), mountPath)) //nolint:errcheck
 	err = client.AttachDisk(c.Context, sandboxID, api.DiskAttachReq{
 		DiskID:    diskRef,
 		MountPath: mountPath,

@@ -10,6 +10,8 @@ import (
 // — 1 KB = 1000 bytes) plus binary suffixes (KiB/MiB/GiB/TiB). Pure
 // digits are treated as raw bytes. Used by `sandbox edit`'s bandwidth
 // top-up step and any future caller that needs human size parsing.
+//
+//nolint:unused // reserved for the non-interactive `bandwidth-recharge <id> <amount>` path
 func parseSizeBytes(in string) (int64, error) {
 	s := strings.TrimSpace(strings.ToUpper(in))
 	if s == "" {

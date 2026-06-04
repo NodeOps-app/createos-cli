@@ -28,7 +28,10 @@ func Pick(title string, items []PickerItem) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	res := out.(pickerModel)
+	res, ok := out.(pickerModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected picker result")
+	}
 	if res.quit {
 		return "", nil
 	}
@@ -46,8 +49,7 @@ type pickerModel struct {
 func (m pickerModel) Init() tea.Cmd { return nil }
 
 func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			m.quit = true

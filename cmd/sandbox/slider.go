@@ -119,19 +119,19 @@ func pickRechargeAmountGB(initialGB int) (int, error) {
 
 // renderSliderBar draws a width-character bar with a marker at the
 // current value's position.
-func renderSliderBar(value, min, max, width int) string {
+func renderSliderBar(value, lo, hi, width int) string {
 	if width < 3 {
 		width = 3
 	}
-	if value < min {
-		value = min
+	if value < lo {
+		value = lo
 	}
-	if value > max {
-		value = max
+	if value > hi {
+		value = hi
 	}
 	pos := 0
-	if max > min {
-		pos = ((value - min) * (width - 1)) / (max - min)
+	if hi > lo {
+		pos = ((value - lo) * (width - 1)) / (hi - lo)
 	}
 	var b strings.Builder
 	b.WriteString("[")

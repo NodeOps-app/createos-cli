@@ -13,13 +13,13 @@ import (
 
 // newEditCommand returns the `sandbox edit` command. Two ways to use:
 //
-//   1) Flag form (script-friendly):
-//      createos sandbox edit <ref> --ingress on|off
-//      createos sandbox edit <ref> --add-ssh-key ~/.ssh/id_ed25519.pub
+//  1. Flag form (script-friendly):
+//     createos sandbox edit <ref> --ingress on|off
+//     createos sandbox edit <ref> --add-ssh-key ~/.ssh/id_ed25519.pub
 //
-//   2) Interactive (TTY, no flags):
-//      createos sandbox edit <ref>
-//      → menu: toggle public URL / add SSH key / cancel
+//  2. Interactive (TTY, no flags):
+//     createos sandbox edit <ref>
+//     → menu: toggle public URL / add SSH key / cancel
 //
 // SSH-key removal is not supported by the server today — once a key is
 // on a sandbox you cannot retract it without destroying the sandbox.
@@ -152,7 +152,7 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 	}
 	// Bandwidth is on a sibling endpoint. Best-effort — a stale/missing
 	// counter shouldn't block the rest of the edit menu.
-	bw, _ := client.GetBandwidth(c.Context, id)
+	bw, _ := client.GetBandwidth(c.Context, id) //nolint:errcheck
 
 	fmt.Println()
 	pterm.NewStyle(pterm.FgCyan, pterm.Bold).Printfln("  Editing %s", refLabel(label, id))
@@ -273,7 +273,7 @@ func applyIngressFlag(c *cli.Context, client *api.SandboxClient, label, id, valu
 	case "off", "false", "no", "disable":
 		target = false
 	default:
-		return fmt.Errorf("--ingress %q is not a value I understand. Use `on` or `off`.", value)
+		return fmt.Errorf("--ingress %q is not a value I understand — use `on` or `off`", value)
 	}
 	updated, err := client.SetSandboxIngress(c.Context, id, target)
 	if err != nil {

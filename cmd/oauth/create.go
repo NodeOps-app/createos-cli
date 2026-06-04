@@ -92,7 +92,8 @@ func newCreateCommand() *cli.Command {
 					return err
 				}
 
-				confirm, err := pterm.DefaultInteractiveConfirm.
+				var confirm bool
+				confirm, err = pterm.DefaultInteractiveConfirm.
 					WithDefaultText("Create this OAuth client now?").
 					WithDefaultValue(true).
 					Show()
@@ -105,7 +106,7 @@ func newCreateCommand() *cli.Command {
 				}
 			} else {
 				name = strings.TrimSpace(c.String("name"))
-				if err := validateClientName(name); err != nil {
+				if err = validateClientName(name); err != nil {
 					return fmt.Errorf("--name: %w", err)
 				}
 
@@ -114,7 +115,7 @@ func newCreateCommand() *cli.Command {
 					return fmt.Errorf("at least one --redirect-uri is required")
 				}
 				for _, u := range redirectURIs {
-					if err := validateURI(u); err != nil {
+					if err = validateURI(u); err != nil {
 						return fmt.Errorf("--redirect-uri %q: %w", u, err)
 					}
 				}
@@ -122,19 +123,19 @@ func newCreateCommand() *cli.Command {
 				public = c.Bool("public")
 
 				clientURI = c.String("app-url")
-				if err := validateURI(clientURI); err != nil {
+				if err = validateURI(clientURI); err != nil {
 					return fmt.Errorf("--app-url: %w", err)
 				}
 				policyURI = c.String("policy-url")
-				if err := validateURI(policyURI); err != nil {
+				if err = validateURI(policyURI); err != nil {
 					return fmt.Errorf("--policy-url: %w", err)
 				}
 				tosURI = c.String("tos-url")
-				if err := validateURI(tosURI); err != nil {
+				if err = validateURI(tosURI); err != nil {
 					return fmt.Errorf("--tos-url: %w", err)
 				}
 				logoURI = c.String("logo-url")
-				if err := validateURI(logoURI); err != nil {
+				if err = validateURI(logoURI); err != nil {
 					return fmt.Errorf("--logo-url: %w", err)
 				}
 			}

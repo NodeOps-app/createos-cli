@@ -106,7 +106,7 @@ func runFirewallSet(c *cli.Context) error {
 			fmt.Println("Cancelled.")
 			return nil
 		}
-		current, _ := client.GetEgress(c.Context, pickedID)
+		current, _ := client.GetEgress(c.Context, pickedID) //nolint:errcheck
 		prefill := strings.Join(current, ", ")
 		if len(current) == 0 {
 			pterm.Println(pterm.Gray("  Firewall is currently open. Enter destinations to lock it down, or leave empty to cancel."))

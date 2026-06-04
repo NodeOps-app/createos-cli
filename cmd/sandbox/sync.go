@@ -121,7 +121,7 @@ func runSync(c *cli.Context) error {
 		if !tty {
 			return errors.New("--local is required (no terminal for interactive prompt)")
 		}
-		cwd, _ := os.Getwd()
+		cwd, _ := os.Getwd() //nolint:errcheck
 		v, err := pterm.DefaultInteractiveTextInput.
 			WithDefaultText("Local directory to sync (enter for current directory)").
 			WithDefaultValue(cwd).
@@ -153,7 +153,7 @@ func runSync(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := validateRemoteSyncPath(remote); err != nil {
+	if err = validateRemoteSyncPath(remote); err != nil {
 		return err
 	}
 
@@ -167,7 +167,7 @@ func runSync(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pubBytes, err := os.ReadFile(pubPath)
+	pubBytes, err := os.ReadFile(pubPath) // #nosec G304 -- pubPath is the user's own SSH public key, chosen via --identity
 	if err != nil {
 		return fmt.Errorf("could not read public key %s: %w", pubPath, err)
 	}
@@ -193,7 +193,7 @@ func runSync(c *cli.Context) error {
 	// 4. Install authorized_keys + start sshd. Mirror of the SSH-shell
 	//    path so sync gets the same modes/sshd setup.
 	authPath := authorizedKeysPath(user)
-	if err := client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
+	if err = client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
 		return fmt.Errorf("could not install your SSH key: %w", err)
 	}
 	prepScript := fmt.Sprintf(`
@@ -212,11 +212,11 @@ if ! awk 'NR>1{print $2}' /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -qi ':
   /usr/sbin/sshd
 fi
 `, filepath.Dir(authPath), user, shellQuote(remote))
-	if pre, err := client.ExecSandbox(c.Context, id, api.SandboxExecReq{
+	if pre, execErr := client.ExecSandbox(c.Context, id, api.SandboxExecReq{
 		Cmd:  "sh",
 		Args: []string{"-c", prepScript},
-	}); err != nil {
-		return fmt.Errorf("could not prepare sshd: %w", err)
+	}); execErr != nil {
+		return fmt.Errorf("could not prepare sshd: %w", execErr)
 	} else if pre.Result.ExitCode == 100 {
 		return fmt.Errorf("the sandbox image doesn't have sshd installed — try a rootfs that does (e.g. devbox:1)")
 	} else if pre.Result.ExitCode != 0 {
@@ -231,10 +231,10 @@ fi
 		return fmt.Errorf("could not open tunnel to the sandbox: %w", err)
 	}
 	defer bridge.close()
-	if err := waitForTCP(bridge.localAddr, c.Duration("sshd-wait")); err != nil {
+	if err = waitForTCP(ctx, bridge.localAddr, c.Duration("sshd-wait")); err != nil {
 		return fmt.Errorf("sshd did not start in time: %w", err)
 	}
-	_, port, _ := net.SplitHostPort(bridge.localAddr)
+	_, port, _ := net.SplitHostPort(bridge.localAddr) //nolint:errcheck
 
 	// 6. Create the mutagen session.
 	//    Mutagen's URL parser dislikes `ssh://user@host:port/path` —
@@ -246,12 +246,12 @@ fi
 	if err != nil {
 		return fmt.Errorf("could not set up ssh wrapper: %w", err)
 	}
-	defer os.RemoveAll(wrapperDir)
+	defer func() { _ = os.RemoveAll(wrapperDir) }() //nolint:errcheck
 
 	// Mutagen runs ssh from its long-lived daemon, not from this
 	// process. Stop the daemon so the next `create` auto-starts it
 	// under our env, picking up the wrapper PATH.
-	_ = runMutagen(ctx, mutagenBin, wrapperEnv, "daemon", "stop")
+	_ = runMutagen(ctx, mutagenBin, wrapperEnv, "daemon", "stop") //nolint:errcheck
 
 	pterm.Println(pterm.Gray(fmt.Sprintf("  syncing %s ⇄ %s:%s", local, refLabel(ref, id), remote)))
 	createArgs := []string{
@@ -268,7 +268,7 @@ fi
 	// cancellation propagating before we exit.
 	defer func() {
 		bg := context.Background()
-		_ = runMutagen(bg, mutagenBin, wrapperEnv, "sync", "terminate", sessionName)
+		_ = runMutagen(bg, mutagenBin, wrapperEnv, "sync", "terminate", sessionName) //nolint:errcheck
 	}()
 
 	pterm.Success.Println("Sync running. Press Ctrl+C to stop.")
@@ -276,7 +276,7 @@ fi
 	// 7. Monitor the session in the foreground. `mutagen sync monitor`
 	//    streams status lines until the session is terminated or the
 	//    process exits.
-	mon := exec.CommandContext(ctx, mutagenBin, "sync", "monitor", sessionName)
+	mon := exec.CommandContext(ctx, mutagenBin, "sync", "monitor", sessionName) // #nosec G204 -- mutagenBin is our managed binary; sessionName is internally generated
 	mon.Env = wrapperEnv
 	mon.Stdout = os.Stdout
 	mon.Stderr = os.Stderr
@@ -290,7 +290,7 @@ fi
 // runMutagen runs `mutagen <args>` with our shadowed PATH env.
 // stdout/stderr are forwarded so the user sees mutagen's progress.
 func runMutagen(ctx context.Context, bin string, env []string, args ...string) error {
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- bin is our managed mutagen binary; args are internally constructed
 	cmd.Env = env
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -326,20 +326,22 @@ func makeSSHWrapper(privPath string) (string, []string, error) {
 			"-o UserKnownHostsFile=%s -o LogLevel=ERROR",
 		shellQuote(privPath), shellQuote(knownHosts))
 
+	// #nosec G306 -- these are wrapper scripts that must be executable
 	if err := os.WriteFile(
 		filepath.Join(dir, "ssh"),
 		[]byte(fmt.Sprintf("#!/bin/sh\nexec %s %s \"$@\"\n", realSSH, commonOpts)),
 		0o755,
 	); err != nil {
-		_ = os.RemoveAll(dir)
+		_ = os.RemoveAll(dir) //nolint:errcheck
 		return "", nil, err
 	}
+	// #nosec G306 -- these are wrapper scripts that must be executable
 	if err := os.WriteFile(
 		filepath.Join(dir, "scp"),
 		[]byte(fmt.Sprintf("#!/bin/sh\nexec %s %s \"$@\"\n", realSCP, commonOpts)),
 		0o755,
 	); err != nil {
-		_ = os.RemoveAll(dir)
+		_ = os.RemoveAll(dir) //nolint:errcheck
 		return "", nil, err
 	}
 
@@ -357,7 +359,7 @@ func makeSSHWrapper(privPath string) (string, []string, error) {
 
 // shellQuote single-quotes a string for safe inclusion in /bin/sh.
 // Embedded single quotes are escaped via the standard close-escape-open
-// dance: 'foo'\''bar' decodes to foo'bar.
+// dance: 'foo'\”bar' decodes to foo'bar.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -407,7 +409,7 @@ func validateLocalSyncPath(p string, force bool) (string, error) {
 	if abs == "/" {
 		return "", fmt.Errorf("refusing to sync from %q — pick a specific subdirectory", abs)
 	}
-	home, _ := os.UserHomeDir()
+	home, _ := os.UserHomeDir() //nolint:errcheck
 	if abs == home {
 		return "", fmt.Errorf("refusing to sync from $HOME itself — pick a subdirectory like ~/work")
 	}
@@ -419,7 +421,7 @@ func validateLocalSyncPath(p string, force bool) (string, error) {
 			rel := strings.TrimPrefix(strings.TrimPrefix(abs, home), "/")
 			first := strings.SplitN(rel, "/", 2)[0]
 			if _, bad := sensitiveLocalDirs[first]; bad {
-				return "", fmt.Errorf("refusing to sync from %s (sensitive directory). Pass --force if you really mean it.", abs)
+				return "", fmt.Errorf("refusing to sync from %s (sensitive directory) — pass --force if you really mean it", abs)
 			}
 		}
 	}
@@ -435,7 +437,7 @@ func validateLocalSyncPath(p string, force bool) (string, error) {
 // reservedRemoteDirs are remote first-path-components we refuse to
 // sync TO. System dirs that mutagen would happily overwrite.
 var reservedRemoteDirs = map[string]struct{}{
-	"":  {}, "/": {}, "etc": {}, "usr": {}, "bin": {}, "sbin": {},
+	"": {}, "/": {}, "etc": {}, "usr": {}, "bin": {}, "sbin": {},
 	"lib": {}, "lib64": {}, "boot": {}, "proc": {}, "sys": {}, "dev": {},
 	"run": {},
 }
@@ -473,7 +475,7 @@ func validateRemoteSyncPath(p string) error {
 // before this command returns.
 func unlockSSHKeyIfNeeded(path string) (string, func(), error) {
 	noop := func() {}
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is the user's own SSH private key, chosen via --identity
 	if err != nil {
 		return "", noop, fmt.Errorf("could not read SSH key %s: %w", path, err)
 	}
@@ -485,7 +487,7 @@ func unlockSSHKeyIfNeeded(path string) (string, func(), error) {
 		return "", noop, fmt.Errorf("the SSH key %s is passphrase-protected — pass --identity <unencrypted-key> or run from a terminal that can prompt for the passphrase", path)
 	}
 	fmt.Printf("Enter passphrase for %s: ", path)
-	pw, perr := term.ReadPassword(int(os.Stdin.Fd()))
+	pw, perr := term.ReadPassword(int(os.Stdin.Fd())) // #nosec G115 -- a file descriptor always fits in an int
 	fmt.Println()
 	if perr != nil {
 		return "", noop, fmt.Errorf("could not read passphrase: %w", perr)
@@ -504,9 +506,9 @@ func unlockSSHKeyIfNeeded(path string) (string, func(), error) {
 		return "", noop, derr
 	}
 	out := filepath.Join(dir, "id_unlocked")
-	if werr := os.WriteFile(out, pem.EncodeToMemory(block), 0o600); werr != nil {
-		_ = os.RemoveAll(dir)
+	if werr := os.WriteFile(out, pem.EncodeToMemory(block), 0o600); werr != nil { // #nosec G703 -- out is under a freshly created MkdirTemp dir, not user-controlled
+		_ = os.RemoveAll(dir) //nolint:errcheck
 		return "", noop, fmt.Errorf("could not write unlocked key: %w", werr)
 	}
-	return out, func() { _ = os.RemoveAll(dir) }, nil
+	return out, func() { _ = os.RemoveAll(dir) }, nil //nolint:errcheck
 }

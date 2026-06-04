@@ -66,7 +66,8 @@ func newTemplatesUseCommand() *cli.Command {
 					} else {
 						confirmText = fmt.Sprintf("Download %q (free)?", tmpl.Name)
 					}
-					confirm, err := pterm.DefaultInteractiveConfirm.
+					var confirm bool
+					confirm, err = pterm.DefaultInteractiveConfirm.
 						WithDefaultText(confirmText).
 						WithDefaultValue(true).
 						Show()
@@ -79,11 +80,10 @@ func newTemplatesUseCommand() *cli.Command {
 					}
 				}
 
-				newPurchaseID, err := client.BuyTemplate(templateID)
+				purchaseID, err = client.BuyTemplate(templateID)
 				if err != nil {
 					return err
 				}
-				purchaseID = newPurchaseID
 			}
 
 			downloadURL, err := client.GetTemplatePurchaseDownloadURL(purchaseID)
@@ -104,7 +104,7 @@ func newTemplatesUseCommand() *cli.Command {
 				return err
 			}
 
-			if err := os.MkdirAll(absDir, 0750); err != nil {
+			if err = os.MkdirAll(absDir, 0750); err != nil {
 				return fmt.Errorf("could not create directory %s: %w", dir, err)
 			}
 
@@ -124,7 +124,7 @@ func newTemplatesUseCommand() *cli.Command {
 
 			zipPath := filepath.Join(absDir, "template.zip")
 			if err := downloadToFile(zipPath, resp.Body); err != nil {
-				_ = os.Remove(zipPath)
+				_ = os.Remove(zipPath) //nolint:errcheck
 				return err
 			}
 
@@ -140,7 +140,7 @@ func downloadToFile(path string, src io.Reader) error {
 		return fmt.Errorf("could not create file: %w", err)
 	}
 	if _, err := io.Copy(out, src); err != nil {
-		_ = out.Close()
+		_ = out.Close() //nolint:errcheck
 		return fmt.Errorf("could not write template: %w", err)
 	}
 	if err := out.Close(); err != nil {

@@ -54,7 +54,7 @@ func runPush(c *cli.Context) error {
 	// Open the source: a real file (we know its size for Content-Length)
 	// or stdin ("-") for piped uploads.
 	var (
-		src    interface {
+		src interface {
 			Read(p []byte) (int, error)
 		}
 		size   int64
@@ -67,17 +67,17 @@ func runPush(c *cli.Context) error {
 		label = "(stdin)"
 		closer = func() error { return nil }
 	} else {
-		f, err := os.Open(local)
+		f, err := os.Open(local) // #nosec G304 -- local is a user-supplied source path
 		if err != nil {
 			return fmt.Errorf("could not open %s: %w", local, err)
 		}
 		info, err := f.Stat()
 		if err != nil {
-			_ = f.Close()
+			_ = f.Close() //nolint:errcheck
 			return fmt.Errorf("could not stat %s: %w", local, err)
 		}
 		if info.IsDir() {
-			_ = f.Close()
+			_ = f.Close() //nolint:errcheck
 			return fmt.Errorf("%s is a directory — push handles single files. Tar it first:\n  tar -c %s | createos sandbox push %s - /tmp/bundle.tar", local, local, ref)
 		}
 		src = f
@@ -85,9 +85,9 @@ func runPush(c *cli.Context) error {
 		label = local
 		closer = f.Close
 	}
-	defer func() { _ = closer() }()
+	defer func() { _ = closer() }() //nolint:errcheck
 
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Uploading %s → %s:%s", label, refLabel(ref, id), remote))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Uploading %s → %s:%s", label, refLabel(ref, id), remote)) //nolint:errcheck
 	if err := client.UploadFile(c.Context, id, remote, src, size); err != nil {
 		spinner.Fail("Upload failed")
 		return err

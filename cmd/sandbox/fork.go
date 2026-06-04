@@ -80,7 +80,7 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		req.Egress = egress
 	}
 
-	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Forking %s…", refLabel(ref, srcID)))
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Forking %s…", refLabel(ref, srcID))) //nolint:errcheck
 	view, err := client.ForkSandbox(c.Context, srcID, req)
 	if err != nil {
 		spinner.Fail("Fork failed")

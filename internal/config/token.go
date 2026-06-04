@@ -37,7 +37,7 @@ func SaveToken(token string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 

@@ -37,7 +37,7 @@ func runGet(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  To see your sandboxes, run:\n    createos sandbox list")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Show details for which sandbox?", "")
+		pickedID, _, err := pickByStatus(c, client, "Show details for which sandbox?", "")
 		if err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func runGet(c *cli.Context) error {
 			fmt.Println("Cancelled.")
 			return nil
 		}
-		id, ref = pickedID, label
+		id = pickedID
 	} else {
 		resolved, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {

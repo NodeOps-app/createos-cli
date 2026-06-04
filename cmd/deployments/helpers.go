@@ -82,7 +82,9 @@ func pickDeployment(client *api.APIClient, projectID string, statusFilter []stri
 		})
 	}
 	fmt.Println()
-	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+	if err = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+		pterm.Error.Println(err)
+	}
 	fmt.Println()
 
 	options := make([]string, len(deployments))

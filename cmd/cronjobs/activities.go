@@ -71,7 +71,7 @@ func newCronjobsActivitiesCommand() *cli.Command {
 						log,
 					})
 				}
-				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
 				fmt.Println()
 			})
 			return nil

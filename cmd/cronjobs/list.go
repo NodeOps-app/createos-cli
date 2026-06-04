@@ -53,7 +53,7 @@ func newCronjobsListCommand() *cli.Command {
 						cj.CreatedAt.Format("2006-01-02 15:04:05"),
 					})
 				}
-				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
 				fmt.Println()
 			})
 			return nil

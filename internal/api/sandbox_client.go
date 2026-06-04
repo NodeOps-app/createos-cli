@@ -27,19 +27,20 @@ type SandboxClient struct {
 // requires the X-Access-Token header instead. Use
 // NewSandboxClientWithAccessToken for that case.
 func NewSandboxClient(token, sandboxURL string, debug bool) SandboxClient {
-	return newSandboxClient("X-Api-Key", token, sandboxURL, debug)
+	return newSandboxClient(headerAPIKey, token, sandboxURL, debug, nil)
 }
 
 // NewSandboxClientWithAccessToken builds a SandboxClient authenticated
 // with an OAuth access token, sent via the X-Access-Token header. This
 // mirrors NewClientWithAccessToken on the main API client — fc-spawn
-// accepts the same token under this header.
-func NewSandboxClientWithAccessToken(accessToken, sandboxURL string, debug bool) SandboxClient {
-	return newSandboxClient("X-Access-Token", accessToken, sandboxURL, debug)
+// accepts the same token under this header. When refresher is non-nil
+// the client refreshes the token and retries once on a 401.
+func NewSandboxClientWithAccessToken(accessToken, sandboxURL string, debug bool, refresher TokenRefresher) SandboxClient {
+	return newSandboxClient(headerAccessToken, accessToken, sandboxURL, debug, refresher)
 }
 
 // newSandboxClient is the shared builder behind the two auth schemes.
-func newSandboxClient(authHeader, token, sandboxURL string, debug bool) SandboxClient {
+func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refresher TokenRefresher) SandboxClient {
 	if sandboxURL == "" {
 		sandboxURL = DefaultSandboxBaseURL
 	}
@@ -54,6 +55,7 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool) SandboxC
 			masked: maskToken(token),
 		})
 	}
+	installAuthRefresh(client, authHeader, refresher)
 	return SandboxClient{Client: client}
 }
 

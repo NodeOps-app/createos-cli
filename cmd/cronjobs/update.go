@@ -62,7 +62,7 @@ Examples:
 			// Decode existing settings for defaults in both TTY and non-TTY.
 			var currentSettings api.HTTPCronjobSettings
 			if existing.Settings != nil {
-				if err := json.Unmarshal(*existing.Settings, &currentSettings); err != nil {
+				if err = json.Unmarshal(*existing.Settings, &currentSettings); err != nil {
 					return fmt.Errorf("could not parse existing cron job settings: %w", err)
 				}
 			}
