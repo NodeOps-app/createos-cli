@@ -18,17 +18,34 @@ type SandboxClient struct {
 	Client *resty.Client
 }
 
-// NewSandboxClient builds a SandboxClient with the given token + URL.
-// Empty url falls back to DefaultSandboxBaseURL. The same token used
-// for the CreateOS API works here too — fc-spawn validates against the
-// same upstream NodeOps auth service.
+// NewSandboxClient builds a SandboxClient for API-key auth. Empty url
+// falls back to DefaultSandboxBaseURL. The api key is sent as X-Api-Key
+// — fc-spawn validates it against the same upstream NodeOps auth service.
+//
+// For OAuth/browser logins the credential is an access-token JWT, NOT an
+// api key: fc-spawn rejects it under X-Api-Key ("invalid api key") and
+// requires the X-Access-Token header instead. Use
+// NewSandboxClientWithAccessToken for that case.
 func NewSandboxClient(token, sandboxURL string, debug bool) SandboxClient {
+	return newSandboxClient("X-Api-Key", token, sandboxURL, debug)
+}
+
+// NewSandboxClientWithAccessToken builds a SandboxClient authenticated
+// with an OAuth access token, sent via the X-Access-Token header. This
+// mirrors NewClientWithAccessToken on the main API client — fc-spawn
+// accepts the same token under this header.
+func NewSandboxClientWithAccessToken(accessToken, sandboxURL string, debug bool) SandboxClient {
+	return newSandboxClient("X-Access-Token", accessToken, sandboxURL, debug)
+}
+
+// newSandboxClient is the shared builder behind the two auth schemes.
+func newSandboxClient(authHeader, token, sandboxURL string, debug bool) SandboxClient {
 	if sandboxURL == "" {
 		sandboxURL = DefaultSandboxBaseURL
 	}
 	client := resty.New().
 		SetBaseURL(sandboxURL).
-		SetHeader("X-Api-Key", token).
+		SetHeader(authHeader, token).
 		SetHeader("Content-Type", "application/json")
 	if debug {
 		client.SetDebug(true)

@@ -134,10 +134,7 @@ func NewApp() *cli.App {
 					}
 					client := api.NewClientWithAccessToken(session.AccessToken, c.String("api-url"), c.Bool("debug"))
 					c.App.Metadata[api.ClientKey] = &client
-					// Sandbox API (fc-spawn) reuses the same access token —
-					// the token is validated against the shared NodeOps
-					// auth service on the server side.
-					sandboxClient := api.NewSandboxClient(session.AccessToken, c.String("sandbox-api-url"), c.Bool("debug"))
+					sandboxClient := api.NewSandboxClientWithAccessToken(session.AccessToken, c.String("sandbox-api-url"), c.Bool("debug"))
 					c.App.Metadata[api.SandboxClientKey] = &sandboxClient
 					return nil
 				}
