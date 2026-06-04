@@ -24,7 +24,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -259,12 +258,12 @@ func runShellPTY(c *cli.Context, id, ref string) error {
 	if ctrlURL == "" {
 		ctrlURL = api.DefaultSandboxBaseURL
 	}
-	token, err := loadAPIToken()
+	authHeader, token, err := sandboxAuth(c)
 	if err != nil {
 		return err
 	}
 
-	conn, err := dialControlUpgrade(c.Context, ctrlURL, token, "/v1/sandboxes/"+id+"/shell")
+	conn, err := dialControlUpgrade(c.Context, ctrlURL, authHeader, token, "/v1/sandboxes/"+id+"/shell")
 	if err != nil {
 		return err
 	}
@@ -353,7 +352,7 @@ func writeFrame(w io.Writer, mu *sync.Mutex, typ byte, payload []byte) error {
 // Upgrade handshake, and returns the raw connection on a 101 reply.
 // Used by the keyless PTY path — same wire shape as the tunnel bridge
 // but with a different target path.
-func dialControlUpgrade(ctx context.Context, ctrlURL, token, path string) (net.Conn, error) {
+func dialControlUpgrade(ctx context.Context, ctrlURL, authHeader, token, path string) (net.Conn, error) {
 	u, err := url.Parse(ctrlURL)
 	if err != nil {
 		return nil, fmt.Errorf("bad sandbox URL %q: %w", ctrlURL, err)
@@ -383,7 +382,7 @@ func dialControlUpgrade(ctx context.Context, ctrlURL, token, path string) (net.C
 
 	req := "POST " + path + " HTTP/1.1\r\n" +
 		"Host: " + u.Host + "\r\n" +
-		"X-Api-Key: " + token + "\r\n" +
+		authHeader + ": " + token + "\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Upgrade: tcp-tunnel\r\n" +
 		"Content-Length: 0\r\n\r\n"
@@ -458,7 +457,7 @@ func startTunnelBridge(parent context.Context, c *cli.Context, sandboxID string,
 	if ctrlURL == "" {
 		ctrlURL = api.DefaultSandboxBaseURL
 	}
-	token, err := loadAPIToken()
+	authHeader, token, err := sandboxAuth(c)
 	if err != nil {
 		return nil, err
 	}
@@ -479,23 +478,25 @@ func startTunnelBridge(parent context.Context, c *cli.Context, sandboxID string,
 			if err != nil {
 				return
 			}
-			go bridgeOne(ctx, ctrlURL, token, sandboxID, remotePort, conn)
+			go bridgeOne(ctx, ctrlURL, authHeader, token, sandboxID, remotePort, conn)
 		}
 	}()
 	return b, nil
 }
 
-// loadAPIToken pulls the user's token the same way the root Before
-// hook does — OAuth session if present, else the static api-key file.
-// We re-read because the Resty client doesn't expose the raw value.
-func loadAPIToken() (string, error) {
-	if config.HasOAuthSession() {
-		sess, err := config.LoadOAuthSession()
-		if err == nil && sess != nil && sess.AccessToken != "" {
-			return sess.AccessToken, nil
-		}
+// sandboxAuth returns the auth header name and current token from the
+// sandbox client the root Before hook already built and stored in
+// metadata — the single source of truth for credentials. The raw
+// HTTP-Upgrade paths reuse it so they authenticate exactly like every
+// other sandbox call: the right header for the auth type (X-Access-Token
+// for OAuth, X-Api-Key for an api key) and the already-refreshed token.
+func sandboxAuth(c *cli.Context) (header, token string, err error) {
+	sc, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
+	if !ok {
+		return "", "", fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
-	return config.LoadToken()
+	header, token = sc.AuthHeader()
+	return header, token, nil
 }
 
 // bridgeOne handles a single accepted local connection: it opens an
@@ -504,9 +505,9 @@ func loadAPIToken() (string, error) {
 // not just one — because SSH negotiation interleaves writes from both
 // peers, and closing early on a transient half-drain truncates the
 // handshake mid-flight and looks like an auth failure.
-func bridgeOne(ctx context.Context, ctrlURL, token, id string, port int, local net.Conn) {
+func bridgeOne(ctx context.Context, ctrlURL, authHeader, token, id string, port int, local net.Conn) {
 	defer func() { _ = local.Close() }() //nolint:errcheck
-	remote, err := dialControlTunnel(ctx, ctrlURL, token, id, port)
+	remote, err := dialControlTunnel(ctx, ctrlURL, authHeader, token, id, port)
 	if err != nil {
 		return
 	}
@@ -542,7 +543,7 @@ func bridgeOne(ctx context.Context, ctrlURL, token, id string, port int, local n
 // protocol by hand: POST `/v1/sandboxes/:id/tunnel/:port` with the
 // Upgrade headers, watch for 101 Switching Protocols, then return a
 // net.Conn that carries only tunnel bytes from then on.
-func dialControlTunnel(ctx context.Context, ctrlURL, token, id string, port int) (net.Conn, error) {
+func dialControlTunnel(ctx context.Context, ctrlURL, authHeader, token, id string, port int) (net.Conn, error) {
 	u, err := url.Parse(ctrlURL)
 	if err != nil {
 		return nil, fmt.Errorf("bad sandbox URL %q: %w", ctrlURL, err)
@@ -574,9 +575,9 @@ func dialControlTunnel(ctx context.Context, ctrlURL, token, id string, port int)
 	}
 
 	req := fmt.Sprintf("POST /v1/sandboxes/%s/tunnel/%d HTTP/1.1\r\n"+
-		"Host: %s\r\nX-Api-Key: %s\r\n"+
+		"Host: %s\r\n%s: %s\r\n"+
 		"Connection: Upgrade\r\nUpgrade: tcp-tunnel\r\nContent-Length: 0\r\n\r\n",
-		id, port, u.Host, token)
+		id, port, u.Host, authHeader, token)
 	if _, err = conn.Write([]byte(req)); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, err

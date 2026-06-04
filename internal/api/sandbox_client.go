@@ -16,6 +16,18 @@ const DefaultSandboxBaseURL = "https://fc-spawn.bhautik.in"
 // is not accepted on user-facing routes).
 type SandboxClient struct {
 	Client *resty.Client
+	// authHeader is the header name this client sends its credential
+	// under (X-Api-Key for an api key, X-Access-Token for an OAuth JWT).
+	authHeader string
+}
+
+// AuthHeader returns the header name and the current token this client
+// authenticates with. The hand-rolled HTTP-Upgrade streaming paths
+// (sandbox shell PTY, tunnel, sync) reuse this so they send the same
+// header and the same (refresh-rotated) token as every other sandbox
+// call, instead of re-deriving credentials and hardcoding X-Api-Key.
+func (c *SandboxClient) AuthHeader() (header, token string) {
+	return c.authHeader, c.Client.Header.Get(c.authHeader)
 }
 
 // NewSandboxClient builds a SandboxClient for API-key auth. Empty url
@@ -56,7 +68,7 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refreshe
 		})
 	}
 	installAuthRefresh(client, authHeader, refresher)
-	return SandboxClient{Client: client}
+	return SandboxClient{Client: client, authHeader: authHeader}
 }
 
 // SandboxClientKey is the cli.Context metadata key for the sandbox client.

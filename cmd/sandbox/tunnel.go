@@ -164,7 +164,7 @@ func runTunnel(c *cli.Context) error {
 	if ctrlURL == "" {
 		ctrlURL = api.DefaultSandboxBaseURL
 	}
-	token, err := loadAPIToken()
+	authHeader, token, err := sandboxAuth(c)
 	if err != nil {
 		return err
 	}
@@ -190,6 +190,6 @@ func runTunnel(c *cli.Context) error {
 			// Closed by signal handler or local error → done.
 			return nil
 		}
-		go bridgeOne(c.Context, ctrlURL, token, id, remote, conn)
+		go bridgeOne(c.Context, ctrlURL, authHeader, token, id, remote, conn)
 	}
 }
