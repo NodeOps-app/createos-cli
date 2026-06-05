@@ -77,6 +77,11 @@ sandbox (/etc, /usr, /bin …). Pass --force to bypass the local check
 				Name:  "force",
 				Usage: "Bypass the local sensitive-path check (still requires non-/ paths)",
 			},
+			&cli.BoolFlag{
+				Name:    "yes",
+				Aliases: []string{"y"},
+				Usage:   "Install your SSH key into the sandbox without asking (required in non-interactive mode when your key isn't already there)",
+			},
 		},
 		Action: runSync,
 	}
@@ -190,12 +195,12 @@ func runSync(c *cli.Context) error {
 		user = "root"
 	}
 
-	// 4. Install authorized_keys + start sshd. Mirror of the SSH-shell
-	//    path so sync gets the same modes/sshd setup.
-	authPath := authorizedKeysPath(user)
-	if err = client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
-		return fmt.Errorf("could not install your SSH key: %w", err)
+	// 4. Install authorized_keys (with consent) + start sshd. Mirror of
+	//    the SSH-shell path so sync gets the same modes/sshd setup.
+	if err = ensureAuthorizedKey(c, client, id, user, ref, pubBytes, keyConsentGiven(c)); err != nil {
+		return err
 	}
+	authPath := authorizedKeysPath(user)
 	prepScript := fmt.Sprintf(`
 set -e
 if ! [ -x /usr/sbin/sshd ]; then
@@ -362,6 +367,120 @@ func makeSSHWrapper(privPath string) (string, []string, error) {
 // dance: 'foo'\”bar' decodes to foo'bar.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// ── authorized_keys consent ───────────────────────────────────────────
+
+// ensureAuthorizedKey guarantees the local public key in pubBytes is
+// present in the sandbox user's authorized_keys before sync/shell rely on
+// SSH. It is idempotent and non-destructive:
+//
+//   - if a key matching ours is already installed, it returns immediately,
+//     touching nothing (no upload, no prompt);
+//   - if our key is NOT there, it asks for consent — the only path that
+//     modifies the sandbox — then APPENDS our key, preserving any keys
+//     already present.
+//
+// Consent rules mirror `sandbox rm`:
+//   - interactive TTY  → y/N confirm
+//   - non-interactive  → requires assumeYes, else a clear error
+//   - assumeYes (--yes/-y) skips the prompt everywhere
+func ensureAuthorizedKey(c *cli.Context, client *api.SandboxClient, id, user, ref string, pubBytes []byte, assumeYes bool) error {
+	authPath := authorizedKeysPath(user)
+
+	wantKey, _, _, _, perr := ssh.ParseAuthorizedKey(pubBytes)
+	if perr != nil {
+		return fmt.Errorf("your public key doesn't look like a valid SSH key: %w", perr)
+	}
+	want := canonicalAuthKey(wantKey)
+
+	existing := readSandboxAuthorizedKeys(c, client, id, authPath)
+	for _, line := range existing {
+		if pk, _, _, _, e := ssh.ParseAuthorizedKey([]byte(line)); e == nil && canonicalAuthKey(pk) == want {
+			// Already trusted — nothing to do. No overwrite, no prompt.
+			return nil
+		}
+	}
+
+	// Our key isn't there → installing it modifies the sandbox. Gate it.
+	if !assumeYes {
+		if !terminal.IsInteractive() {
+			return fmt.Errorf("your SSH key isn't installed in %s yet\n\n  Installing it changes the sandbox's authorized_keys. Re-run with --yes to allow it:\n    createos sandbox %s --yes %s", refLabel(ref, id), c.Command.Name, ref)
+		}
+		prompt := fmt.Sprintf("Install your SSH key (%s) into %s?", ssh.FingerprintSHA256(wantKey), refLabel(ref, id))
+		if n := len(existing); n > 0 {
+			prompt += fmt.Sprintf(" It already has %d other key(s); yours is added alongside them.", n)
+		}
+		ok, cerr := pterm.DefaultInteractiveConfirm.
+			WithDefaultText(prompt).
+			WithDefaultValue(true).
+			Show()
+		if cerr != nil {
+			return fmt.Errorf("could not read confirmation: %w", cerr)
+		}
+		if !ok {
+			return errors.New("cancelled — your SSH key was not installed, so there's no way to connect")
+		}
+	}
+
+	// Append our key, preserving existing entries (drop blank lines).
+	merged := make([]string, 0, len(existing)+1)
+	for _, l := range existing {
+		if t := strings.TrimSpace(l); t != "" {
+			merged = append(merged, t)
+		}
+	}
+	merged = append(merged, strings.TrimSpace(string(pubBytes)))
+	content := strings.Join(merged, "\n") + "\n"
+	if err := client.UploadFile(c.Context, id, authPath, bytesReader([]byte(content)), int64(len(content))); err != nil {
+		return fmt.Errorf("could not install your SSH key: %w", err)
+	}
+	return nil
+}
+
+// canonicalAuthKey reduces a public key to its "<type> <base64>" form,
+// dropping the trailing newline and any comment, so two keys compare equal
+// regardless of the comment they were uploaded with.
+func canonicalAuthKey(pk ssh.PublicKey) string {
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pk)))
+}
+
+// readSandboxAuthorizedKeys returns the current authorized_keys lines for
+// the sandbox user, or nil when the file is missing/unreadable (a fresh
+// box). Errors are swallowed: a missing file is the common, expected case
+// and simply means "no keys yet".
+func readSandboxAuthorizedKeys(c *cli.Context, client *api.SandboxClient, id, authPath string) []string {
+	resp, err := client.ExecSandbox(c.Context, id, api.SandboxExecReq{
+		Cmd:  "sh",
+		Args: []string{"-c", fmt.Sprintf("cat %s 2>/dev/null || true", shellQuote(authPath))},
+	})
+	if err != nil || resp.Result.ExitCode != 0 {
+		return nil
+	}
+	var out []string
+	for _, l := range strings.Split(resp.Result.Stdout, "\n") {
+		if strings.TrimSpace(l) != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// keyConsentGiven reports whether the user pre-authorized installing their
+// SSH key, via --yes/-y. It also scans positional args because urfave/cli
+// v2 stops parsing flags at the first positional, so `sync my-box --yes`
+// would otherwise drop the flag (same workaround as `sandbox rm`).
+func keyConsentGiven(c *cli.Context) bool {
+	if c.Bool("yes") {
+		return true
+	}
+	for _, a := range c.Args().Slice() {
+		switch strings.TrimSpace(a) {
+		case "-y", "--yes", "-yes":
+			return true
+		}
+	}
+	return false
 }
 
 // ── path validators ───────────────────────────────────────────────

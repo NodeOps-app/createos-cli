@@ -12,11 +12,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pterm/pterm"
@@ -65,6 +63,11 @@ Examples:
 				Aliases: []string{"u"},
 				Value:   "root",
 				Usage:   "Username inside the sandbox (SSH path only — the keyless PTY always runs as the sandbox's default user)",
+			},
+			&cli.BoolFlag{
+				Name:    "yes",
+				Aliases: []string{"y"},
+				Usage:   "Install your SSH key into the sandbox without asking (SSH path; required in non-interactive mode when your key isn't already there)",
 			},
 		},
 		Action: runShell,
@@ -129,12 +132,14 @@ func runShellSSH(c *cli.Context, client *api.SandboxClient, id, ref string) erro
 	}
 
 	// 1. Drop the pubkey into the sandbox's authorized_keys via the
-	//    file API. sshd refuses keys unless ~/.ssh is 0700 and the
-	//    file is 0600 — we chmod in the next step.
-	authPath := authorizedKeysPath(user)
-	if err = client.UploadFile(c.Context, id, authPath, bytesReader(pubBytes), int64(len(pubBytes))); err != nil {
-		return fmt.Errorf("could not install your SSH key: %w", err)
+	//    file API, with consent — idempotent if our key is already there,
+	//    and asks before modifying the sandbox otherwise. sshd refuses
+	//    keys unless ~/.ssh is 0700 and the file is 0600 — we chmod in
+	//    the next step.
+	if err = ensureAuthorizedKey(c, client, id, user, ref, pubBytes, keyConsentGiven(c)); err != nil {
+		return err
 	}
+	authPath := authorizedKeysPath(user)
 
 	// 2. Make the modes right + start sshd. The script tolerates the
 	//    "Address already in use" exit when sshd is already running,
@@ -283,14 +288,11 @@ func runShellPTY(c *cli.Context, id, ref string) error {
 	var frameMu sync.Mutex
 	sendResize(conn, &frameMu, stdinFd)
 
-	winch := make(chan os.Signal, 1)
-	signal.Notify(winch, syscall.SIGWINCH)
-	defer signal.Stop(winch)
-	go func() {
-		for range winch {
-			sendResize(conn, &frameMu, stdinFd)
-		}
-	}()
+	// Re-send the terminal size on every resize. The mechanism is
+	// platform-specific (SIGWINCH on Unix, no-op on Windows), so it
+	// lives behind a build tag in shell_resize_*.go.
+	stopResize := watchWindowSize(func() { sendResize(conn, &frameMu, stdinFd) })
+	defer stopResize()
 
 	done := make(chan struct{}, 2)
 	// remote → local screen
