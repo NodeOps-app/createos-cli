@@ -203,37 +203,24 @@ func (c *SandboxClient) AddSSHPubkeys(ctx context.Context, id string, keys []str
 // the updated SandboxView (with ingress_url_template when enabled and
 // the cluster knows its domain suffix).
 func (c *SandboxClient) SetSandboxIngress(ctx context.Context, id string, enabled bool) (*SandboxView, error) {
-	body := map[string]bool{"ingress_enabled": enabled}
-	var envelope Response[SandboxView]
-	resp, err := c.Client.R().
-		SetContext(ctx).
-		SetPathParam("id", id).
-		SetBody(body).
-		SetResult(&envelope).
-		Patch("/v1/sandboxes/{id}")
-	if err != nil {
-		return nil, err
-	}
-	if resp.IsError() {
-		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
-	}
-	return &envelope.Data, nil
+	return c.patchSandbox(ctx, id, SandboxPatchReq{IngressEnabled: &enabled})
 }
 
 // SetAutoPause sets or clears the idle-pause timeout on a sandbox.
 // Pass nil to turn auto-pause off; pass a pointer to seconds (60–86400) to enable.
 func (c *SandboxClient) SetAutoPause(ctx context.Context, id string, seconds *int) (*SandboxView, error) {
-	var body map[string]any
 	if seconds == nil {
-		body = map[string]any{"disable_auto_pause": true}
-	} else {
-		body = map[string]any{"auto_pause_after_seconds": *seconds}
+		return c.patchSandbox(ctx, id, SandboxPatchReq{DisableAutoPause: true})
 	}
+	return c.patchSandbox(ctx, id, SandboxPatchReq{AutoPauseAfterSeconds: seconds})
+}
+
+func (c *SandboxClient) patchSandbox(ctx context.Context, id string, req SandboxPatchReq) (*SandboxView, error) {
 	var envelope Response[SandboxView]
 	resp, err := c.Client.R().
 		SetContext(ctx).
 		SetPathParam("id", id).
-		SetBody(body).
+		SetBody(req).
 		SetResult(&envelope).
 		Patch("/v1/sandboxes/{id}")
 	if err != nil {

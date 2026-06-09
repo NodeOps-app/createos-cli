@@ -25,6 +25,14 @@ type SandboxCreateReq struct {
 	AutoPauseAfterSeconds *int                   `json:"auto_pause_after_seconds,omitempty"`
 }
 
+// SandboxPatchReq is the body of PATCH /v1/sandboxes/:id.
+// Only non-nil / non-zero fields are sent; omitempty keeps unset ones out of the wire.
+type SandboxPatchReq struct {
+	IngressEnabled        *bool `json:"ingress_enabled,omitempty"`
+	AutoPauseAfterSeconds *int  `json:"auto_pause_after_seconds,omitempty"`
+	DisableAutoPause      bool  `json:"disable_auto_pause,omitempty"`
+}
+
 // SandboxNetworkAttach binds a sandbox to a private network at create time.
 type SandboxNetworkAttach struct {
 	ID string `json:"id"`
