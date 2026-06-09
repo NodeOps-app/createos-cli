@@ -109,13 +109,24 @@ func runCreate(c *cli.Context) error {
 	// Lets users walk through name / rootfs / network / ssh keys without
 	// remembering every flag. Headless callers continue to get the
 	// "use --shape" error.
+	// Pre-parse --auto-pause so the wizard can skip the step when supplied.
+	var autoPauseSecs *int
+	if raw := strings.TrimSpace(c.String("auto-pause")); raw != "" {
+		secs, parseErr := parseDurationToSeconds(raw)
+		if parseErr != nil {
+			return fmt.Errorf("--auto-pause %q: %w", raw, parseErr)
+		}
+		autoPauseSecs = &secs
+	}
+
 	if shape == "" {
 		w, werr := runCreateWizard(c, client, wizardSeed{
-			name:    name,
-			rootfs:  rootfs,
-			ingress: ingress,
-			netIDs:  netIDs,
-			sshKeys: sshKeys,
+			name:          name,
+			rootfs:        rootfs,
+			ingress:       ingress,
+			netIDs:        netIDs,
+			sshKeys:       sshKeys,
+			autoPauseSecs: autoPauseSecs,
 		})
 		if werr != nil {
 			return werr
@@ -138,6 +149,9 @@ func runCreate(c *cli.Context) error {
 			sshKeys = w.sshKeys
 		}
 		ingress = ingress || w.ingress
+		if autoPauseSecs == nil {
+			autoPauseSecs = w.autoPauseSecs
+		}
 	}
 
 	req := api.SandboxCreateReq{
@@ -177,12 +191,8 @@ func runCreate(c *cli.Context) error {
 		req.Disks = disks
 	}
 
-	if raw := strings.TrimSpace(c.String("auto-pause")); raw != "" {
-		secs, parseErr := parseDurationToSeconds(raw)
-		if parseErr != nil {
-			return fmt.Errorf("--auto-pause %q: %w", raw, parseErr)
-		}
-		req.AutoPauseAfterSeconds = &secs
+	if autoPauseSecs != nil {
+		req.AutoPauseAfterSeconds = autoPauseSecs
 	}
 
 	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck

@@ -17,22 +17,24 @@ import (
 // wizardSeed lets the caller pre-fill some answers so already-supplied
 // flags aren't asked for again.
 type wizardSeed struct {
-	name    string
-	rootfs  string
-	ingress bool
-	netIDs  []string
-	sshKeys []string // canonicalised key strings (NOT paths)
+	name          string
+	rootfs        string
+	ingress       bool
+	netIDs        []string
+	sshKeys       []string // canonicalised key strings (NOT paths)
+	autoPauseSecs *int     // nil = not supplied via flag
 }
 
 // wizardResult is what runCreateWizard returns when the user finished.
 // nil result = user cancelled (caller exits quietly).
 type wizardResult struct {
-	shape   string
-	name    string
-	rootfs  string
-	ingress bool
-	netIDs  []string
-	sshKeys []string // canonicalised key strings (NOT paths)
+	shape         string
+	name          string
+	rootfs        string
+	ingress       bool
+	netIDs        []string
+	sshKeys       []string // canonicalised key strings (NOT paths)
+	autoPauseSecs *int     // nil = disabled
 }
 
 // runCreateWizard walks the user through shape → name → rootfs → ingress
@@ -50,11 +52,12 @@ func runCreateWizard(c *cli.Context, client *api.SandboxClient, seed wizardSeed)
 		return nil, fmt.Errorf("please choose a size with --shape\n\n  To see the options, run:\n    createos sandbox shapes")
 	}
 	out := &wizardResult{
-		name:    seed.name,
-		rootfs:  seed.rootfs,
-		ingress: seed.ingress,
-		netIDs:  append([]string{}, seed.netIDs...),
-		sshKeys: append([]string{}, seed.sshKeys...),
+		name:          seed.name,
+		rootfs:        seed.rootfs,
+		ingress:       seed.ingress,
+		netIDs:        append([]string{}, seed.netIDs...),
+		sshKeys:       append([]string{}, seed.sshKeys...),
+		autoPauseSecs: seed.autoPauseSecs,
 	}
 
 	// ── 1. Shape (required) ─────────────────────────────────────────
@@ -122,6 +125,16 @@ func runCreateWizard(c *cli.Context, client *api.SandboxClient, seed wizardSeed)
 			pterm.Println(pterm.Gray(fmt.Sprintf("  SSH key step skipped (%v).", err)))
 		} else {
 			out.sshKeys = picked
+		}
+	}
+
+	// ── 7. Auto-pause (optional; skip if already supplied via --auto-pause) ──
+	if out.autoPauseSecs == nil {
+		secs, err := wizardPickAutoPause()
+		if err != nil {
+			pterm.Println(pterm.Gray(fmt.Sprintf("  Auto-pause step skipped (%v).", err)))
+		} else {
+			out.autoPauseSecs = secs
 		}
 	}
 
@@ -337,6 +350,33 @@ func relToHome(path, home string) string {
 		return "~" + strings.TrimPrefix(path, home)
 	}
 	return path
+}
+
+// wizardPickAutoPause asks whether the sandbox should pause itself when idle.
+// Returns nil (no auto-pause) if the user skips or types nothing.
+func wizardPickAutoPause() (*int, error) {
+	pterm.Println()
+	pterm.NewStyle(pterm.FgCyan).Println("  Auto-pause")
+	pterm.Println(pterm.Gray("  Your sandbox can pause itself automatically when you're not using it,"))
+	pterm.Println(pterm.Gray("  saving resources. It resumes instantly the next time you need it."))
+	pterm.Println(pterm.Gray("  Leave blank to keep it running until you stop it manually."))
+
+	input, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("Pause after how long with no activity? (e.g. 10m, 1h — leave blank to skip)").
+		Show()
+	if err != nil {
+		return nil, err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, nil
+	}
+	secs, err := parseDurationToSeconds(input)
+	if err != nil {
+		pterm.Println(pterm.Gray(fmt.Sprintf("  Didn't recognise %q — skipping auto-pause.", input)))
+		return nil, nil
+	}
+	return &secs, nil
 }
 
 // stringSliceCleanup trims and drops empty entries — pulled out of
