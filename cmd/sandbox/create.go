@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -74,6 +75,10 @@ Examples:
 			&cli.StringSliceFlag{
 				Name:  "disk",
 				Usage: "S3 disk to mount at creation (repeatable): <name|id>:/mount/path",
+			},
+			&cli.StringFlag{
+				Name:  "auto-pause",
+				Usage: "Pause the sandbox automatically after this long with no activity — e.g. 10m, 1h, 30m. Leave empty to keep it running until you stop it.",
 			},
 		},
 		Action: runCreate,
@@ -170,6 +175,14 @@ func runCreate(c *cli.Context) error {
 			return derr
 		}
 		req.Disks = disks
+	}
+
+	if raw := strings.TrimSpace(c.String("auto-pause")); raw != "" {
+		secs, parseErr := parseDurationToSeconds(raw)
+		if parseErr != nil {
+			return fmt.Errorf("--auto-pause %q: %w", raw, parseErr)
+		}
+		req.AutoPauseAfterSeconds = &secs
 	}
 
 	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck
@@ -280,4 +293,34 @@ func printCreateResult(resp *api.SandboxCreateResp) {
 		fmt.Printf("    %s\n", resp.IngressURLTemplate)
 		pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
 	}
+
+	if resp.AutoPauseAfterSeconds != nil {
+		d := time.Duration(*resp.AutoPauseAfterSeconds) * time.Second
+		pterm.Println(pterm.Gray(fmt.Sprintf("  Will pause automatically after %s with no activity.", formatDuration(d))))
+	}
+}
+
+// parseDurationToSeconds parses human durations like "10m", "1h", "30m" into
+// seconds. Returns an error for values outside 60–86400.
+func parseDurationToSeconds(s string) (int, error) {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("use a duration like 10m, 1h, or 30m")
+	}
+	secs := int(d.Seconds())
+	if secs < 60 || secs > 86400 {
+		return 0, fmt.Errorf("must be between 1 minute (1m) and 24 hours (24h)")
+	}
+	return secs, nil
+}
+
+// formatDuration renders a duration in the most readable unit (e.g. "10m", "1h").
+func formatDuration(d time.Duration) string {
+	if d >= time.Hour && d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	if d >= time.Minute && d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return d.String()
 }

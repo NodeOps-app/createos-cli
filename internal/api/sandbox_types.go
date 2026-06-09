@@ -12,16 +12,17 @@ import "time"
 // SandboxCreateReq is the body of POST /v1/sandboxes.
 // `host_id` is deliberately absent — pinning was removed from the API.
 type SandboxCreateReq struct {
-	Name           string                 `json:"name,omitempty"`
-	Shape          string                 `json:"shape"`
-	Rootfs         string                 `json:"rootfs,omitempty"`
-	DiskMib        int64                  `json:"disk_mib,omitempty"`
-	SSHPubkeys     []string               `json:"ssh_pubkeys,omitempty"`
-	Egress         []string               `json:"egress,omitempty"`
-	Envs           map[string]string      `json:"envs,omitempty"`
-	IngressEnabled bool                   `json:"ingress_enabled,omitempty"`
-	Networks       []SandboxNetworkAttach `json:"networks,omitempty"`
-	Disks          []SandboxDiskAttach    `json:"disks,omitempty"`
+	Name                  string                 `json:"name,omitempty"`
+	Shape                 string                 `json:"shape"`
+	Rootfs                string                 `json:"rootfs,omitempty"`
+	DiskMib               int64                  `json:"disk_mib,omitempty"`
+	SSHPubkeys            []string               `json:"ssh_pubkeys,omitempty"`
+	Egress                []string               `json:"egress,omitempty"`
+	Envs                  map[string]string      `json:"envs,omitempty"`
+	IngressEnabled        bool                   `json:"ingress_enabled,omitempty"`
+	Networks              []SandboxNetworkAttach `json:"networks,omitempty"`
+	Disks                 []SandboxDiskAttach    `json:"disks,omitempty"`
+	AutoPauseAfterSeconds *int                   `json:"auto_pause_after_seconds,omitempty"`
 }
 
 // SandboxNetworkAttach binds a sandbox to a private network at create time.
@@ -85,18 +86,19 @@ type SandboxForkReq struct {
 // SandboxCreateResp is the response body for POST /v1/sandboxes.
 // `mode` is deliberately absent — it's an internal boot-path detail.
 type SandboxCreateResp struct {
-	ID                  string   `json:"id"`
-	Name                *string  `json:"name,omitempty"`
-	IP                  string   `json:"ip"`
-	Shape               string   `json:"shape"`
-	Rootfs              *string  `json:"rootfs,omitempty"`
-	VCPU                int      `json:"vcpu"`
-	MemMib              int      `json:"mem_mib"`
-	DiskMib             int64    `json:"disk_mib"`
-	SpawnMs             float64  `json:"spawn_ms,omitempty"`
-	Egress              []string `json:"egress,omitempty"`
-	BandwidthQuotaBytes int64    `json:"bandwidth_quota_bytes,omitempty"`
-	IngressURLTemplate  string   `json:"ingress_url_template,omitempty"`
+	ID                    string   `json:"id"`
+	Name                  *string  `json:"name,omitempty"`
+	IP                    string   `json:"ip"`
+	Shape                 string   `json:"shape"`
+	Rootfs                *string  `json:"rootfs,omitempty"`
+	VCPU                  int      `json:"vcpu"`
+	MemMib                int      `json:"mem_mib"`
+	DiskMib               int64    `json:"disk_mib"`
+	SpawnMs               float64  `json:"spawn_ms,omitempty"`
+	Egress                []string `json:"egress,omitempty"`
+	BandwidthQuotaBytes   int64    `json:"bandwidth_quota_bytes,omitempty"`
+	IngressURLTemplate    string   `json:"ingress_url_template,omitempty"`
+	AutoPauseAfterSeconds *int     `json:"auto_pause_after_seconds,omitempty"`
 }
 
 // SandboxView is the projection returned by GET /v1/sandboxes and
@@ -126,6 +128,7 @@ type SandboxView struct {
 	PausedAt              *time.Time `json:"paused_at,omitempty"`
 	LastResumedAt         *time.Time `json:"last_resumed_at,omitempty"`
 	ForkedFrom            *string    `json:"forked_from,omitempty"`
+	AutoPauseAfterSeconds *int       `json:"auto_pause_after_seconds,omitempty"`
 }
 
 // ── List shape ────────────────────────────────────────────────────

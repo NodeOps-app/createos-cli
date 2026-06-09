@@ -3,6 +3,7 @@ package sandbox
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -37,6 +38,10 @@ func newEditCommand() *cli.Command {
 				Name:  "add-ssh-key",
 				Usage: "Path to a public-key file to add (repeatable)",
 			},
+			&cli.StringFlag{
+				Name:  "auto-pause",
+				Usage: "Pause automatically after this long with no activity (e.g. 10m, 1h). Use `off` to disable.",
+			},
 		},
 		Action: runEdit,
 	}
@@ -51,8 +56,8 @@ func runEdit(c *cli.Context) error {
 	// urfave/cli v2 stops flag parsing at the first positional, so
 	// `edit my-sb --ingress on` loses `--ingress`. Re-scan args by hand
 	// so users can put flags anywhere.
-	ref, ingressFlag, sshFiles := parseEditArgs(c)
-	hasFlagChanges := ingressFlag != "" || len(sshFiles) > 0
+	ref, ingressFlag, autoPauseFlag, sshFiles := parseEditArgs(c)
+	hasFlagChanges := ingressFlag != "" || autoPauseFlag != "" || len(sshFiles) > 0
 
 	// Resolve the sandbox first — either from positional or via picker.
 	id, label, err := resolveTarget(c, client, ref)
@@ -73,6 +78,11 @@ func runEdit(c *cli.Context) error {
 				return err
 			}
 		}
+		if autoPauseFlag != "" {
+			if err := applyAutoPauseFlag(c, client, label, id, autoPauseFlag); err != nil {
+				return err
+			}
+		}
 		if len(sshFiles) > 0 {
 			if err := applyAddSSHKeys(c, client, label, id, sshFiles); err != nil {
 				return err
@@ -83,7 +93,7 @@ func runEdit(c *cli.Context) error {
 
 	// No flags — interactive only.
 	if !terminal.IsInteractive() {
-		return fmt.Errorf("nothing to do — pass --ingress or --add-ssh-key, or run again on a terminal for an interactive menu")
+		return fmt.Errorf("nothing to do — pass --ingress, --auto-pause, or --add-ssh-key, or run again on a terminal for an interactive menu")
 	}
 	return runEditMenu(c, client, label, id)
 }
@@ -93,10 +103,9 @@ func runEdit(c *cli.Context) error {
 // as the sandbox ref, and recognises `--ingress <value>`,
 // `--ingress=<value>`, `--add-ssh-key <path>`, `--add-ssh-key=<path>`
 // in any position.
-func parseEditArgs(c *cli.Context) (ref, ingressVal string, sshPaths []string) {
-	// Start with whatever urfave/cli already parsed (covers
-	// flags-before-positional). Use as defaults.
+func parseEditArgs(c *cli.Context) (ref, ingressVal, autoPauseVal string, sshPaths []string) {
 	ingressVal = strings.ToLower(strings.TrimSpace(c.String("ingress")))
+	autoPauseVal = strings.TrimSpace(c.String("auto-pause"))
 	sshPaths = append([]string{}, c.StringSlice("add-ssh-key")...)
 
 	args := c.Args().Slice()
@@ -110,6 +119,13 @@ func parseEditArgs(c *cli.Context) (ref, ingressVal string, sshPaths []string) {
 			}
 		case strings.HasPrefix(a, "--ingress="):
 			ingressVal = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(a, "--ingress=")))
+		case a == "--auto-pause":
+			if i+1 < len(args) {
+				autoPauseVal = strings.TrimSpace(args[i+1])
+				i++
+			}
+		case strings.HasPrefix(a, "--auto-pause="):
+			autoPauseVal = strings.TrimSpace(strings.TrimPrefix(a, "--auto-pause="))
 		case a == "--add-ssh-key":
 			if i+1 < len(args) {
 				sshPaths = append(sshPaths, strings.TrimSpace(args[i+1]))
@@ -123,7 +139,7 @@ func parseEditArgs(c *cli.Context) (ref, ingressVal string, sshPaths []string) {
 			}
 		}
 	}
-	return ref, ingressVal, sshPaths
+	return ref, ingressVal, autoPauseVal, sshPaths
 }
 
 // resolveTarget figures out which sandbox the user wants to edit. With
@@ -156,7 +172,11 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 
 	fmt.Println()
 	pterm.NewStyle(pterm.FgCyan, pterm.Bold).Printfln("  Editing %s", refLabel(label, id))
-	header := fmt.Sprintf("  Public URL: %s   SSH keys: %d", onOff(sb.IngressEnabled), len(sb.SSHPubkeys))
+	autoPauseLabel := "off"
+	if sb.AutoPauseAfterSeconds != nil {
+		autoPauseLabel = "pauses after " + formatDuration(time.Duration(*sb.AutoPauseAfterSeconds)*time.Second) + " idle"
+	}
+	header := fmt.Sprintf("  Public URL: %s   SSH keys: %d   Auto-pause: %s", onOff(sb.IngressEnabled), len(sb.SSHPubkeys), autoPauseLabel)
 	if bw != nil {
 		bwLine := fmt.Sprintf("%s used of %s", humanBytes(bw.UsedBytes), humanBytes(bw.QuotaBytes))
 		if bw.Capped {
@@ -171,11 +191,12 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 		optIngress   = "Toggle public URL"
 		optSSH       = "Add an SSH key"
 		optBandwidth = "Top up bandwidth"
+		optAutoPause = "Auto-pause when idle"
 		optDone      = "Done"
 	)
 	for {
 		choice, err := pterm.DefaultInteractiveSelect.
-			WithOptions([]string{optIngress, optSSH, optBandwidth, optDone}).
+			WithOptions([]string{optIngress, optSSH, optBandwidth, optAutoPause, optDone}).
 			WithDefaultText("What would you like to change?").
 			Show()
 		if err != nil {
@@ -258,6 +279,28 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 				humanBytes(bytes),
 				humanBytes(updated.UsedBytes), humanBytes(updated.QuotaBytes),
 				humanBytes(updated.RemainingBytes))
+		case optAutoPause:
+			current := "off"
+			if sb.AutoPauseAfterSeconds != nil {
+				current = formatDuration(time.Duration(*sb.AutoPauseAfterSeconds) * time.Second)
+			}
+			input, err := pterm.DefaultInteractiveTextInput.
+				WithDefaultText(fmt.Sprintf("Pause after how long with no activity? (current: %s — e.g. 10m, 1h, or 'off')", current)).
+				Show()
+			if err != nil {
+				return fmt.Errorf("could not read your input: %w", err)
+			}
+			input = strings.TrimSpace(input)
+			if input == "" {
+				continue
+			}
+			if err := applyAutoPauseFlag(c, client, label, id, input); err != nil {
+				pterm.Error.Printfln("%v", err)
+				continue
+			}
+			if refreshed, err := client.GetSandbox(c.Context, id); err == nil {
+				sb = refreshed
+			}
 		case optDone:
 			return nil
 		}
@@ -305,6 +348,32 @@ func applyAddSSHKeys(c *cli.Context, client *api.SandboxClient, label, id string
 		return err
 	}
 	pterm.Success.Printfln("Added %d SSH key(s) to %s — total now %d", len(keys), refLabel(label, id), count)
+	return nil
+}
+
+// applyAutoPauseFlag handles --auto-pause <value>: "off" disables, a duration enables.
+func applyAutoPauseFlag(c *cli.Context, client *api.SandboxClient, label, id, value string) error {
+	var seconds *int
+	switch strings.ToLower(value) {
+	case "off", "disable", "false", "no":
+		// leave seconds nil → disable
+	default:
+		secs, err := parseDurationToSeconds(value)
+		if err != nil {
+			return fmt.Errorf("--auto-pause %q: %w", value, err)
+		}
+		seconds = &secs
+	}
+	updated, err := client.SetAutoPause(c.Context, id, seconds)
+	if err != nil {
+		return err
+	}
+	if updated.AutoPauseAfterSeconds != nil {
+		d := time.Duration(*updated.AutoPauseAfterSeconds) * time.Second
+		pterm.Success.Printfln("Auto-pause set to %s for %s", formatDuration(d), refLabel(label, id))
+	} else {
+		pterm.Success.Printfln("Auto-pause turned off for %s", refLabel(label, id))
+	}
 	return nil
 }
 

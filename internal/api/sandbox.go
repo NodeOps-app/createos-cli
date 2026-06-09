@@ -220,6 +220,31 @@ func (c *SandboxClient) SetSandboxIngress(ctx context.Context, id string, enable
 	return &envelope.Data, nil
 }
 
+// SetAutoPause sets or clears the idle-pause timeout on a sandbox.
+// Pass nil to turn auto-pause off; pass a pointer to seconds (60–86400) to enable.
+func (c *SandboxClient) SetAutoPause(ctx context.Context, id string, seconds *int) (*SandboxView, error) {
+	var body map[string]any
+	if seconds == nil {
+		body = map[string]any{"disable_auto_pause": true}
+	} else {
+		body = map[string]any{"auto_pause_after_seconds": *seconds}
+	}
+	var envelope Response[SandboxView]
+	resp, err := c.Client.R().
+		SetContext(ctx).
+		SetPathParam("id", id).
+		SetBody(body).
+		SetResult(&envelope).
+		Patch("/v1/sandboxes/{id}")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return &envelope.Data, nil
+}
+
 // ── Disks ─────────────────────────────────────────────────────────
 
 // CreateDisk registers an S3 bucket as a named disk the caller can
