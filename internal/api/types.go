@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 )
 
 // APIError is a structured error returned by the CreateOS API.
@@ -31,16 +33,39 @@ func (e *APIError) Hint() string {
 }
 
 // ParseAPIError extracts a human-readable message from an API error response body.
+//
+// JSend "fail" bodies can shape `data` three different ways:
+//
+//	"data": "shape is required"                          // plain string
+//	"data": {"shape": "shape \"x\" not allowed..."}      // field-error object
+//	"data": {"auth": "invalid api key"}                  // single-field gate
+//
+// We try each in order and join field-error values into one human line so
+// the user actually sees what's wrong instead of "request failed with status 403".
 func ParseAPIError(statusCode int, body []byte) *APIError {
 	var envelope struct {
 		Data json.RawMessage `json:"data"`
 	}
 	msg := ""
-	if err := json.Unmarshal(body, &envelope); err == nil {
-		// data may be a plain string or an object
+	if err := json.Unmarshal(body, &envelope); err == nil && len(envelope.Data) > 0 {
+		// 1. plain string
 		var s string
-		if err := json.Unmarshal(envelope.Data, &s); err == nil {
+		if err := json.Unmarshal(envelope.Data, &s); err == nil && s != "" {
 			msg = s
+		}
+		// 2. field-error map { "field": "msg", ... }
+		if msg == "" {
+			var fields map[string]string
+			if err := json.Unmarshal(envelope.Data, &fields); err == nil && len(fields) > 0 {
+				parts := make([]string, 0, len(fields))
+				for _, v := range fields {
+					if v != "" {
+						parts = append(parts, v)
+					}
+				}
+				sort.Strings(parts)
+				msg = strings.Join(parts, "; ")
+			}
 		}
 	}
 	if msg == "" {
