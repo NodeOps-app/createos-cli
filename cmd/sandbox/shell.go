@@ -455,6 +455,14 @@ func (b *tunnelBridge) close() {
 }
 
 func startTunnelBridge(parent context.Context, c *cli.Context, sandboxID string, remotePort int) (*tunnelBridge, error) {
+	return startTunnelBridgeOn(parent, c, sandboxID, remotePort, 0)
+}
+
+// startTunnelBridgeOn is like startTunnelBridge but binds the local
+// listener to a specific port. localPort=0 means "pick any free port"
+// (matches startTunnelBridge). Used by `dc up --sync` so the mutagen
+// session URL stays stable across `dc up` invocations.
+func startTunnelBridgeOn(parent context.Context, c *cli.Context, sandboxID string, remotePort, localPort int) (*tunnelBridge, error) {
 	ctrlURL := strings.TrimSpace(c.String("sandbox-api-url"))
 	if ctrlURL == "" {
 		ctrlURL = api.DefaultSandboxBaseURL
@@ -464,7 +472,8 @@ func startTunnelBridge(parent context.Context, c *cli.Context, sandboxID string,
 		return nil, err
 	}
 	var lc net.ListenConfig
-	l, err := lc.Listen(parent, "tcp", "127.0.0.1:0")
+	bindAddr := fmt.Sprintf("127.0.0.1:%d", localPort)
+	l, err := lc.Listen(parent, "tcp", bindAddr)
 	if err != nil {
 		return nil, fmt.Errorf("local listen: %w", err)
 	}
