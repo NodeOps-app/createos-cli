@@ -67,7 +67,7 @@ func NewApp() *cli.App {
 				Name:    "sandbox-gateway",
 				Usage:   "SSH gateway address (<host:port>) used by `sandbox shell`",
 				EnvVars: []string{"CREATEOS_SANDBOX_GATEWAY"},
-				Value:   "65.109.104.247:2222",
+				Value:   "gateway.sb.createos.sh:2222",
 			},
 			&cli.StringFlag{
 				Name:    "output",
