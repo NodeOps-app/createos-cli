@@ -288,6 +288,70 @@ Sensitive and noisy files are always excluded: `.env`, `.env.*`, secrets/keys (`
 | `createos vms resize`    | Resize a VM to a different plan |
 | `createos vms terminate` | Permanently destroy a VM        |
 
+### Sandboxes
+
+Sandboxes are fast-booting VMs — isolated environments you can exec into, sync files to, tunnel ports through, and snapshot at will.
+
+| Command                            | Description                                                   |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `createos sandbox create`          | Create a new sandbox                                          |
+| `createos sandbox list`            | List your sandboxes                                           |
+| `createos sandbox get`             | Show details for one sandbox                                  |
+| `createos sandbox edit`            | Change a sandbox's settings (public URL, SSH keys, auto-pause)|
+| `createos sandbox pause`           | Snapshot a running sandbox so you can resume it later         |
+| `createos sandbox resume`          | Bring a paused sandbox back to life                           |
+| `createos sandbox fork`            | Clone a paused sandbox into a brand-new one                   |
+| `createos sandbox rm`              | Delete one or more sandboxes                                  |
+| `createos sandbox exec`            | Run a command inside a sandbox                                |
+| `createos sandbox shell`           | Open an interactive shell inside a sandbox                    |
+| `createos sandbox sync`            | Two-way file sync between your laptop and a sandbox           |
+| `createos sandbox push`            | Copy a local file into a sandbox                              |
+| `createos sandbox pull`            | Copy a file out of a sandbox                                  |
+| `createos sandbox tunnel`          | Forward a local port to a port inside a sandbox               |
+| `createos sandbox shapes`          | List available sandbox sizes (vCPU / RAM / disk)              |
+| `createos sandbox rootfs`          | List built-in OS images you can boot a sandbox from           |
+
+**`sandbox create` flags:**
+
+| Flag            | Description                                                                      |
+| --------------- | -------------------------------------------------------------------------------- |
+| `--shape`       | Size of the sandbox (see `createos sandbox shapes`)                              |
+| `--name`        | Friendly name for the sandbox                                                    |
+| `--rootfs`      | Base image or custom template to start from                                      |
+| `--disk-mib`    | Disk size in MiB (defaults to the shape's standard disk)                         |
+| `--ssh-key`     | Path to an SSH public key file (repeatable)                                      |
+| `--env`         | Environment variable for every exec (repeatable): `KEY=VALUE`                    |
+| `--egress`      | Allowed outbound host/IP (repeatable). Empty = unrestricted.                     |
+| `--network`     | Private network to join at creation (repeatable): `<name\|id>`                  |
+| `--disk`        | S3 disk to mount at creation (repeatable): `<name\|id>:/mount/path`             |
+| `--ingress`     | Give the sandbox a public HTTPS URL                                               |
+| `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
+
+**Sandbox sub-resource commands:**
+
+| Command                                        | Description                                              |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `createos sandbox disk create`                 | Register an S3 bucket as a mountable disk                |
+| `createos sandbox disk ls`                     | List your disks                                          |
+| `createos sandbox disk show <name\|id>`        | Show details for one disk                                |
+| `createos sandbox disk attach <sb> <disk> <path>` | Mount a disk into a running sandbox                   |
+| `createos sandbox disk detach <sb> <disk> <path>` | Unmount a disk from a sandbox                         |
+| `createos sandbox disk rm <name\|id>`          | Delete a disk (auto-detaches first)                      |
+| `createos sandbox network create <name>`       | Create a private network                                 |
+| `createos sandbox network ls`                  | List your networks                                       |
+| `createos sandbox network show <name\|id>`     | Show a network and its attached sandboxes                |
+| `createos sandbox network attach <sb> <net>`   | Add a sandbox to a network                               |
+| `createos sandbox network detach <sb> <net>`   | Remove a sandbox from a network                          |
+| `createos sandbox network rm <name\|id>`       | Delete a network (auto-detaches first)                   |
+| `createos sandbox firewall show <sandbox>`     | Show what the sandbox is allowed to reach                |
+| `createos sandbox firewall set <sb> <host…>`   | Replace the outbound allowlist                           |
+| `createos sandbox firewall clear <sandbox>`    | Open the firewall — allow all outbound traffic           |
+| `createos sandbox template submit <name>`      | Build a Dockerfile into a sandbox image                  |
+| `createos sandbox template ls`                 | List your custom sandbox images                          |
+| `createos sandbox template show <name\|id>`    | Show details for one image                               |
+| `createos sandbox template logs <name\|id>`    | Show (or follow) the build output for an image           |
+| `createos sandbox template rm <name\|id>`      | Delete a custom image                                    |
+
 ### Skills
 
 | Command                     | Description                |
@@ -407,6 +471,58 @@ createos cronjobs update --project <id> --cronjob <id> \
 createos cronjobs get --project <id> --cronjob <id>
 createos cronjobs delete --project <id> --cronjob <id> --force
 
+# Sandboxes
+createos sandbox create --shape s-1vcpu-1gb --name my-box --ssh-key ~/.ssh/id_ed25519.pub
+createos sandbox create --shape s-1vcpu-512mb --ingress --auto-pause 1h
+createos sandbox list
+createos sandbox list --all
+createos sandbox list --status paused --quiet | xargs createos sandbox rm --force
+createos sandbox get <id>
+createos sandbox exec my-box -- uname -a
+createos sandbox exec my-box --stream -- pip install requests
+createos sandbox shell my-box
+createos sandbox shell my-box --ssh
+createos sandbox push my-box ./script.py /root/script.py
+createos sandbox pull my-box /root/output.csv ./output.csv
+createos sandbox tunnel my-box --local 8080 --remote 8000
+createos sandbox pause my-box
+createos sandbox resume my-box
+createos sandbox fork my-box
+createos sandbox edit my-box --ingress on
+createos sandbox edit my-box --auto-pause 30m
+createos sandbox rm my-box --force
+createos sandbox shapes
+createos sandbox rootfs
+
+# Sandbox sync
+createos sandbox sync my-box --local ~/work/project --remote /root/work
+
+# Sandbox disks
+createos sandbox disk create my-data --bucket my-bucket --endpoint https://s3.amazonaws.com \
+  --access-key AKID... --secret-key ...
+createos sandbox disk ls
+createos sandbox disk attach my-box my-data /mnt/data
+createos sandbox disk detach my-box my-data /mnt/data --yes
+createos sandbox disk rm my-data --yes
+
+# Sandbox networks
+createos sandbox network create my-net
+createos sandbox network ls
+createos sandbox network attach my-box my-net
+createos sandbox network detach my-box my-net --yes
+createos sandbox network rm my-net --yes
+
+# Sandbox firewall
+createos sandbox firewall show my-box
+createos sandbox firewall set my-box pypi.org github.com
+createos sandbox firewall clear my-box --yes
+
+# Sandbox templates (custom images)
+createos sandbox template submit my-rails -f Dockerfile
+createos sandbox template ls
+createos sandbox template logs my-rails --follow
+createos sandbox template rm my-rails --yes
+
 # Templates
 createos templates use --template <id> --yes
 
@@ -455,11 +571,13 @@ createos environments list --project <id> -o json
 
 ## Options
 
-| Flag                  | Description                                                          |
-| --------------------- | -------------------------------------------------------------------- |
-| `--output, -o <fmt>`  | Output format: `json` or `table` (default). Auto-json when piped.   |
-| `--debug, -d`         | Print HTTP request/response details (token is masked)                |
-| `--api-url`           | Override the API base URL                                            |
+| Flag                     | Description                                                          |
+| ------------------------ | -------------------------------------------------------------------- |
+| `--output, -o <fmt>`     | Output format: `json` or `table` (default). Auto-json when piped.   |
+| `--debug, -d`            | Print HTTP request/response details (token is masked)                |
+| `--api-url`              | Override the API base URL                                            |
+| `--sandbox-api-url`      | Override the sandbox (fc-spawn) base URL                             |
+| `--sandbox-gateway`      | SSH gateway address (`host:port`) used by `sandbox shell --ssh`      |
 
 ## Security
 
