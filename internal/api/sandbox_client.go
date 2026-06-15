@@ -8,7 +8,7 @@ import (
 // sandbox surface lives on a different host from the main CreateOS API
 // (api-createos.nodeops.network); these two clients are wired
 // side-by-side under app.Metadata.
-const DefaultSandboxBaseURL = "https://fc-spawn.bhautik.in"
+const DefaultSandboxBaseURL = "https://api.sb.createos.sh"
 
 // SandboxClient wraps a resty.Client configured for the fc-spawn API.
 // Mirrors APIClient but targets the sandbox base URL and uses
@@ -72,4 +72,4 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refreshe
 }
 
 // SandboxClientKey is the cli.Context metadata key for the sandbox client.
-const SandboxClientKey = "sandbox_client"
+const SandboxClientKey = "sandbox_client" // #nosec G101 -- context metadata key, not a credential  // pragma: allowlist secret
