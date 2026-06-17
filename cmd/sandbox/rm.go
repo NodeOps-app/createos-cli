@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -101,31 +102,54 @@ func runRm(c *cli.Context) error {
 		}
 	}
 
+	type deletedSandbox struct {
+		ID     string `json:"id"`
+		Ref    string `json:"ref,omitempty"`
+		Status string `json:"status"`
+		Error  string `json:"error,omitempty"`
+	}
+
 	// Resolve any names to IDs before deleting. Resolution failures
 	// are reported per-ref so a typo in one name doesn't kill the rest
 	// of the batch.
 	failed := 0
+	results := make([]deletedSandbox, 0, len(ids))
 	for _, ref := range ids {
 		id, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
+			if !output.IsJSON(c) {
+				pterm.Error.Printfln("%s: %v", ref, err)
+			}
+			results = append(results, deletedSandbox{ID: ref, Status: "error", Error: err.Error()})
 			failed++
 			continue
 		}
 		if err := client.DestroySandbox(c.Context, id); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
+			if !output.IsJSON(c) {
+				pterm.Error.Printfln("%s: %v", ref, err)
+			}
+			results = append(results, deletedSandbox{ID: id, Ref: ref, Status: "error", Error: err.Error()})
 			failed++
 			continue
 		}
+		results = append(results, deletedSandbox{ID: id, Ref: func() string {
+			if id != ref {
+				return ref
+			}
+			return ""
+		}(), Status: "destroyed"})
 		// Echo the friendly ref the user typed; if it was already an
 		// id this reads the same, if it was a name they see what was
 		// actually removed.
-		if id != ref {
-			pterm.Success.Printfln("Deleted %s (%s)", ref, id)
-		} else {
-			pterm.Success.Printfln("Deleted %s", id)
+		if !output.IsJSON(c) {
+			if id != ref {
+				pterm.Success.Printfln("Deleted %s (%s)", ref, id)
+			} else {
+				pterm.Success.Printfln("Deleted %s", id)
+			}
 		}
 	}
+	output.Render(c, results, func() {})
 	if failed > 0 {
 		// Non-zero exit so scripts can tell something went wrong.
 		os.Exit(1)

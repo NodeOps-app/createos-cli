@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -87,6 +88,13 @@ func runEdit(c *cli.Context) error {
 			if err := applyAddSSHKeys(c, client, label, id, sshFiles); err != nil {
 				return err
 			}
+		}
+		if output.IsJSON(c) {
+			finalView, err := client.GetSandbox(c.Context, id)
+			if err != nil {
+				return err
+			}
+			output.Render(c, finalView, func() {})
 		}
 		return nil
 	}
@@ -322,14 +330,16 @@ func applyIngressFlag(c *cli.Context, client *api.SandboxClient, label, id, valu
 	if err != nil {
 		return err
 	}
-	if target {
-		pterm.Success.Printfln("Public URL is on for %s", refLabel(label, id))
-		if updated.IngressURLTemplate != "" {
-			fmt.Printf("    %s\n", updated.IngressURLTemplate)
-			pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
+	if !output.IsJSON(c) {
+		if target {
+			pterm.Success.Printfln("Public URL is on for %s", refLabel(label, id))
+			if updated.IngressURLTemplate != "" {
+				fmt.Printf("    %s\n", updated.IngressURLTemplate)
+				pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
+			}
+		} else {
+			pterm.Success.Printfln("Public URL is off for %s", refLabel(label, id))
 		}
-	} else {
-		pterm.Success.Printfln("Public URL is off for %s", refLabel(label, id))
 	}
 	return nil
 }
@@ -347,7 +357,9 @@ func applyAddSSHKeys(c *cli.Context, client *api.SandboxClient, label, id string
 	if err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Added %d SSH key(s) to %s — total now %d", len(keys), refLabel(label, id), count)
+	if !output.IsJSON(c) {
+		pterm.Success.Printfln("Added %d SSH key(s) to %s — total now %d", len(keys), refLabel(label, id), count)
+	}
 	return nil
 }
 
@@ -368,11 +380,13 @@ func applyAutoPauseFlag(c *cli.Context, client *api.SandboxClient, label, id, va
 	if err != nil {
 		return err
 	}
-	if updated.AutoPauseAfterSeconds != nil {
-		d := time.Duration(*updated.AutoPauseAfterSeconds) * time.Second
-		pterm.Success.Printfln("Auto-pause set to %s for %s", formatDuration(d), refLabel(label, id))
-	} else {
-		pterm.Success.Printfln("Auto-pause turned off for %s", refLabel(label, id))
+	if !output.IsJSON(c) {
+		if updated.AutoPauseAfterSeconds != nil {
+			d := time.Duration(*updated.AutoPauseAfterSeconds) * time.Second
+			pterm.Success.Printfln("Auto-pause set to %s for %s", formatDuration(d), refLabel(label, id))
+		} else {
+			pterm.Success.Printfln("Auto-pause turned off for %s", refLabel(label, id))
+		}
 	}
 	return nil
 }

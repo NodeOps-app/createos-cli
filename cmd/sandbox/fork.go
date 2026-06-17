@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -80,6 +81,27 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		req.Egress = egress
 	}
 
+	target := "running"
+	if req.StartPaused {
+		target = "paused"
+	}
+
+	if output.IsJSON(c) {
+		view, err := client.ForkSandbox(c.Context, srcID, req)
+		if err != nil {
+			return err
+		}
+		sb, err := waitForStatus(c.Context, client, view.ID, target)
+		if err != nil {
+			return err
+		}
+		if sb.Status != target {
+			return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", sb.ID, sb.Status, sb.ID)
+		}
+		output.Render(c, sb, func() {})
+		return nil
+	}
+
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Forking %s…", refLabel(ref, srcID))) //nolint:errcheck
 	view, err := client.ForkSandbox(c.Context, srcID, req)
 	if err != nil {
@@ -87,10 +109,6 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		return err
 	}
 
-	target := "running"
-	if req.StartPaused {
-		target = "paused"
-	}
 	sb, err := waitForStatus(c.Context, client, view.ID, target)
 	if err != nil {
 		spinner.Fail("Fork did not finish")

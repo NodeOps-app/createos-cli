@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -53,6 +54,21 @@ func runPause(c *cli.Context) error {
 }
 
 func runPauseByID(c *cli.Context, client *api.SandboxClient, ref, id string) error {
+	if output.IsJSON(c) {
+		if _, err := client.PauseSandbox(c.Context, id); err != nil {
+			return err
+		}
+		sb, err := waitForStatus(c.Context, client, id, "paused")
+		if err != nil {
+			return err
+		}
+		if sb.Status != "paused" {
+			return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", refLabel(ref, id), sb.Status, id)
+		}
+		output.Render(c, sb, func() {})
+		return nil
+	}
+
 	if _, err := client.PauseSandbox(c.Context, id); err != nil {
 		return err
 	}
