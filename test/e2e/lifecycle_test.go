@@ -18,7 +18,7 @@ func TestLifecycle(t *testing.T) {
 	// Step 2: Get — verify the sandbox is reachable and fields match.
 	getCtx, getCancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer getCancel()
-	getOut, getErr, getCode := runCLICtx(getCtx, "sandbox", "get", "-o", "json", sb.ID)
+	getOut, getErr, getCode := runCLICtx(getCtx, "sandbox", "get", sb.ID)
 	if getCode != 0 {
 		t.Fatalf("sandbox get failed (exit %d)\nstdout: %s\nstderr: %s", getCode, getOut, getErr)
 	}
@@ -36,7 +36,7 @@ func TestLifecycle(t *testing.T) {
 	// Step 3: Edit — set auto-pause to 30m (1800 seconds).
 	editCtx, editCancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer editCancel()
-	editOut, editErr, editCode := runCLICtx(editCtx, "sandbox", "edit", sb.ID, "--auto-pause", "30m", "-o", "json")
+	editOut, editErr, editCode := runCLICtx(editCtx, "sandbox", "edit", sb.ID, "--auto-pause", "30m")
 	if editCode != 0 {
 		t.Fatalf("sandbox edit failed (exit %d)\nstdout: %s\nstderr: %s", editCode, editOut, editErr)
 	}
@@ -51,7 +51,7 @@ func TestLifecycle(t *testing.T) {
 	// Step 4: Pause — command polls internally and renders JSON when not on TTY.
 	pauseCtx, pauseCancel := context.WithTimeout(context.Background(), createTimeout)
 	defer pauseCancel()
-	pauseOut, pauseErr, pauseCode := runCLICtx(pauseCtx, "sandbox", "pause", sb.ID, "-o", "json")
+	pauseOut, pauseErr, pauseCode := runCLICtx(pauseCtx, "sandbox", "pause", sb.ID)
 	if pauseCode != 0 {
 		t.Fatalf("sandbox pause failed (exit %d)\nstdout: %s\nstderr: %s", pauseCode, pauseOut, pauseErr)
 	}
@@ -63,7 +63,7 @@ func TestLifecycle(t *testing.T) {
 	// Step 5: Resume — command polls internally and renders JSON when not on TTY.
 	resumeCtx, resumeCancel := context.WithTimeout(context.Background(), createTimeout)
 	defer resumeCancel()
-	resumeOut, resumeErr, resumeCode := runCLICtx(resumeCtx, "sandbox", "resume", sb.ID, "-o", "json")
+	resumeOut, resumeErr, resumeCode := runCLICtx(resumeCtx, "sandbox", "resume", sb.ID)
 	if resumeCode != 0 {
 		t.Fatalf("sandbox resume failed (exit %d)\nstdout: %s\nstderr: %s", resumeCode, resumeOut, resumeErr)
 	}
@@ -78,7 +78,7 @@ func TestLifecycle(t *testing.T) {
 	_ = forkName // no --name flag; kept for tracing only
 	forkCtx, forkCancel := context.WithTimeout(context.Background(), createTimeout)
 	defer forkCancel()
-	forkOut, forkErr, forkCode := runCLICtx(forkCtx, "sandbox", "fork", sb.ID, "-o", "json")
+	forkOut, forkErr, forkCode := runCLICtx(forkCtx, "sandbox", "fork", sb.ID)
 	if forkCode != 0 {
 		t.Fatalf("sandbox fork failed (exit %d)\nstdout: %s\nstderr: %s", forkCode, forkOut, forkErr)
 	}
@@ -103,7 +103,7 @@ func TestLifecycle(t *testing.T) {
 	// Verify removal: get should fail with a non-zero exit (404).
 	verCtx, verCancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer verCancel()
-	_, _, verCode := runCLICtx(verCtx, "sandbox", "get", "-o", "json", sb.ID)
+	_, _, verCode := runCLICtx(verCtx, "sandbox", "get", sb.ID)
 	if verCode == 0 {
 		t.Errorf("expected non-zero exit after rm, but sandbox get succeeded for %q", sb.ID)
 	}

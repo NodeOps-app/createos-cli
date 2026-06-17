@@ -19,7 +19,7 @@ type ShapeView struct {
 // TestShapes asserts that `sandbox shapes -o json` returns a non-empty list
 // of shapes with expected fields populated.
 func TestShapes(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "shapes", "-o", "json")
+	stdout, stderr, code := runCLI("sandbox", "shapes")
 	if code != 0 {
 		t.Fatalf("sandbox shapes exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -44,7 +44,7 @@ func TestShapes(t *testing.T) {
 // TestCatalog asserts that `sandbox catalog -o json` exits 0 and returns a
 // non-empty JSON array where the first item has a recognisable key.
 func TestCatalog(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "catalog", "-o", "json")
+	stdout, stderr, code := runCLI("sandbox", "catalog")
 	if code != 0 {
 		t.Fatalf("sandbox catalog exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -68,7 +68,7 @@ func TestCatalog(t *testing.T) {
 // TestRootfs asserts that `sandbox rootfs -o json` exits 0 and returns a
 // non-nil, non-empty JSON value.
 func TestRootfs(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "rootfs", "-o", "json")
+	stdout, stderr, code := runCLI("sandbox", "rootfs")
 	if code != 0 {
 		t.Fatalf("sandbox rootfs exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -96,7 +96,7 @@ func TestRootfs(t *testing.T) {
 // TestTemplateList asserts that `sandbox template list -o json` exits 0 and
 // returns valid JSON (empty or non-empty slice).
 func TestTemplateList(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "template", "list", "-o", "json")
+	stdout, stderr, code := runCLI("sandbox", "template", "list")
 	if code != 0 {
 		t.Fatalf("sandbox template list exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -111,7 +111,7 @@ func TestTemplateList(t *testing.T) {
 // TestList asserts that `sandbox list -o json` exits 0 and returns valid JSON.
 // An empty slice is acceptable since the account may have no sandboxes.
 func TestList(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "list", "-o", "json")
+	stdout, stderr, code := runCLI("sandbox", "list")
 	if code != 0 {
 		t.Fatalf("sandbox list exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -124,7 +124,7 @@ func TestList(t *testing.T) {
 func TestGet(t *testing.T) {
 	sb := newSandbox(t)
 
-	stdout, stderr, code := runCLI("sandbox", "get", "-o", "json", sb.ID)
+	stdout, stderr, code := runCLI("sandbox", "get", sb.ID)
 	if code != 0 {
 		t.Fatalf("sandbox get exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}

@@ -87,7 +87,7 @@ func TestMain(m *testing.M) {
 // with the lowest vcpu+mem_mib sum. Falls back to empty string on any error
 // so create calls get the server's default.
 func discoverSmallestShape() string {
-	stdout, _, code := runCLI("sandbox", "shapes", "-o", "json")
+	stdout, _, code := runCLI("sandbox", "shapes")
 	if code != 0 || strings.TrimSpace(stdout) == "" {
 		return ""
 	}
@@ -115,7 +115,7 @@ func discoverSmallestShape() string {
 
 // presweep deletes any existing sandboxes whose names start with "e2e-".
 func presweep() {
-	stdout, _, code := runCLI("sandbox", "list", "-o", "json", "--all")
+	stdout, _, code := runCLI("sandbox", "list", "--all")
 	if code != 0 || strings.TrimSpace(stdout) == "" {
 		return
 	}
@@ -139,7 +139,7 @@ func presweep() {
 
 // postsweep is deferred in TestMain; best-effort delete of e2e- sandboxes.
 func postsweep() {
-	stdout, _, code := runCLI("sandbox", "list", "-o", "json", "--all")
+	stdout, _, code := runCLI("sandbox", "list", "--all")
 	if code != 0 || strings.TrimSpace(stdout) == "" {
 		return
 	}

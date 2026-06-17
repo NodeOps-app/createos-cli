@@ -141,7 +141,7 @@ func newSandbox(t *testing.T, extraArgs ...string) SandboxView { //nolint:unused
 	safeName := sanitiseName(t.Name())
 	name := fmt.Sprintf("e2e-%s-%s", runID, safeName)
 
-	args := []string{"sandbox", "create", "-o", "json", "--name", name}
+	args := []string{"sandbox", "create", "--name", name}
 	if testShape != "" {
 		args = append(args, "--shape", testShape)
 	}
@@ -178,7 +178,7 @@ func newSandbox(t *testing.T, extraArgs ...string) SandboxView { //nolint:unused
 
 	waitRunning(t, id)
 
-	getOut, getErr, getCode := runCLI("sandbox", "get", "-o", "json", id)
+	getOut, getErr, getCode := runCLI("sandbox", "get", id)
 	if getCode != 0 {
 		t.Fatalf("sandbox get failed after create (exit %d)\nstdout: %s\nstderr: %s", getCode, getOut, getErr)
 	}
@@ -193,7 +193,7 @@ func waitRunning(t *testing.T, id string) { //nolint:unused // called by newSand
 	deadline := time.Now().Add(waitRunningCap)
 	var lastStatus string
 	for time.Now().Before(deadline) {
-		stdout, _, code := runCLI("sandbox", "get", "-o", "json", id)
+		stdout, _, code := runCLI("sandbox", "get", id)
 		if code == 0 {
 			var view struct {
 				Status string `json:"status"`
