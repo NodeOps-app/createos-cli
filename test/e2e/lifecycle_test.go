@@ -4,8 +4,7 @@ package e2e
 
 import (
 	"context"
-	"fmt"
-	"testing"
+"testing"
 )
 
 func TestLifecycle(t *testing.T) {
@@ -60,22 +59,8 @@ func TestLifecycle(t *testing.T) {
 		t.Errorf("pause: expected status 'paused', got %q", paused.Status)
 	}
 
-	// Step 5: Resume — command polls internally and renders JSON when not on TTY.
-	resumeCtx, resumeCancel := context.WithTimeout(context.Background(), createTimeout)
-	defer resumeCancel()
-	resumeOut, resumeErr, resumeCode := runCLICtx(resumeCtx, "sandbox", "resume", sb.ID)
-	if resumeCode != 0 {
-		t.Fatalf("sandbox resume failed (exit %d)\nstdout: %s\nstderr: %s", resumeCode, resumeOut, resumeErr)
-	}
-	resumed := mustJSON[SandboxView](t, resumeOut)
-	if resumed.Status != "running" {
-		t.Errorf("resume: expected status 'running', got %q", resumed.Status)
-	}
-
-	// Step 6: Fork — command polls until running (default) and renders JSON.
+	// Step 5: Fork — API requires source to be paused; fork auto-resumes.
 	// Note: sandbox/fork does not expose a --name flag; the server assigns a name.
-	forkName := fmt.Sprintf("e2e-%s-fork", runID)
-	_ = forkName // no --name flag; kept for tracing only
 	forkCtx, forkCancel := context.WithTimeout(context.Background(), createTimeout)
 	defer forkCancel()
 	forkOut, forkErr, forkCode := runCLICtx(forkCtx, "sandbox", "fork", sb.ID)
@@ -86,12 +71,22 @@ func TestLifecycle(t *testing.T) {
 	if forked.ID == sb.ID {
 		t.Errorf("fork: expected new sandbox ID, got same ID %q", forked.ID)
 	}
-	// Register cleanup for the forked sandbox.
 	t.Cleanup(func() {
-		runCLI("sandbox", "rm", "--force", forked.ID) //nolint:errcheck
+		_, _, _ = runCLI("sandbox", "rm", "--force", forked.ID)
 	})
-	// Fork auto-resumes by default; wait to confirm it is running.
 	waitRunning(t, forked.ID)
+
+	// Step 6: Resume source sandbox.
+	resumeCtx, resumeCancel := context.WithTimeout(context.Background(), createTimeout)
+	defer resumeCancel()
+	resumeOut, resumeErr, resumeCode := runCLICtx(resumeCtx, "sandbox", "resume", sb.ID)
+	if resumeCode != 0 {
+		t.Fatalf("sandbox resume failed (exit %d)\nstdout: %s\nstderr: %s", resumeCode, resumeOut, resumeErr)
+	}
+	resumed := mustJSON[SandboxView](t, resumeOut)
+	if resumed.Status != "running" {
+		t.Errorf("resume: expected status 'running', got %q", resumed.Status)
+	}
 
 	// Step 7: Rm — explicitly delete the original sandbox.
 	rmCtx, rmCancel := context.WithTimeout(context.Background(), defaultTimeout)
