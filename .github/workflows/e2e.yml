@@ -24,6 +24,15 @@ jobs:
       - name: Build binary
         run: go build -o createos-e2e-bin .
 
+      - name: Check required secrets
+        run: |
+          if [ -z "$CREATEOS_E2E_API_KEY" ]; then
+            echo "Error: CREATEOS_E2E_API_KEY secret is not configured"
+            exit 1
+          fi
+        env:
+          CREATEOS_E2E_API_KEY: ${{ secrets.CREATEOS_E2E_API_KEY }}
+
       - name: Run E2E tests
         env:
           CREATEOS_E2E_API_KEY: ${{ secrets.CREATEOS_E2E_API_KEY }}

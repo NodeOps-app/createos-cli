@@ -4,7 +4,7 @@ package e2e
 
 import (
 	"context"
-"testing"
+	"testing"
 )
 
 func TestLifecycle(t *testing.T) {

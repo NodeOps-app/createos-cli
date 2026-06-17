@@ -33,8 +33,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmpDir)
-
 	testHomeDir = tmpDir
 	os.Setenv("HOME", tmpDir)            // #nosec G104 -- HOME must be set; failure is non-recoverable but unreachable in practice
 	os.Setenv("XDG_CONFIG_HOME", tmpDir) // #nosec G104
@@ -77,10 +75,12 @@ func TestMain(m *testing.M) {
 	// Pre-sweep: delete any leftover e2e- sandboxes from prior failed runs.
 	presweep()
 
-	// Deferred post-sweep: best-effort cleanup after the suite finishes.
-	defer postsweep()
-
-	os.Exit(m.Run())
+	// Post-sweep: best-effort cleanup after the suite finishes.
+	// Called explicitly before os.Exit so defers are not skipped.
+	code = m.Run()
+	postsweep()
+	_ = os.RemoveAll(tmpDir)
+	os.Exit(code)
 }
 
 // discoverSmallestShape calls `sandbox shapes -o json` and returns the shape
@@ -113,7 +113,10 @@ func discoverSmallestShape() string {
 	return best.ID
 }
 
-// presweep deletes any existing sandboxes whose names start with "e2e-".
+// presweep deletes stale e2e-* sandboxes left by prior failed runs.
+// It intentionally matches all e2e-* prefixes (not just this runID) to
+// collect orphans from previous sessions. The nightly CI enforces
+// cancel-in-progress to prevent concurrent runs on the same account.
 func presweep() {
 	stdout, _, code := runCLI("sandbox", "list", "--all")
 	if code != 0 || strings.TrimSpace(stdout) == "" {
@@ -137,7 +140,8 @@ func presweep() {
 	}
 }
 
-// postsweep is deferred in TestMain; best-effort delete of e2e- sandboxes.
+// postsweep is called explicitly before os.Exit in TestMain; best-effort
+// delete of sandboxes created by THIS run only (prefix "e2e-<runID>-").
 func postsweep() {
 	stdout, _, code := runCLI("sandbox", "list", "--all")
 	if code != 0 || strings.TrimSpace(stdout) == "" {
@@ -152,8 +156,9 @@ func postsweep() {
 		return
 	}
 
+	runPrefix := "e2e-" + runID + "-"
 	for _, sb := range sandboxes {
-		if sb.Name == nil || !strings.HasPrefix(*sb.Name, "e2e-") {
+		if sb.Name == nil || !strings.HasPrefix(*sb.Name, runPrefix) {
 			continue
 		}
 		_, _, _ = runCLI("sandbox", "rm", "--force", sb.ID)
