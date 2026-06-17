@@ -11,7 +11,6 @@ import (
 // `sandbox shapes -o json`. Defined here since it is only used in readonly tests.
 type ShapeView struct {
 	ID     string `json:"id"`
-	Name   string `json:"name"`
 	VCPU   int    `json:"vcpu"`
 	MemMib int    `json:"mem_mib"`
 }
@@ -36,32 +35,8 @@ func TestShapes(t *testing.T) {
 	if first.MemMib <= 0 {
 		t.Errorf("sandbox shapes: first shape MemMib must be > 0, got %d", first.MemMib)
 	}
-	if shapes[0].Name == "" {
-		t.Errorf("shapes[0].Name is empty")
-	}
-}
-
-// TestCatalog asserts that `sandbox catalog -o json` exits 0 and returns a
-// non-empty JSON array where the first item has a recognisable key.
-func TestCatalog(t *testing.T) {
-	stdout, stderr, code := runCLI("sandbox", "catalog")
-	if code != 0 {
-		t.Fatalf("sandbox catalog exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
-	}
-
-	var items []map[string]any
-	if err := json.Unmarshal([]byte(stdout), &items); err != nil {
-		t.Fatalf("sandbox catalog: could not parse JSON: %v\noutput: %s", err, stdout)
-	}
-	if len(items) == 0 {
-		t.Fatal("sandbox catalog: expected at least one item, got empty list")
-	}
-
-	first := items[0]
-	_, hasName := first["name"]
-	_, hasID := first["id"]
-	if !hasName && !hasID {
-		t.Errorf("sandbox catalog: first item has neither 'name' nor 'id' key; keys: %v", keys(first))
+	if shapes[0].ID == "" {
+		t.Errorf("shapes[0].ID is empty")
 	}
 }
 

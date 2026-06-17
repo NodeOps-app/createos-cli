@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Derive a run-scoped ID from crypto/rand so parallel CI runs don't collide.
-	var b [8]byte
+	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		fmt.Fprintf(os.Stderr, "crypto/rand failed: %v\n", err)
 		os.Exit(1)

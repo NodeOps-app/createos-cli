@@ -139,6 +139,9 @@ func newSandbox(t *testing.T, extraArgs ...string) SandboxView { //nolint:unused
 
 	// Sanitise t.Name(): replace any characters that the API rejects in names.
 	safeName := sanitiseName(t.Name())
+	if len(safeName) > 9 {
+		safeName = safeName[:9]
+	}
 	name := fmt.Sprintf("e2e-%s-%s", runID, safeName)
 
 	args := []string{"sandbox", "create", "--name", name}
