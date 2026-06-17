@@ -1,0 +1,30 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'  # nightly at 03:00 UTC
+
+concurrency:
+  group: e2e
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binary
+        run: go build -o createos-e2e-bin .
+
+      - name: Run E2E tests
+        env:
+          CREATEOS_E2E_API_KEY: ${{ secrets.CREATEOS_E2E_API_KEY }}
+        run: go test -tags=e2e -timeout 30m ./test/e2e/... -v

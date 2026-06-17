@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
 jobs:
   build:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})

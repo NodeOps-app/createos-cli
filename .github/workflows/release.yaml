@@ -13,6 +13,7 @@ jobs:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: darwin
@@ -82,10 +83,10 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
-          DARWIN_ARM64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-darwin-arm64.sha256")
-          DARWIN_AMD64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-darwin-amd64.sha256")
-          LINUX_AMD64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-linux-amd64.sha256")
-          LINUX_ARM64_SHA=$(curl -sL "https://github.com/NodeOps-app/createos-cli/releases/download/${VERSION}/createos-linux-arm64.sha256")
+          DARWIN_ARM64_SHA=$(cat createos-darwin-arm64.sha256)
+          DARWIN_AMD64_SHA=$(cat createos-darwin-amd64.sha256)
+          LINUX_AMD64_SHA=$(cat createos-linux-amd64.sha256)
+          LINUX_ARM64_SHA=$(cat createos-linux-arm64.sha256)
           sed -i "s/version \".*\"/version \"${VERSION_NUM}\"/" Formula/createos.rb
           sed -i "s|releases/download/v[^/]*/|releases/download/${VERSION}/|g" Formula/createos.rb
           sed -i "/darwin-arm64/{n;s/sha256 \".*\"/sha256 \"${DARWIN_ARM64_SHA}\"/}" Formula/createos.rb
