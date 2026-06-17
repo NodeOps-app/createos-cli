@@ -173,7 +173,7 @@ func newSandbox(t *testing.T, extraArgs ...string) SandboxView { //nolint:unused
 	// Register cleanup before waiting so the sandbox is always removed even
 	// if waitRunning or the test itself fails.
 	t.Cleanup(func() {
-		runCLI("sandbox", "rm", "--force", id) //nolint:errcheck
+		_, _, _ = runCLI("sandbox", "rm", "--force", id)
 	})
 
 	waitRunning(t, id)
