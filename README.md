@@ -352,6 +352,17 @@ Sandboxes are fast-booting VMs — isolated environments you can exec into, sync
 | `createos sandbox template logs <name\|id>`    | Show (or follow) the build output for an image           |
 | `createos sandbox template rm <name\|id>`      | Delete a custom image                                    |
 
+### Webhooks
+
+| Command                       | Description                        |
+| ----------------------------- | ---------------------------------- |
+| `createos webhooks list`      | List all webhook endpoints         |
+| `createos webhooks get`       | Show details for a webhook endpoint|
+| `createos webhooks create`    | Create a new webhook endpoint      |
+| `createos webhooks delete`    | Delete a webhook endpoint          |
+| `createos webhooks suspend`   | Suspend a webhook endpoint         |
+| `createos webhooks resume`    | Resume a suspended webhook endpoint|
+
 ### Skills
 
 | Command                     | Description                |
@@ -523,6 +534,16 @@ createos sandbox template ls
 createos sandbox template logs my-rails --follow
 createos sandbox template rm my-rails --yes
 
+# Webhooks
+createos webhooks list
+createos webhooks get --endpoint <id>
+createos webhooks create --url https://example.com/webhook
+createos webhooks create --url https://example.com/webhook \
+  --event sandbox.create --event sandbox.destroy
+createos webhooks suspend --endpoint <id>
+createos webhooks resume --endpoint <id>
+createos webhooks delete --endpoint <id> --force
+
 # Templates
 createos templates use --template <id> --yes
 
@@ -560,6 +581,7 @@ createos projects list | jq '.[].id'
 createos deployments list --project <id> | jq '.[] | select(.status == "running")'
 createos cronjobs list --project <id> | jq '.[] | {id, name, schedule}'
 createos vms list | jq '.[].extra.ip_address'
+createos webhooks list | jq '.[].url'
 ```
 
 To force JSON output in a TTY, use `--output json` (or `-o json`):
