@@ -70,6 +70,11 @@ func NewApp() *cli.App {
 				Value:   "gateway.sb.createos.sh:2222",
 			},
 			&cli.StringFlag{
+				Name:    "api-key",
+				Usage:   "API key for authentication (overrides stored token)",
+				EnvVars: []string{"CREATEOS_API_KEY"},
+			},
+			&cli.StringFlag{
 				Name:    "output",
 				Aliases: []string{"o"},
 				Usage:   "Output format: table or json",
@@ -100,7 +105,16 @@ func NewApp() *cli.App {
 				return nil
 			}
 
-			// Try OAuth session first
+			// CREATEOS_API_KEY env var (or --api-key flag) — injected by Stripe Projects
+			if apiKey := c.String("api-key"); apiKey != "" {
+				client := api.NewClient(apiKey, c.String("api-url"), c.Bool("debug"))
+				c.App.Metadata[api.ClientKey] = &client
+				sandboxClient := api.NewSandboxClient(apiKey, c.String("sandbox-api-url"), c.Bool("debug"))
+				c.App.Metadata[api.SandboxClientKey] = &sandboxClient
+				return nil
+			}
+
+			// Try OAuth session
 			if config.HasOAuthSession() {
 				session, err := config.LoadOAuthSession()
 				if err != nil {
@@ -133,7 +147,7 @@ func NewApp() *cli.App {
 				}
 			}
 
-			// Fall back to API key
+			// Fall back to stored token (~/.createos/.token)
 			token, err := config.LoadToken()
 			if err != nil {
 				return err

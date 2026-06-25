@@ -91,7 +91,7 @@ func tokenFileExists() bool {
 	return err == nil
 }
 
-// IsLoggedIn returns true if the user is signed in via API key or OAuth
+// IsLoggedIn returns true if the user is signed in via API key, env var, or OAuth
 func IsLoggedIn() bool {
-	return tokenFileExists() || HasOAuthSession()
+	return os.Getenv("CREATEOS_API_KEY") != "" || tokenFileExists() || HasOAuthSession()
 }
