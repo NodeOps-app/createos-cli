@@ -29,6 +29,7 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/users"
 	versioncmd "github.com/NodeOps-app/createos-cli/cmd/version"
 	"github.com/NodeOps-app/createos-cli/cmd/vms"
+	"github.com/NodeOps-app/createos-cli/cmd/webhooks"
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	"github.com/NodeOps-app/createos-cli/internal/intro"
@@ -181,6 +182,7 @@ func NewApp() *cli.App {
 				fmt.Println("  status         Show project health and deployment status")
 				fmt.Println("  templates      Browse and scaffold from project templates")
 				fmt.Println("  vms            Manage VM terminal instances")
+				fmt.Println("  webhooks       Manage webhook endpoints")
 				fmt.Println("  whoami         Show the currently authenticated user")
 			} else {
 				fmt.Println("  login          Authenticate with CreateOS")
@@ -219,6 +221,7 @@ func NewApp() *cli.App {
 			upgrade.NewUpgradeCommand(),
 			users.NewUsersCommand(),
 			vms.NewVMsCommand(),
+			webhooks.NewWebhooksCommand(),
 			auth.NewWhoamiCommand(),
 			versioncmd.NewVersionCommand(),
 		},
