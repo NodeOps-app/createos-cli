@@ -15,7 +15,7 @@ func newWebhooksListCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "list",
 		Aliases: []string{"ls"},
-		Usage: "List all webhook endpoints",
+		Usage:   "List all webhook endpoints",
 		Action: func(c *cli.Context) error {
 			client, ok := c.App.Metadata[api.ClientKey].(*api.APIClient)
 			if !ok {
