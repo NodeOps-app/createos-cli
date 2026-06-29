@@ -1,8 +1,10 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -85,13 +87,18 @@ func runVPNUp(c *cli.Context) error {
 	tmp.Close()
 	defer os.Remove(confPath)
 
-	// Bring the tunnel up. wg-quick prints noisy "ip route add" lines
-	// to stderr; pipe them through so the user can see if something
-	// fails (e.g., conflicting subnet routes).
+	// Bring the tunnel up. wg-quick echoes every shell command it runs
+	// ("[#] wg setconf ...", "[#] ip route add ...") which is pure noise
+	// for the happy path. Suppress unless --debug is set; on failure we
+	// still want the captured output so the user can diagnose.
+	debug := c.Bool("debug")
 	upCmd := sudoCommand("wg-quick", "up", confPath)
-	upCmd.Stdout = os.Stdout
-	upCmd.Stderr = os.Stderr
+	var upBuf bytes.Buffer
+	upCmd.Stdout, upCmd.Stderr = pickWGOutputs(debug, &upBuf)
 	if err := upCmd.Run(); err != nil {
+		if !debug {
+			io.Copy(os.Stderr, &upBuf)
+		}
 		_ = closeSessionBestEffort(client, st.DeviceID, sess.SessionID)
 		return fmt.Errorf("wg-quick up: %w", err)
 	}
@@ -110,9 +117,11 @@ func runVPNUp(c *cli.Context) error {
 	pterm.Println()
 	pterm.Info.Println("Disconnecting...")
 	downCmd := sudoCommand("wg-quick", "down", confPath)
-	downCmd.Stdout = os.Stdout
-	downCmd.Stderr = os.Stderr
-	_ = downCmd.Run()
+	var downBuf bytes.Buffer
+	downCmd.Stdout, downCmd.Stderr = pickWGOutputs(debug, &downBuf)
+	if err := downCmd.Run(); err != nil && !debug {
+		io.Copy(os.Stderr, &downBuf)
+	}
 	if err := closeSessionBestEffort(client, st.DeviceID, sess.SessionID); err != nil {
 		pterm.Warning.Printfln("Server-side session close failed: %v", err)
 	}
@@ -139,6 +148,16 @@ func injectPrivateKey(config, privkey string) string {
 // CAP_NET_ADMIN to manage the kernel iface; running as a normal user
 // always fails. Wrapping in sudo here is friendlier than telling the
 // user to run the whole `createos` command as root.
+// pickWGOutputs returns the (stdout, stderr) wiring for a wg-quick child.
+// debug=true tees both through to the user's terminal; debug=false captures
+// into buf so we can replay the diagnostic only on failure.
+func pickWGOutputs(debug bool, buf *bytes.Buffer) (io.Writer, io.Writer) {
+	if debug {
+		return os.Stdout, os.Stderr
+	}
+	return buf, buf
+}
+
 func sudoCommand(name string, args ...string) *exec.Cmd {
 	if _, err := exec.LookPath("sudo"); err == nil {
 		full := append([]string{name}, args...)
