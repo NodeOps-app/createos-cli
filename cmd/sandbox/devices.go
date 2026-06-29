@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,10 +62,13 @@ func saveDeviceState(st deviceState) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
+	if mkErr := os.MkdirAll(filepath.Dir(p), 0o700); mkErr != nil {
+		return mkErr
 	}
-	b, err := json.MarshalIndent(st, "", "  ")
+	// gosec G117: this struct intentionally serializes the device's WG
+	// private key — stored at 0o600 in the user's config dir; the server
+	// never sees it. Encrypting at rest is out of scope for v1.
+	b, err := json.MarshalIndent(st, "", "  ") //nolint:gosec
 	if err != nil {
 		return err
 	}
@@ -84,17 +88,18 @@ func clearDeviceState() error {
 
 // genWGKeypair shells out to `wg genkey | wg pubkey`. Requires
 // wireguard-tools installed — the same prerequisite as `vpn up`.
-func genWGKeypair() (priv, pub string, err error) {
-	if _, err := exec.LookPath("wg"); err != nil {
+func genWGKeypair(ctx context.Context) (priv, pub string, err error) {
+	if _, lookErr := exec.LookPath("wg"); lookErr != nil {
+		fmt.Fprintln(os.Stderr, wgInstallHint)
 		return "", "", errNoWG
 	}
-	out, err := exec.Command("wg", "genkey").Output()
+	out, err := exec.CommandContext(ctx, "wg", "genkey").Output()
 	if err != nil {
 		return "", "", fmt.Errorf("wg genkey: %w", err)
 	}
 	priv = strings.TrimSpace(string(out))
 
-	cmd := exec.Command("wg", "pubkey")
+	cmd := exec.CommandContext(ctx, "wg", "pubkey")
 	cmd.Stdin = strings.NewReader(priv + "\n")
 	out, err = cmd.Output()
 	if err != nil {
@@ -104,15 +109,22 @@ func genWGKeypair() (priv, pub string, err error) {
 	return priv, pub, nil
 }
 
-// errNoWG carries the install instructions shown when wireguard-tools
-// isn't on PATH. Used by both register (key gen) and vpn up (wg-quick).
-var errNoWG = fmt.Errorf(`wireguard-tools not installed.
+// errNoWG is a sentinel returned when wireguard-tools isn't on PATH.
+// The user-facing install hints are kept off the error string (revive's
+// error-strings rule rejects multi-line/punctuated error text) and
+// printed by callers via wgInstallHint().
+var errNoWG = errors.New("wireguard-tools not installed")
+
+// wgInstallHint is the multi-line install snippet for the platforms we
+// care about. Printed alongside errNoWG so users see actionable advice
+// without baking it into the error string.
+const wgInstallHint = `wireguard-tools is required for VPN commands.
 
   macOS:    brew install wireguard-tools
   Ubuntu:   sudo apt install -y wireguard-tools
   Fedora:   sudo dnf install -y wireguard-tools
 
-After installing, re-run this command.`)
+After installing, re-run this command.`
 
 // newDevicesCommand returns the `sb devices` group. Devices are this
 // machine's identity to the network — register once, then `vpn up`
@@ -147,12 +159,13 @@ func runDeviceRegister(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	// Already registered? Surface that instead of silently double-registering.
-	if existing, _ := loadDeviceState(); existing != nil {
+	existing, _ := loadDeviceState() //nolint:errcheck // missing/corrupt file = not registered, fall through
+	if existing != nil {
 		pterm.Warning.Printfln("This machine is already registered as %q (%s).", existing.Name, existing.ClientIP)
 		pterm.Println(pterm.Gray("  To re-register, first run: createos sb devices unregister"))
 		return nil
 	}
-	hostname, _ := os.Hostname()
+	hostname, _ := os.Hostname() //nolint:errcheck // hostname is optional metadata
 	name := strings.TrimSpace(c.String("name"))
 	if name == "" {
 		name = strings.TrimSpace(c.Args().First())
@@ -164,7 +177,7 @@ func runDeviceRegister(c *cli.Context) error {
 		return fmt.Errorf("please give this device a name:\n\n  createos sb devices register <name>")
 	}
 
-	priv, pub, err := genWGKeypair()
+	priv, pub, err := genWGKeypair(c.Context)
 	if err != nil {
 		return err
 	}

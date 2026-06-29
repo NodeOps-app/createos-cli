@@ -31,8 +31,8 @@ func newVPNCommand() *cli.Command {
 
 func newVPNUpCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "up",
-		Usage: "Connect this machine to your networks. Stays up until you press Ctrl-C.",
+		Name:   "up",
+		Usage:  "Connect this machine to your networks. Stays up until you press Ctrl-C.",
 		Action: runVPNUp,
 	}
 }
@@ -52,7 +52,8 @@ func runVPNUp(c *cli.Context) error {
   Then come back and:
     createos sb vpn up`)
 	}
-	if _, err := exec.LookPath("wg-quick"); err != nil {
+	if _, lookErr := exec.LookPath("wg-quick"); lookErr != nil {
+		fmt.Fprintln(os.Stderr, wgInstallHint)
 		return errNoWG
 	}
 
@@ -79,28 +80,28 @@ func runVPNUp(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("temp file: %w", err)
 	}
-	if _, err := tmp.WriteString(conf); err != nil {
-		tmp.Close()
-		os.Remove(confPath)
-		return fmt.Errorf("write config: %w", err)
+	if _, wErr := tmp.WriteString(conf); wErr != nil {
+		_ = tmp.Close()         //nolint:errcheck // cleanup; original error wins
+		_ = os.Remove(confPath) //nolint:errcheck // cleanup; original error wins
+		return fmt.Errorf("write config: %w", wErr)
 	}
-	tmp.Close()
-	defer os.Remove(confPath)
+	_ = tmp.Close()                            //nolint:errcheck // close-after-write — flush already done
+	defer func() { _ = os.Remove(confPath) }() //nolint:errcheck // best-effort cleanup of temp file
 
 	// Bring the tunnel up. wg-quick echoes every shell command it runs
 	// ("[#] wg setconf ...", "[#] ip route add ...") which is pure noise
 	// for the happy path. Suppress unless --debug is set; on failure we
 	// still want the captured output so the user can diagnose.
 	debug := c.Bool("debug")
-	upCmd := sudoCommand("wg-quick", "up", confPath)
+	upCmd := sudoCommand(c.Context, "wg-quick", "up", confPath)
 	var upBuf bytes.Buffer
 	upCmd.Stdout, upCmd.Stderr = pickWGOutputs(debug, &upBuf)
-	if err := upCmd.Run(); err != nil {
+	if runErr := upCmd.Run(); runErr != nil {
 		if !debug {
-			io.Copy(os.Stderr, &upBuf)
+			_, _ = io.Copy(os.Stderr, &upBuf) //nolint:errcheck // diagnostic dump; original error wins
 		}
-		_ = closeSessionBestEffort(client, st.DeviceID, sess.SessionID)
-		return fmt.Errorf("wg-quick up: %w", err)
+		_ = closeSessionBestEffort(client, st.DeviceID, sess.SessionID) //nolint:errcheck // best-effort cleanup
+		return fmt.Errorf("wg-quick up: %w", runErr)
 	}
 
 	ifaceName := strings.TrimSuffix(filepath.Base(confPath), ".conf")
@@ -116,11 +117,13 @@ func runVPNUp(c *cli.Context) error {
 
 	pterm.Println()
 	pterm.Info.Println("Disconnecting...")
-	downCmd := sudoCommand("wg-quick", "down", confPath)
+	downCtx, cancelDown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelDown()
+	downCmd := sudoCommand(downCtx, "wg-quick", "down", confPath)
 	var downBuf bytes.Buffer
 	downCmd.Stdout, downCmd.Stderr = pickWGOutputs(debug, &downBuf)
-	if err := downCmd.Run(); err != nil && !debug {
-		io.Copy(os.Stderr, &downBuf)
+	if runErr := downCmd.Run(); runErr != nil && !debug {
+		_, _ = io.Copy(os.Stderr, &downBuf) //nolint:errcheck // diagnostic dump
 	}
 	if err := closeSessionBestEffort(client, st.DeviceID, sess.SessionID); err != nil {
 		pterm.Warning.Printfln("Server-side session close failed: %v", err)
@@ -144,10 +147,6 @@ func injectPrivateKey(config, privkey string) string {
 	return config[:insertAt] + "\nPrivateKey = " + privkey + config[insertAt:]
 }
 
-// sudoCommand wraps wg-quick with sudo on non-Windows. wg-quick needs
-// CAP_NET_ADMIN to manage the kernel iface; running as a normal user
-// always fails. Wrapping in sudo here is friendlier than telling the
-// user to run the whole `createos` command as root.
 // pickWGOutputs returns the (stdout, stderr) wiring for a wg-quick child.
 // debug=true tees both through to the user's terminal; debug=false captures
 // into buf so we can replay the diagnostic only on failure.
@@ -158,12 +157,21 @@ func pickWGOutputs(debug bool, buf *bytes.Buffer) (io.Writer, io.Writer) {
 	return buf, buf
 }
 
-func sudoCommand(name string, args ...string) *exec.Cmd {
+// sudoCommand wraps wg-quick with sudo on non-Windows. wg-quick needs
+// CAP_NET_ADMIN to manage the kernel iface; running as a normal user
+// always fails. Wrapping in sudo here is friendlier than telling the
+// user to run the whole `createos` command as root.
+//
+// gosec G204: name/args are hard-coded callsites from this package
+// ("wg-quick up <confPath>" / "wg-quick down <confPath>") where confPath
+// is generated inside vpn.go from os.TempDir() + a constant basename —
+// no user input flows into either field.
+func sudoCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	if _, err := exec.LookPath("sudo"); err == nil {
 		full := append([]string{name}, args...)
-		return exec.Command("sudo", full...)
+		return exec.CommandContext(ctx, "sudo", full...) //nolint:gosec
 	}
-	return exec.Command(name, args...)
+	return exec.CommandContext(ctx, name, args...) //nolint:gosec
 }
 
 func closeSessionBestEffort(client *api.SandboxClient, deviceID, sessionID string) error {
