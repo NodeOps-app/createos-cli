@@ -145,3 +145,35 @@ detect-secrets audit .secrets.baseline
 2. Create `<group>.go` with `NewXxxCommand()` returning `*cli.Command` with subcommands
 3. Import and register in `cmd/root/root.go` `Commands` slice
 4. Add to the home screen manual list in `root.go` Action, alphabetically
+
+## Keeping the Website Docs in Sync
+
+Any change to a command, flag, or its behavior must be mirrored in the
+website docs repo at `../website-04`. The CLI and the published docs are
+two separate repos — editing one does **not** update the other.
+
+Source-of-truth markdown (edit these by hand):
+
+| File | Covers |
+|------|--------|
+| `content/docs/Sandbox/CLI/Commands.md` | Per-command flag tables + examples (sandbox group) |
+| `content/docs/CLI/Command-Reference.md` | One-line summary row per command |
+
+After editing the markdown, regenerate the derived files (they carry an
+"Auto-generated — do not edit manually" header):
+
+```bash
+cd ../website-04
+node scripts/generate-docs-content.mjs    # → lib/docs/docs-content.ts
+node scripts/generate-search-index.mjs    # → lib/docs/search-index-generated.ts
+```
+
+Don't hand-edit the `lib/docs/*-generated.ts` files and don't run the
+full `prebuild` (it also fetches remote content). Commit the markdown +
+both regenerated TS files together.
+
+Checklist when adding/changing/removing a command or flag:
+- [ ] CLI code under `cmd/`
+- [ ] This repo's `README.md`
+- [ ] `../website-04` `Commands.md` (and `Command-Reference.md` for new commands)
+- [ ] Regenerate the two `lib/docs/*.ts` files

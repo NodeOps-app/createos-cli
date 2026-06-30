@@ -507,6 +507,10 @@ createos sandbox rootfs
 
 # Sandbox sync
 createos sandbox sync my-box --local ~/work/project --remote /root/work
+createos sandbox sync my-box --exclude '*.log' --exclude node_modules  # skip files (repeatable)
+createos sandbox sync my-box --mode one-way   # push-only: laptop wins, keep extra remote files
+createos sandbox sync my-box --mode mirror    # make sandbox identical, delete extra remote files
+createos sandbox sync my-box --quiet          # run silently until Ctrl+C
 
 # Sandbox disks
 createos sandbox disk create my-data --bucket my-bucket --endpoint https://s3.amazonaws.com \

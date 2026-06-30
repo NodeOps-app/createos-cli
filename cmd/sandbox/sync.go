@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -44,6 +45,18 @@ Examples:
   createos sandbox sync my-box --local ~/work/project --remote /root/work
   createos sandbox sync my-box -i ~/.ssh/id_ed25519
 
+  # Skip files you don't want synced (repeatable)
+  createos sandbox sync my-box --exclude '*.log' --exclude node_modules
+
+  # Push-only: laptop wins, never pull changes back
+  createos sandbox sync my-box --mode one-way
+
+  # Mirror: make the sandbox identical, deleting extra files there
+  createos sandbox sync my-box --mode mirror
+
+  # Run silently in the background of your terminal
+  createos sandbox sync my-box --quiet
+
 Safety: refuses to sync from $HOME directly, /, or known sensitive
 paths (.ssh, .aws, etc.). Refuses to sync TO system dirs inside the
 sandbox (/etc, /usr, /bin …). Pass --force to bypass the local check
@@ -81,6 +94,24 @@ sandbox (/etc, /usr, /bin …). Pass --force to bypass the local check
 				Name:    "yes",
 				Aliases: []string{"y"},
 				Usage:   "Install your SSH key into the sandbox without asking (required in non-interactive mode when your key isn't already there)",
+			},
+			&cli.StringSliceFlag{
+				Name:  "exclude",
+				Usage: "Glob pattern to skip; repeatable (e.g. --exclude '*.log' --exclude node_modules)",
+			},
+			&cli.StringFlag{
+				Name:  "mode",
+				Value: "two-way",
+				Usage: "Sync direction: two-way | one-way (laptop wins, keeps extra files on the sandbox) | mirror (one-way and deletes extra files on the sandbox)",
+			},
+			&cli.BoolFlag{
+				Name:    "quiet",
+				Aliases: []string{"q"},
+				Usage:   "Don't print status; run silently until Ctrl+C",
+			},
+			&cli.BoolFlag{
+				Name:  "no-ignore-vcs",
+				Usage: "Sync VCS directories too (.git, .hg …); by default they're skipped",
 			},
 		},
 		Action: runSync,
@@ -159,6 +190,13 @@ func runSync(c *cli.Context) error {
 		return err
 	}
 	if err = validateRemoteSyncPath(remote); err != nil {
+		return err
+	}
+
+	// Resolve --mode up front so a typo fails before we touch the
+	// sandbox or download Mutagen.
+	syncMode, err := syncModeToMutagen(c.String("mode"))
+	if err != nil {
 		return err
 	}
 
@@ -258,14 +296,25 @@ fi
 	// under our env, picking up the wrapper PATH.
 	_ = runMutagen(ctx, mutagenBin, wrapperEnv, "daemon", "stop") //nolint:errcheck
 
-	pterm.Println(pterm.Gray(fmt.Sprintf("  syncing %s ⇄ %s:%s", local, refLabel(ref, id), remote)))
+	quiet := c.Bool("quiet")
+	if !quiet {
+		pterm.Println(pterm.Gray(fmt.Sprintf("  syncing %s ⇄ %s:%s", local, refLabel(ref, id), remote)))
+	}
 	createArgs := []string{
 		"sync", "create",
 		"--name=" + sessionName,
-		"--ignore-vcs",
-		local,
-		remoteSpec,
+		"--sync-mode=" + syncMode,
 	}
+	if !c.Bool("no-ignore-vcs") {
+		createArgs = append(createArgs, "--ignore-vcs")
+	}
+	for _, pat := range c.StringSlice("exclude") {
+		if p := strings.TrimSpace(pat); p != "" {
+			createArgs = append(createArgs, "--ignore="+p)
+		}
+	}
+	// Source and target must come last as positional args.
+	createArgs = append(createArgs, local, remoteSpec)
 	if err := runMutagen(ctx, mutagenBin, wrapperEnv, createArgs...); err != nil {
 		return fmt.Errorf("mutagen sync create failed: %w", err)
 	}
@@ -276,20 +325,50 @@ fi
 		_ = runMutagen(bg, mutagenBin, wrapperEnv, "sync", "terminate", sessionName) //nolint:errcheck
 	}()
 
-	pterm.Success.Println("Sync running. Press Ctrl+C to stop.")
+	if !quiet {
+		pterm.Success.Println("Sync running. Press Ctrl+C to stop.")
+	}
 
 	// 7. Monitor the session in the foreground. `mutagen sync monitor`
 	//    streams status lines until the session is terminated or the
-	//    process exits.
+	//    process exits — it blocks, which keeps the sync alive. When
+	//    --quiet is set we still run it (for the blocking lifecycle) but
+	//    drop its status output; errors stay on stderr.
 	mon := exec.CommandContext(ctx, mutagenBin, "sync", "monitor", sessionName) // #nosec G204 -- mutagenBin is our managed binary; sessionName is internally generated
 	mon.Env = wrapperEnv
-	mon.Stdout = os.Stdout
+	if quiet {
+		mon.Stdout = io.Discard
+	} else {
+		mon.Stdout = os.Stdout
+	}
 	mon.Stderr = os.Stderr
 	if err := mon.Run(); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("mutagen monitor exited: %w", err)
 	}
-	pterm.Println("Sync stopped.")
+	if !quiet {
+		pterm.Println("Sync stopped.")
+	}
 	return nil
+}
+
+// syncModeToMutagen maps our friendly --mode values onto Mutagen's
+// --sync-mode. We surface three of Mutagen's modes under plain names so
+// users don't have to learn Mutagen's vocabulary:
+//
+//	two-way → two-way-safe    (default; conflicting edits pause, never clobber)
+//	one-way → one-way-safe    (laptop is the source; extra files on the sandbox are kept)
+//	mirror  → one-way-replica (laptop is the source; the sandbox is made identical, extras deleted)
+func syncModeToMutagen(mode string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "two-way":
+		return "two-way-safe", nil
+	case "one-way":
+		return "one-way-safe", nil
+	case "mirror":
+		return "one-way-replica", nil
+	default:
+		return "", fmt.Errorf("unknown --mode %q\n\n  Choose one of:\n    two-way  (default)\n    one-way\n    mirror", mode)
+	}
 }
 
 // runMutagen runs `mutagen <args>` with our shadowed PATH env.
