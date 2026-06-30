@@ -34,6 +34,8 @@ func NewSandboxCommand() *cli.Command {
 			newTemplateCommand(),
 			newShapesCommand(),
 			newRootfsCommand(),
+			newDevicesCommand(),
+			newVPNCommand(),
 		},
 	}
 }
