@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -16,6 +17,17 @@ type APIError struct { //nolint:revive
 
 func (e *APIError) Error() string {
 	return e.Message
+}
+
+// IsNotFound reports whether err is an APIError wrapping a 404.
+// Used by the VPN renewal loop to discriminate "server lost my session"
+// (tear-down signal) from a transient transport failure (retry).
+func IsNotFound(err error) bool {
+	var ae *APIError
+	if errors.As(err, &ae) {
+		return ae.StatusCode == http.StatusNotFound
+	}
+	return false
 }
 
 // Hint returns a contextual suggestion based on the HTTP status code.

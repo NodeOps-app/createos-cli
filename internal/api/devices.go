@@ -173,3 +173,21 @@ func (c *SandboxClient) DeleteDeviceSession(ctx context.Context, deviceID, sessi
 	}
 	return nil
 }
+
+// RenewDeviceSession bumps the session's expires_at forward by one
+// server-side TTL. The CLI's renewal goroutine calls this every ~TTL/2
+// while a tunnel is live. A 404 from this endpoint means the session
+// has expired or been deleted server-side — the caller's local WG iface
+// is now orphan and must be torn down. Use IsNotFound to discriminate.
+func (c *SandboxClient) RenewDeviceSession(ctx context.Context, deviceID, sessionID string) error {
+	resp, err := c.Client.R().SetContext(ctx).
+		SetPathParam("id", deviceID).SetPathParam("sid", sessionID).
+		Put("/v1/devices/{id}/sessions/{sid}")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return ParseAPIError(resp.StatusCode(), resp.Body())
+	}
+	return nil
+}

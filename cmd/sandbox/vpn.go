@@ -3,8 +3,10 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -88,11 +90,41 @@ func runVPNUp(c *cli.Context) error {
 	_ = tmp.Close()                            //nolint:errcheck // close-after-write — flush already done
 	defer func() { _ = os.Remove(confPath) }() //nolint:errcheck // best-effort cleanup of temp file
 
+	debug := c.Bool("debug")
+
+	// CGNAT / subnet conflict check. Our wg-quick config installs routes
+	// for the device's CGNAT pool (100.64.0.0/10) plus the VM subnets the
+	// device is authorised for. If any of those overlap with a route
+	// already in the local routing table — e.g. the user is on Tailscale
+	// (also 100.64.0.0/10), a corporate VPN with a 10.0.0.0/8 subnet, or
+	// a home LAN happening to use 10.0.0.0/22 — installing OUR routes
+	// would silently steal that traffic. Stop loudly instead.
+	if conflict := detectRouteConflict(c.Context, conf); conflict != "" {
+		_ = closeSessionBestEffort(client, st.DeviceID, sess.SessionID) //nolint:errcheck
+		return fmt.Errorf(`route conflict detected: %s
+
+  another VPN or local network is already using an IP range that
+  overlaps with your createos tunnel. Bringing up the tunnel would
+  steal that traffic. Disconnect the other VPN (e.g. tailscale down)
+  or remove the conflicting route, then re-run 'createos sb vpn up'`, conflict)
+	}
+
+	// Defensive startup recovery: a prior CLI run that was killed (OOM,
+	// kernel panic, force-quit) leaves the cosvpn iface in the kernel
+	// without a matching server-side session. wg-quick up would then
+	// fail with "RTNETLINK answers: File exists". Wipe any stale iface
+	// before proceeding so the user doesn't have to manually intervene.
+	if out, _ := exec.CommandContext(c.Context, "ip", "link", "show", "cosvpn").Output(); len(out) > 0 {
+		cleanup := sudoCommand(c.Context, "wg-quick", "down", confPath)
+		var cleanupBuf bytes.Buffer
+		cleanup.Stdout, cleanup.Stderr = pickWGOutputs(debug, &cleanupBuf)
+		_ = cleanup.Run() //nolint:errcheck // best-effort; if cosvpn was never up, this is a no-op
+	}
+
 	// Bring the tunnel up. wg-quick echoes every shell command it runs
 	// ("[#] wg setconf ...", "[#] ip route add ...") which is pure noise
 	// for the happy path. Suppress unless --debug is set; on failure we
 	// still want the captured output so the user can diagnose.
-	debug := c.Bool("debug")
 	upCmd := sudoCommand(c.Context, "wg-quick", "up", confPath)
 	var upBuf bytes.Buffer
 	upCmd.Stdout, upCmd.Stderr = pickWGOutputs(debug, &upBuf)
@@ -110,9 +142,60 @@ func runVPNUp(c *cli.Context) error {
 	pterm.Println(pterm.Gray(fmt.Sprintf("  iface:  %s", ifaceName)))
 	pterm.Println(pterm.Gray("Press Ctrl-C to disconnect."))
 
-	// Block until Ctrl-C / SIGTERM. Best-effort cleanup on the way out.
+	// Block until Ctrl-C / SIGTERM (user disconnect) or until the
+	// renewal goroutine signals that the server-side session is gone.
+	// Best-effort cleanup on the way out either way.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+
+	// Renewal goroutine: PUT /sessions/:id every ~TTL/2 so an active
+	// tunnel keeps its server-side session alive. If the server returns
+	// 404 (sweeper got it, admin revoked, etc), or if two consecutive
+	// renews fail with network errors, we self-signal a teardown — the
+	// local WG iface without a matching server session is silently
+	// broken and we'd rather the user know than have it look-alive-but-
+	// fail-quietly.
+	const renewInterval = 30 * time.Second
+	renewCtx, cancelRenew := context.WithCancel(c.Context)
+	defer cancelRenew()
+	go func() {
+		t := time.NewTicker(renewInterval)
+		defer t.Stop()
+		misses := 0
+		for {
+			select {
+			case <-renewCtx.Done():
+				return
+			case <-t.C:
+				ctx2, cancel := context.WithTimeout(renewCtx, 10*time.Second)
+				err := client.RenewDeviceSession(ctx2, st.DeviceID, sess.SessionID)
+				cancel()
+				if err == nil {
+					misses = 0
+					continue
+				}
+				if api.IsNotFound(err) {
+					pterm.Warning.Printfln("session lost server-side — tearing down tunnel")
+					select {
+					case sig <- syscall.SIGTERM:
+					default:
+					}
+					return
+				}
+				misses++
+				pterm.Warning.Printfln("renew failed (%d/2): %v", misses, err)
+				if misses >= 2 {
+					pterm.Error.Println("renewal repeatedly failed — assuming server lost session")
+					select {
+					case sig <- syscall.SIGTERM:
+					default:
+					}
+					return
+				}
+			}
+		}
+	}()
+
 	<-sig
 
 	pterm.Println()
@@ -178,4 +261,119 @@ func closeSessionBestEffort(client *api.SandboxClient, deviceID, sessionID strin
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return client.DeleteDeviceSession(ctx, deviceID, sessionID)
+}
+
+// detectRouteConflict checks whether any of the AllowedIPs in our
+// pending wg-quick config overlaps with a route already in the local
+// routing table that points at a DIFFERENT interface. Returns a
+// human-readable description of the first conflict found, or "" if none.
+//
+// Skips loopback + own-iface routes. "ip" missing or output unparseable
+// → returns "" (best-effort; we'd rather let wg-quick try and surface
+// its own error than block on a tooling absence).
+func detectRouteConflict(ctx context.Context, conf string) string {
+	allowed := parseAllowedIPs(conf)
+	if len(allowed) == 0 {
+		return ""
+	}
+	existing := listLocalRoutes(ctx)
+	if len(existing) == 0 {
+		return ""
+	}
+	for _, ours := range allowed {
+		for _, theirs := range existing {
+			if theirs.iface == "cosvpn" || theirs.iface == "lo" {
+				continue // our own iface (stale from prior run) or loopback
+			}
+			if cidrsOverlap(ours, theirs.dst) {
+				return fmt.Sprintf("%s (ours) overlaps %s on dev %s",
+					ours.String(), theirs.dst.String(), theirs.iface)
+			}
+		}
+	}
+	return ""
+}
+
+// parseAllowedIPs pulls every CIDR from the [Peer] AllowedIPs line(s)
+// of a wg-quick config. Robust to comma-separated and multi-line forms.
+func parseAllowedIPs(conf string) []*net.IPNet {
+	var out []*net.IPNet
+	for _, line := range strings.Split(conf, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(strings.ToLower(line), "allowedips") {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		for _, item := range strings.Split(line[eq+1:], ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if _, cidr, err := net.ParseCIDR(item); err == nil {
+				out = append(out, cidr)
+			}
+		}
+	}
+	return out
+}
+
+type localRoute struct {
+	dst   *net.IPNet
+	iface string
+}
+
+// listLocalRoutes shells out to `ip -j route show` and parses the JSON.
+// `ip` is part of iproute2 — available everywhere wg-quick runs (Linux
+// + Homebrew on macOS via `iproute2mac` — though macOS doesn't actually
+// have `ip` by default, so on macOS this returns nil and the check is
+// effectively a no-op there. wg-quick's own conflict detection takes
+// over.)
+func listLocalRoutes(ctx context.Context) []localRoute {
+	out, err := exec.CommandContext(ctx, "ip", "-j", "route", "show").Output()
+	if err != nil {
+		return nil
+	}
+	var raw []struct {
+		Dst string `json:"dst"`
+		Dev string `json:"dev"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil
+	}
+	routes := make([]localRoute, 0, len(raw))
+	for _, r := range raw {
+		if r.Dst == "" || r.Dst == "default" {
+			continue
+		}
+		// `ip -j` emits a bare IP for /32 routes; tack on the mask so
+		// ParseCIDR is happy.
+		dstStr := r.Dst
+		if !strings.Contains(dstStr, "/") {
+			if ip := net.ParseIP(dstStr); ip != nil {
+				if ip.To4() != nil {
+					dstStr += "/32"
+				} else {
+					dstStr += "/128"
+				}
+			}
+		}
+		_, cidr, err := net.ParseCIDR(dstStr)
+		if err != nil {
+			continue
+		}
+		routes = append(routes, localRoute{dst: cidr, iface: r.Dev})
+	}
+	return routes
+}
+
+// cidrsOverlap reports whether two networks share any IP. Either one
+// being a superset of the other (or both equal) counts.
+func cidrsOverlap(a, b *net.IPNet) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Contains(b.IP) || b.Contains(a.IP)
 }
