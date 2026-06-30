@@ -114,7 +114,7 @@ func runVPNUp(c *cli.Context) error {
 	// without a matching server-side session. wg-quick up would then
 	// fail with "RTNETLINK answers: File exists". Wipe any stale iface
 	// before proceeding so the user doesn't have to manually intervene.
-	if out, _ := exec.CommandContext(c.Context, "ip", "link", "show", "cosvpn").Output(); len(out) > 0 {
+	if out, _ := exec.CommandContext(c.Context, "ip", "link", "show", "cosvpn").Output(); len(out) > 0 { //nolint:errcheck // best-effort stale-iface probe; absent iface yields empty out
 		cleanup := sudoCommand(c.Context, "wg-quick", "down", confPath)
 		var cleanupBuf bytes.Buffer
 		cleanup.Stdout, cleanup.Stderr = pickWGOutputs(debug, &cleanupBuf)
