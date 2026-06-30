@@ -312,10 +312,18 @@ func pickNetworksForDelete(c *cli.Context, client *api.SandboxClient) ([]string,
 func newNetworkAttachCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "attach",
-		Usage:     "Add a sandbox to a network",
-		ArgsUsage: "[<sandbox> <network>]",
+		Usage:     "Add a sandbox or device to a network",
+		ArgsUsage: "[<sandbox|device> <network>]",
 		Action:    runNetworkAttach,
 	}
+}
+
+// isDeviceRef reports whether ref looks like a device id (dev-…) — used
+// so `network attach dev-… <net>` routes to the device-attach API
+// instead of the sandbox one. Plain prefix sniff: device ids are minted
+// with this prefix and nothing else legitimately starts with it.
+func isDeviceRef(ref string) bool {
+	return strings.HasPrefix(ref, "dev-") || strings.HasPrefix(ref, "dev_")
 }
 
 func runNetworkAttach(c *cli.Context) error {
@@ -324,35 +332,31 @@ func runNetworkAttach(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	args := c.Args().Slice()
-	sandboxRef, netRef := "", ""
+	ref, netRef := "", ""
 	if len(args) > 0 {
-		sandboxRef = args[0]
+		ref = args[0]
 	}
 	if len(args) > 1 {
 		netRef = args[1]
 	}
 	tty := terminal.IsInteractive()
-	if sandboxRef == "" {
+	if ref == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network attach <sandbox> <network>")
+			return fmt.Errorf("usage: createos sandbox network attach <sandbox|device> <network>")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Attach which sandbox?", "running")
+		picked, err := pickEndpoint(c, client, "Attach what?")
 		if err != nil {
 			return err
 		}
-		if pickedID == "" {
+		if picked == "" {
 			fmt.Println("Cancelled.")
 			return nil
 		}
-		sandboxRef = label
-	}
-	sandboxID, err := resolveSandboxRef(c.Context, client, sandboxRef)
-	if err != nil {
-		return err
+		ref = picked
 	}
 	if netRef == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network attach <sandbox> <network>")
+			return fmt.Errorf("usage: createos sandbox network attach <sandbox|device> <network>")
 		}
 		picked, err := pickNetwork(c, client, "Attach to which network?")
 		if err != nil {
@@ -364,10 +368,22 @@ func runNetworkAttach(c *cli.Context) error {
 		}
 		netRef = picked
 	}
+	if isDeviceRef(ref) {
+		if err := client.AttachDeviceToNetwork(c.Context, ref, netRef); err != nil {
+			return err
+		}
+		pterm.Success.Printfln("Attached device %s → network %s", ref, netRef)
+		pterm.Println(pterm.Gray("  The device can now reach VMs on this network once it brings up the tunnel."))
+		return nil
+	}
+	sandboxID, err := resolveSandboxRef(c.Context, client, ref)
+	if err != nil {
+		return err
+	}
 	if err := client.AttachNetwork(c.Context, sandboxID, netRef); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Attached %s → network %s", refLabel(sandboxRef, sandboxID), netRef)
+	pterm.Success.Printfln("Attached %s → network %s", refLabel(ref, sandboxID), netRef)
 	pterm.Println(pterm.Gray("  Other sandboxes on this network can now reach this one by name."))
 	return nil
 }
@@ -377,8 +393,8 @@ func runNetworkAttach(c *cli.Context) error {
 func newNetworkDetachCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "detach",
-		Usage:     "Remove a sandbox from a network",
-		ArgsUsage: "[<sandbox> <network>]",
+		Usage:     "Remove a sandbox or device from a network",
+		ArgsUsage: "[<sandbox|device> <network>]",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Skip the confirmation prompt"},
 		},
@@ -392,35 +408,31 @@ func runNetworkDetach(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	args := c.Args().Slice()
-	sandboxRef, netRef := "", ""
+	ref, netRef := "", ""
 	if len(args) > 0 {
-		sandboxRef = args[0]
+		ref = args[0]
 	}
 	if len(args) > 1 {
 		netRef = args[1]
 	}
 	tty := terminal.IsInteractive()
-	if sandboxRef == "" {
+	if ref == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network detach <sandbox> <network>")
+			return fmt.Errorf("usage: createos sandbox network detach <sandbox|device> <network>")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Detach from which sandbox?", "running")
+		picked, err := pickEndpoint(c, client, "Detach what?")
 		if err != nil {
 			return err
 		}
-		if pickedID == "" {
+		if picked == "" {
 			fmt.Println("Cancelled.")
 			return nil
 		}
-		sandboxRef = label
-	}
-	sandboxID, err := resolveSandboxRef(c.Context, client, sandboxRef)
-	if err != nil {
-		return err
+		ref = picked
 	}
 	if netRef == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network detach <sandbox> <network>")
+			return fmt.Errorf("usage: createos sandbox network detach <sandbox|device> <network>")
 		}
 		picked, err := pickNetwork(c, client, "Detach from which network?")
 		if err != nil {
@@ -436,9 +448,18 @@ func runNetworkDetach(c *cli.Context) error {
 	if !tty && !force {
 		return fmt.Errorf("non-interactive: pass --yes to confirm detach")
 	}
+	displayLabel := ref
+	if !isDeviceRef(ref) {
+		// Resolve sandbox short-form (name → id) for the confirmation
+		// prompt + final success line. Devices skip this — they only
+		// come through as dev-… ids.
+		if sandboxID, sErr := resolveSandboxRef(c.Context, client, ref); sErr == nil {
+			displayLabel = refLabel(ref, sandboxID)
+		}
+	}
 	if tty && !force {
 		ok, err := pterm.DefaultInteractiveConfirm.
-			WithDefaultText(fmt.Sprintf("Remove %s from network %s?", refLabel(sandboxRef, sandboxID), netRef)).
+			WithDefaultText(fmt.Sprintf("Remove %s from network %s?", displayLabel, netRef)).
 			WithDefaultValue(false).
 			Show()
 		if err != nil {
@@ -449,11 +470,70 @@ func runNetworkDetach(c *cli.Context) error {
 			return nil
 		}
 	}
+	if isDeviceRef(ref) {
+		if err := client.DetachDeviceFromNetwork(c.Context, ref, netRef); err != nil {
+			return err
+		}
+		pterm.Success.Printfln("Detached device %s from network %s", ref, netRef)
+		return nil
+	}
+	sandboxID, err := resolveSandboxRef(c.Context, client, ref)
+	if err != nil {
+		return err
+	}
 	if err := client.DetachNetwork(c.Context, sandboxID, netRef); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Detached %s from network %s", refLabel(sandboxRef, sandboxID), netRef)
+	pterm.Success.Printfln("Detached %s from network %s", refLabel(ref, sandboxID), netRef)
 	return nil
+}
+
+// pickEndpoint shows a single-select picker that lists BOTH the caller's
+// running sandboxes and registered devices, returning whichever ref the
+// user picks (sb-… or dev-…). Used by `network attach` / `network detach`
+// to support attaching devices alongside sandboxes in interactive mode.
+func pickEndpoint(c *cli.Context, client *api.SandboxClient, title string) (string, error) {
+	// Sandboxes (running only — same filter as the old picker).
+	sbs, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{Limit: 200, Status: "running"})
+	if err != nil {
+		return "", err
+	}
+	// Devices — registered ones for this user.
+	devs, err := client.ListDevices(c.Context)
+	if err != nil {
+		// Non-fatal: still let the user pick a sandbox if device list fails.
+		devs = nil
+	}
+	if len(sbs) == 0 && len(devs) == 0 {
+		fmt.Println("You don't have any running sandboxes or registered devices.")
+		pterm.Println(pterm.Gray("  Create one with: createos sandbox create"))
+		pterm.Println(pterm.Gray("  Or register this machine: createos sandbox devices register"))
+		return "", nil
+	}
+	options := make([]string, 0, len(sbs)+len(devs))
+	refByOpt := make(map[string]string, len(sbs)+len(devs))
+	for _, r := range sbs {
+		label := r.ID
+		if r.Name != nil && *r.Name != "" {
+			label = *r.Name
+		}
+		opt := fmt.Sprintf("sandbox: %s   (id: %s)", label, r.ID)
+		options = append(options, opt)
+		refByOpt[opt] = r.ID
+	}
+	for _, d := range devs {
+		opt := fmt.Sprintf("device:  %s   (%s, id: %s)", d.Name, d.ClientIP, d.ID)
+		options = append(options, opt)
+		refByOpt[opt] = d.ID
+	}
+	picked, err := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultText(title).
+		Show()
+	if err != nil {
+		return "", fmt.Errorf("could not read your selection: %w", err)
+	}
+	return refByOpt[picked], nil
 }
 
 // pickNetwork renders a single-select picker over the caller's networks
