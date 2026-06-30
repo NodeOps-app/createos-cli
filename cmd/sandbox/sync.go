@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"encoding/pem"
 	"errors"
@@ -125,8 +126,14 @@ func runSync(c *cli.Context) error {
 	}
 	tty := terminal.IsInteractive()
 
+	// urfave/cli v2 stops parsing flags at the first positional, so
+	// `sync my-box --mode mirror` would otherwise drop every flag after
+	// the sandbox argument. parseSyncArgs recovers them regardless of
+	// position (same workaround as parseDiskCreateArgs / splitForceFlag).
+	opts := parseSyncArgs(c)
+
 	// 1. Pick / resolve the sandbox.
-	ref := strings.TrimSpace(c.Args().First())
+	ref := opts.ref
 	var id string
 	if ref == "" {
 		if !tty {
@@ -152,7 +159,7 @@ func runSync(c *cli.Context) error {
 	// 2. Local + remote paths. Prompt on TTY when missing; default the
 	//    local side to the user's current directory (the common case —
 	//    "sync this project I'm sitting in").
-	localArg := strings.TrimSpace(c.String("local"))
+	localArg := opts.local
 	if localArg == "" {
 		if !tty {
 			return errors.New("--local is required (no terminal for interactive prompt)")
@@ -170,7 +177,7 @@ func runSync(c *cli.Context) error {
 			localArg = cwd
 		}
 	}
-	remote := strings.TrimSpace(c.String("remote"))
+	remote := opts.remote
 	if remote == "" {
 		if !tty {
 			return errors.New("--remote is required (no terminal for interactive prompt)")
@@ -185,7 +192,7 @@ func runSync(c *cli.Context) error {
 		remote = strings.TrimSpace(v)
 	}
 
-	local, err := validateLocalSyncPath(localArg, c.Bool("force"))
+	local, err := validateLocalSyncPath(localArg, opts.force)
 	if err != nil {
 		return err
 	}
@@ -195,7 +202,7 @@ func runSync(c *cli.Context) error {
 
 	// Resolve --mode up front so a typo fails before we touch the
 	// sandbox or download Mutagen.
-	syncMode, err := syncModeToMutagen(c.String("mode"))
+	syncMode, err := syncModeToMutagen(opts.mode)
 	if err != nil {
 		return err
 	}
@@ -206,7 +213,7 @@ func runSync(c *cli.Context) error {
 	}
 
 	// 3. Resolve the SSH identity. Same auto-detect as `shell --ssh`.
-	privPath, pubPath, err := resolveIdentity(c.String("identity"))
+	privPath, pubPath, err := resolveIdentity(opts.identity)
 	if err != nil {
 		return err
 	}
@@ -228,14 +235,14 @@ func runSync(c *cli.Context) error {
 	defer cleanup()
 	privPath = unlocked
 
-	user := strings.TrimSpace(c.String("user"))
+	user := opts.user
 	if user == "" {
 		user = "root"
 	}
 
 	// 4. Install authorized_keys (with consent) + start sshd. Mirror of
 	//    the SSH-shell path so sync gets the same modes/sshd setup.
-	if err = ensureAuthorizedKey(c, client, id, user, ref, pubBytes, keyConsentGiven(c)); err != nil {
+	if err = ensureAuthorizedKey(c, client, id, user, ref, pubBytes, opts.assumeYes); err != nil {
 		return err
 	}
 	authPath := authorizedKeysPath(user)
@@ -274,7 +281,7 @@ fi
 		return fmt.Errorf("could not open tunnel to the sandbox: %w", err)
 	}
 	defer bridge.close()
-	if err = waitForTCP(ctx, bridge.localAddr, c.Duration("sshd-wait")); err != nil {
+	if err = waitForTCP(ctx, bridge.localAddr, opts.sshdWait); err != nil {
 		return fmt.Errorf("sshd did not start in time: %w", err)
 	}
 	_, port, _ := net.SplitHostPort(bridge.localAddr) //nolint:errcheck
@@ -294,35 +301,35 @@ fi
 	// Mutagen runs ssh from its long-lived daemon, not from this
 	// process. Stop the daemon so the next `create` auto-starts it
 	// under our env, picking up the wrapper PATH.
-	_ = runMutagen(ctx, mutagenBin, wrapperEnv, "daemon", "stop") //nolint:errcheck
+	_ = runMutagen(ctx, mutagenBin, wrapperEnv, io.Discard, io.Discard, "daemon", "stop") //nolint:errcheck
 
-	quiet := c.Bool("quiet")
+	quiet := opts.quiet
 	if !quiet {
 		pterm.Println(pterm.Gray(fmt.Sprintf("  syncing %s ⇄ %s:%s", local, refLabel(ref, id), remote)))
 	}
-	createArgs := []string{
-		"sync", "create",
-		"--name=" + sessionName,
-		"--sync-mode=" + syncMode,
+	createArgs := mutagenCreateArgs(sessionName, syncMode, local, remoteSpec, !opts.noIgnoreVCS, opts.exclude)
+	// On --quiet, capture create output and surface it only if the
+	// command fails, so a real error isn't swallowed by the quiet flag.
+	var createOut io.Writer = os.Stderr
+	var createBuf *bytes.Buffer
+	if quiet {
+		createBuf = &bytes.Buffer{}
+		createOut = createBuf
 	}
-	if !c.Bool("no-ignore-vcs") {
-		createArgs = append(createArgs, "--ignore-vcs")
-	}
-	for _, pat := range c.StringSlice("exclude") {
-		if p := strings.TrimSpace(pat); p != "" {
-			createArgs = append(createArgs, "--ignore="+p)
+	if err := runMutagen(ctx, mutagenBin, wrapperEnv, createOut, createOut, createArgs...); err != nil {
+		detail := ""
+		if createBuf != nil {
+			if s := strings.TrimSpace(createBuf.String()); s != "" {
+				detail = "\n" + s
+			}
 		}
-	}
-	// Source and target must come last as positional args.
-	createArgs = append(createArgs, local, remoteSpec)
-	if err := runMutagen(ctx, mutagenBin, wrapperEnv, createArgs...); err != nil {
-		return fmt.Errorf("mutagen sync create failed: %w", err)
+		return fmt.Errorf("mutagen sync create failed: %w%s", err, detail)
 	}
 	// Best-effort cleanup on exit. We can't always rely on context
 	// cancellation propagating before we exit.
 	defer func() {
 		bg := context.Background()
-		_ = runMutagen(bg, mutagenBin, wrapperEnv, "sync", "terminate", sessionName) //nolint:errcheck
+		_ = runMutagen(bg, mutagenBin, wrapperEnv, io.Discard, io.Discard, "sync", "terminate", sessionName) //nolint:errcheck
 	}()
 
 	if !quiet {
@@ -371,14 +378,154 @@ func syncModeToMutagen(mode string) (string, error) {
 	}
 }
 
-// runMutagen runs `mutagen <args>` with our shadowed PATH env.
-// stdout/stderr are forwarded so the user sees mutagen's progress.
-func runMutagen(ctx context.Context, bin string, env []string, args ...string) error {
+// runMutagen runs `mutagen <args>` with our shadowed PATH env, sending
+// stdout/stderr to the supplied writers. Callers decide the output
+// policy (forward to the terminal, discard, or capture) rather than this
+// helper hardwiring it — e.g. --quiet captures create output and only
+// surfaces it on failure.
+func runMutagen(ctx context.Context, bin string, env []string, stdout, stderr io.Writer, args ...string) error {
 	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- bin is our managed mutagen binary; args are internally constructed
 	cmd.Env = env
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+// mutagenCreateArgs assembles the argument list for `mutagen sync
+// create`. Kept pure (no cli.Context, no I/O) so the mode/ignore/exclude
+// mapping — especially the destructive `mirror` → one-way-replica path —
+// is unit-testable. Source and target must be the final two positionals.
+func mutagenCreateArgs(sessionName, syncMode, local, remoteSpec string, ignoreVCS bool, exclude []string) []string {
+	args := []string{
+		"sync", "create",
+		"--name=" + sessionName,
+		"--sync-mode=" + syncMode,
+	}
+	if ignoreVCS {
+		args = append(args, "--ignore-vcs")
+	}
+	for _, pat := range exclude {
+		if p := strings.TrimSpace(pat); p != "" {
+			args = append(args, "--ignore="+p)
+		}
+	}
+	return append(args, local, remoteSpec)
+}
+
+// syncOptions holds every resolved input to `sandbox sync`. It exists so
+// flags work whether they appear before or after the sandbox argument
+// (urfave/cli v2 stops flag parsing at the first positional).
+type syncOptions struct {
+	ref         string
+	local       string
+	remote      string
+	identity    string
+	user        string
+	mode        string
+	sshdWait    time.Duration
+	exclude     []string
+	force       bool
+	assumeYes   bool
+	quiet       bool
+	noIgnoreVCS bool
+}
+
+// parseSyncArgs merges the flags urfave already parsed (those placed
+// before the sandbox argument) with a manual scan of the positional tail
+// (flags placed after it). The first bare token is the sandbox ref; for
+// scalars the last value wins, and --exclude accumulates. Mirrors the
+// parseDiskCreateArgs / splitForceFlag workaround used elsewhere here.
+func parseSyncArgs(c *cli.Context) syncOptions {
+	opts := syncOptions{
+		local:       strings.TrimSpace(c.String("local")),
+		remote:      strings.TrimSpace(c.String("remote")),
+		identity:    strings.TrimSpace(c.String("identity")),
+		user:        strings.TrimSpace(c.String("user")),
+		mode:        c.String("mode"),
+		sshdWait:    c.Duration("sshd-wait"),
+		exclude:     append([]string{}, c.StringSlice("exclude")...),
+		force:       c.Bool("force"),
+		assumeYes:   c.Bool("yes"),
+		quiet:       c.Bool("quiet"),
+		noIgnoreVCS: c.Bool("no-ignore-vcs"),
+	}
+
+	// Map short aliases to their canonical flag names.
+	canon := func(k string) string {
+		switch k {
+		case "i":
+			return "identity"
+		case "u":
+			return "user"
+		case "y":
+			return "yes"
+		case "q":
+			return "quiet"
+		}
+		return k
+	}
+
+	args := c.Args().Slice()
+	for i := 0; i < len(args); i++ {
+		a := strings.TrimSpace(args[i])
+		if a == "" {
+			continue
+		}
+		if !strings.HasPrefix(a, "-") {
+			if opts.ref == "" {
+				opts.ref = a
+			}
+			continue
+		}
+		raw := strings.TrimLeft(a, "-")
+		key, inline, hasInline := raw, "", false
+		if eq := strings.IndexByte(raw, '='); eq >= 0 {
+			key, inline, hasInline = raw[:eq], raw[eq+1:], true
+		}
+		key = canon(key)
+
+		switch key {
+		case "force":
+			opts.force = true
+		case "yes":
+			opts.assumeYes = true
+		case "quiet":
+			opts.quiet = true
+		case "no-ignore-vcs":
+			opts.noIgnoreVCS = true
+		case "local", "remote", "identity", "user", "mode", "sshd-wait", "exclude":
+			val := inline
+			if !hasInline && i+1 < len(args) {
+				val = args[i+1]
+				i++
+			}
+			val = strings.TrimSpace(val)
+			switch key {
+			case "local":
+				opts.local = val
+			case "remote":
+				opts.remote = val
+			case "identity":
+				opts.identity = val
+			case "user":
+				opts.user = val
+			case "mode":
+				opts.mode = val
+			case "sshd-wait":
+				if d, derr := time.ParseDuration(val); derr == nil {
+					opts.sshdWait = d
+				}
+			case "exclude":
+				if val != "" {
+					opts.exclude = append(opts.exclude, val)
+				}
+			}
+		default:
+			// Unknown flag after the positional. Ignore it rather than
+			// guess whether it consumes the following token as a value.
+		}
+	}
+	return opts
 }
 
 // makeSSHWrapper creates a tempdir with `ssh` AND `scp` shims that
