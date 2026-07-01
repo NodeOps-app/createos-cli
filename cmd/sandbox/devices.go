@@ -137,6 +137,8 @@ func newDevicesCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newDevicesRegisterCommand(),
 			newDevicesUnregisterCommand(),
+			newDevicesListCommand(),
+			newDevicesRemoveCommand(),
 		},
 	}
 }
@@ -239,6 +241,138 @@ func runDeviceUnregister(c *cli.Context) error {
 	return nil
 }
 
-// stub used by `createos sb devices ls` if you ever want it — silenced
-// for now since the design specifies only register/unregister.
+func newDevicesListCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "list",
+		Aliases: []string{"ls"},
+		Usage:   "List your registered devices (all machines, not just this one)",
+		Action:  runDeviceList,
+	}
+}
+
+func runDeviceList(c *cli.Context) error {
+	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
+	if !ok {
+		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
+	}
+	ctx, cancel := context.WithTimeout(c.Context, 10*time.Second)
+	defer cancel()
+	devs, err := client.ListDevices(ctx)
+	if err != nil {
+		return err
+	}
+	if len(devs) == 0 {
+		pterm.Info.Println("No devices registered.")
+		pterm.Println(pterm.Gray("  Register this machine with: createos sb devices register"))
+		return nil
+	}
+	local, _ := loadDeviceState() //nolint:errcheck
+	rows := make([][]string, 0, len(devs)+1)
+	rows = append(rows, []string{"NAME", "IP", "OS", "ID", ""})
+	for _, d := range devs {
+		mark := ""
+		if local != nil && local.DeviceID == d.ID {
+			mark = "(this machine)"
+		}
+		rows = append(rows, []string{d.Name, d.ClientIP, d.OS, d.ID, mark})
+	}
+	return pterm.DefaultTable.WithHasHeader().WithData(rows).Render()
+}
+
+func newDevicesRemoveCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "remove",
+		Aliases:   []string{"rm"},
+		Usage:     "Remove any device by id or name (server-side — use when you no longer have local state)",
+		ArgsUsage: "[<id-or-name>]",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip confirmation"},
+		},
+		Action: runDeviceRemove,
+	}
+}
+
+func runDeviceRemove(c *cli.Context) error {
+	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
+	if !ok {
+		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
+	}
+	ctx, cancel := context.WithTimeout(c.Context, 15*time.Second)
+	defer cancel()
+
+	devs, err := client.ListDevices(ctx)
+	if err != nil {
+		return err
+	}
+	if len(devs) == 0 {
+		pterm.Info.Println("No devices registered.")
+		return nil
+	}
+
+	arg := strings.TrimSpace(c.Args().First())
+	var target *api.DeviceView
+	if arg != "" {
+		for i := range devs {
+			if devs[i].ID == arg || devs[i].Name == arg {
+				target = &devs[i]
+				break
+			}
+		}
+		if target == nil {
+			return fmt.Errorf("no device with id or name %q", arg)
+		}
+	} else {
+		options := make([]string, 0, len(devs))
+		byOpt := make(map[string]*api.DeviceView, len(devs))
+		local, _ := loadDeviceState() //nolint:errcheck
+		for i := range devs {
+			d := &devs[i]
+			mark := ""
+			if local != nil && local.DeviceID == d.ID {
+				mark = "  (this machine)"
+			}
+			opt := fmt.Sprintf("%s   (%s, id: %s)%s", d.Name, d.ClientIP, d.ID, mark)
+			options = append(options, opt)
+			byOpt[opt] = d
+		}
+		picked, selErr := pterm.DefaultInteractiveSelect.
+			WithOptions(options).
+			WithDefaultText("Remove which device?").
+			Show()
+		if selErr != nil {
+			return fmt.Errorf("could not read your selection: %w", selErr)
+		}
+		target = byOpt[picked]
+		if target == nil {
+			return nil
+		}
+	}
+
+	if !c.Bool("yes") {
+		ok, confirmErr := pterm.DefaultInteractiveConfirm.
+			WithDefaultText(fmt.Sprintf("Remove device %q (%s)? Active VPN sessions will drop.", target.Name, target.ClientIP)).
+			Show()
+		if confirmErr != nil {
+			return fmt.Errorf("could not read your response: %w", confirmErr)
+		}
+		if !ok {
+			pterm.Println(pterm.Gray("Aborted."))
+			return nil
+		}
+	}
+
+	if err := client.DeleteDevice(ctx, target.ID); err != nil {
+		return err
+	}
+	pterm.Success.Printfln("Removed %q (%s).", target.Name, target.ClientIP)
+
+	// If we just deleted the row backing this machine's device.json,
+	// scrub local state too so `vpn up` doesn't loop against a ghost id.
+	if local, _ := loadDeviceState(); local != nil && local.DeviceID == target.ID { //nolint:errcheck
+		_ = clearDeviceState() //nolint:errcheck
+		pterm.Println(pterm.Gray("  (also cleared local device.json for this machine)"))
+	}
+	return nil
+}
+
 var _ = output.Render
