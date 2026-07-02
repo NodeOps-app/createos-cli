@@ -115,11 +115,12 @@ func runList(c *cli.Context) error {
 
 	output.Render(c, rows, func() {
 		if len(rows) == 0 {
-			if status == "" && showAll {
+			switch {
+			case status == "" && showAll:
 				fmt.Println("You don't have any sandboxes yet.")
-			} else if status == "" {
+			case status == "":
 				fmt.Println("You don't have any active sandboxes.")
-			} else {
+			default:
 				fmt.Printf("You don't have any %s sandboxes.\n", status)
 			}
 			fmt.Println()
