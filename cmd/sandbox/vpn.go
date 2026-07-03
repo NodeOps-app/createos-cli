@@ -111,12 +111,19 @@ func runVPNUp(c *cli.Context) error {
 	}
 
 	// Detect a stale cosvpn iface left by a prior run (OOM, kernel panic,
-	// force-quit). Presence check works cross-platform via `wg show`,
-	// which ships with wg-quick on both Linux and macOS (unlike
-	// `ip link show`, which doesn't exist on macOS). If it's up, ask
-	// before tearing it down — silent removal could kill an intentional
-	// tunnel the user set up manually.
-	if probe := exec.CommandContext(c.Context, "wg", "show", "cosvpn").Run(); probe == nil {
+	// force-quit). On macOS, wg-quick stores the utun→name mapping in
+	// /var/run/wireguard/<name>.name — checking this file needs no sudo
+	// (unlike `wg show`). On Linux, fall back to `wg show` (which works
+	// without sudo on some distros). If it's up, ask before tearing it
+	// down — silent removal could kill an intentional tunnel the user
+	// set up manually.
+	staleIface := false
+	if _, statErr := os.Stat("/var/run/wireguard/cosvpn.name"); statErr == nil {
+		staleIface = true
+	} else if probe := exec.CommandContext(c.Context, "wg", "show", "cosvpn").Run(); probe == nil {
+		staleIface = true
+	}
+	if staleIface {
 		msg := "A WireGuard interface named 'cosvpn' is already up on this machine."
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("%s Bring it down first with 'sudo wg-quick down cosvpn' and re-run", msg)
@@ -135,7 +142,18 @@ func runVPNUp(c *cli.Context) error {
 		cleanup := sudoCommand(c.Context, "wg-quick", "down", confPath)
 		var cleanupBuf bytes.Buffer
 		cleanup.Stdout, cleanup.Stderr = pickWGOutputs(debug, &cleanupBuf)
-		_ = cleanup.Run() //nolint:errcheck // best-effort teardown
+		if cleanupErr := cleanup.Run(); cleanupErr != nil {
+			// wg-quick down can fail if the config doesn't match the
+			// running interface. Fall back to removing the utun device
+			// directly via the name file that macOS wg-quick leaves in
+			// /var/run/wireguard/.
+			if nameBytes, rErr := os.ReadFile("/var/run/wireguard/cosvpn.name"); rErr == nil {
+				utun := strings.TrimSpace(string(nameBytes))
+				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/cosvpn.name").Run()           //nolint:errcheck
+				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/"+utun+".sock").Run()         //nolint:errcheck
+				_ = sudoCommand(c.Context, "ifconfig", utun, "destroy").Run()                            //nolint:errcheck
+			}
+		}
 	}
 
 	// Bring the tunnel up. wg-quick echoes every shell command it runs
