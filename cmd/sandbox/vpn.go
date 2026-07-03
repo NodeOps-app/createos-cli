@@ -19,6 +19,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 func newVPNCommand() *cli.Command {
@@ -109,16 +110,32 @@ func runVPNUp(c *cli.Context) error {
   or remove the conflicting route, then re-run 'createos sb vpn up'`, conflict)
 	}
 
-	// Defensive startup recovery: a prior CLI run that was killed (OOM,
-	// kernel panic, force-quit) leaves the cosvpn iface in the kernel
-	// without a matching server-side session. wg-quick up would then
-	// fail with "RTNETLINK answers: File exists". Wipe any stale iface
-	// before proceeding so the user doesn't have to manually intervene.
-	if out, _ := exec.CommandContext(c.Context, "ip", "link", "show", "cosvpn").Output(); len(out) > 0 { //nolint:errcheck // best-effort stale-iface probe; absent iface yields empty out
+	// Detect a stale cosvpn iface left by a prior run (OOM, kernel panic,
+	// force-quit). Presence check works cross-platform via `wg show`,
+	// which ships with wg-quick on both Linux and macOS (unlike
+	// `ip link show`, which doesn't exist on macOS). If it's up, ask
+	// before tearing it down — silent removal could kill an intentional
+	// tunnel the user set up manually.
+	if probe := exec.CommandContext(c.Context, "wg", "show", "cosvpn").Run(); probe == nil {
+		msg := "A WireGuard interface named 'cosvpn' is already up on this machine."
+		if !terminal.IsInteractive() {
+			return fmt.Errorf("%s Bring it down first with 'sudo wg-quick down cosvpn' and re-run", msg)
+		}
+		pterm.Warning.Println(msg)
+		ok, cErr := pterm.DefaultInteractiveConfirm.
+			WithDefaultText("Reset it and continue?").
+			WithDefaultValue(false).
+			Show()
+		if cErr != nil {
+			return fmt.Errorf("could not read confirmation: %w", cErr)
+		}
+		if !ok {
+			return fmt.Errorf("cancelled — leaving existing cosvpn tunnel in place")
+		}
 		cleanup := sudoCommand(c.Context, "wg-quick", "down", confPath)
 		var cleanupBuf bytes.Buffer
 		cleanup.Stdout, cleanup.Stderr = pickWGOutputs(debug, &cleanupBuf)
-		_ = cleanup.Run() //nolint:errcheck // best-effort; if cosvpn was never up, this is a no-op
+		_ = cleanup.Run() //nolint:errcheck // best-effort teardown
 	}
 
 	// Bring the tunnel up. wg-quick echoes every shell command it runs
