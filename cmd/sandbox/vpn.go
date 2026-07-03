@@ -149,9 +149,9 @@ func runVPNUp(c *cli.Context) error {
 			// /var/run/wireguard/.
 			if nameBytes, rErr := os.ReadFile("/var/run/wireguard/cosvpn.name"); rErr == nil {
 				utun := strings.TrimSpace(string(nameBytes))
-				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/cosvpn.name").Run()           //nolint:errcheck
-				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/"+utun+".sock").Run()         //nolint:errcheck
-				_ = sudoCommand(c.Context, "ifconfig", utun, "destroy").Run()                            //nolint:errcheck
+				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/cosvpn.name").Run()   //nolint:errcheck
+				_ = sudoCommand(c.Context, "rm", "-f", "/var/run/wireguard/"+utun+".sock").Run() //nolint:errcheck
+				_ = sudoCommand(c.Context, "ifconfig", utun, "destroy").Run()                    //nolint:errcheck
 			}
 		}
 	}
