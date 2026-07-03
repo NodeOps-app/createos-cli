@@ -16,13 +16,13 @@ func newListCommand() *cli.Command {
 		Name:    "list",
 		Aliases: []string{"ls"},
 		Usage:   "List your sandboxes",
-		Description: `Show your sandboxes. By default only running ones are shown.
+		Description: `Show your sandboxes. By default active ones are shown (running, paused, pausing, resuming, forking).
 
 Examples:
-  # Running sandboxes
+  # Active sandboxes (running, paused, pausing, resuming, forking)
   createos sandbox list
 
-  # Every sandbox, including paused / destroyed / failed rows
+  # Every sandbox, including destroyed / failed rows
   createos sandbox list --all
 
   # Just one status
@@ -43,12 +43,12 @@ Examples:
 			},
 			&cli.StringFlag{
 				Name:  "status",
-				Usage: "Show only sandboxes in this state (running | creating | paused | destroyed | failed)",
+				Usage: "Show only sandboxes in this state (running | paused | pausing | resuming | forking | creating | destroyed | failed)",
 			},
 			&cli.BoolFlag{
 				Name:    "all",
 				Aliases: []string{"a"},
-				Usage:   "Show sandboxes in every state, not just running ones",
+				Usage:   "Show sandboxes in every state, not just active ones",
 			},
 			&cli.BoolFlag{
 				Name:    "quiet",
@@ -66,12 +66,11 @@ func runList(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
-	// Default: running only. --all clears the filter. --status overrides both.
-	status := "running"
+	// Default: active statuses only. --all clears the filter. --status overrides both.
+	status := ""
+	showAll := c.Bool("all")
 	if explicit := c.String("status"); explicit != "" {
 		status = explicit
-	} else if c.Bool("all") {
-		status = ""
 	}
 
 	rows, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
@@ -81,6 +80,24 @@ func runList(c *cli.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// When neither --all nor --status is given, keep only active statuses.
+	if !showAll && status == "" {
+		activeStatuses := map[string]bool{
+			"running":  true,
+			"paused":   true,
+			"pausing":  true,
+			"resuming": true,
+			"forking":  true,
+		}
+		filtered := rows[:0]
+		for _, r := range rows {
+			if activeStatuses[r.Status] {
+				filtered = append(filtered, r)
+			}
+		}
+		rows = filtered
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -98,9 +115,12 @@ func runList(c *cli.Context) error {
 
 	output.Render(c, rows, func() {
 		if len(rows) == 0 {
-			if status == "" {
+			switch {
+			case status == "" && showAll:
 				fmt.Println("You don't have any sandboxes yet.")
-			} else {
+			case status == "":
+				fmt.Println("You don't have any active sandboxes.")
+			default:
 				fmt.Printf("You don't have any %s sandboxes.\n", status)
 			}
 			fmt.Println()
