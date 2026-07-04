@@ -73,31 +73,33 @@ func runList(c *cli.Context) error {
 		status = explicit
 	}
 
-	rows, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
-		Limit:  c.Int("limit"),
-		Offset: c.Int("offset"),
-		Status: status,
-	})
-	if err != nil {
-		return err
-	}
+	var rows []api.SandboxView
 
-	// When neither --all nor --status is given, keep only active statuses.
 	if !showAll && status == "" {
-		activeStatuses := map[string]bool{
-			"running":  true,
-			"paused":   true,
-			"pausing":  true,
-			"resuming": true,
-			"forking":  true,
-		}
-		filtered := rows[:0]
-		for _, r := range rows {
-			if activeStatuses[r.Status] {
-				filtered = append(filtered, r)
+		// Fetch each active status individually so paused / resuming VMs
+		// aren't pushed out of the first page by destroyed rows.
+		activeStatuses := []string{"running", "paused", "pausing", "resuming", "forking"}
+		for _, s := range activeStatuses {
+			page, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
+				Limit:  c.Int("limit"),
+				Offset: c.Int("offset"),
+				Status: s,
+			})
+			if err != nil {
+				return err
 			}
+			rows = append(rows, page...)
 		}
-		rows = filtered
+	} else {
+		var err error
+		rows, _, err = client.ListSandboxes(c.Context, api.ListSandboxesOpts{
+			Limit:  c.Int("limit"),
+			Offset: c.Int("offset"),
+			Status: status,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
