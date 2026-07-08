@@ -289,7 +289,7 @@ func runEditor(c *cli.Context) error {
 
 	// --- 8. Launch editor ----------------------------------------------------
 	if c.Bool("no-launch") {
-		printFollowup(alias)
+		printFollowup(alias, sbName)
 		return nil
 	}
 	choice, err := chooseEditor(c)
@@ -297,12 +297,12 @@ func runEditor(c *cli.Context) error {
 		return err
 	}
 	if choice == "none" {
-		printFollowup(alias)
+		printFollowup(alias, sbName)
 		return nil
 	}
-	if err := launchEditor(choice, alias); err != nil {
+	if err := launchEditor(choice, alias, sbName); err != nil {
 		pterm.Warning.Printfln("could not launch %s: %v", choice, err)
-		printFollowup(alias)
+		printFollowup(alias, sbName)
 		return nil
 	}
 	pterm.Success.Printfln("launched %s", choice)
@@ -464,9 +464,7 @@ func bytesTrimRight(b []byte, cutset string) []byte {
 	return b
 }
 
-// hostLine builds the `Host` line — dual alias when a friendly name
-// passes the regex, id-only otherwise. Same-name-as-id, blanks, and
-// anything with unsafe chars fall back to id-only.
+// hostLine builds the `Host` line — id-only, or dual alias when name is safe.
 func hostLine(alias, name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" || name == alias || !editorNameRE.MatchString(name) {
@@ -476,7 +474,6 @@ func hostLine(alias, name string) string {
 }
 
 // renderSSHBlock builds the ~/.ssh/config stanza for the sandbox.
-// `name` is the sandbox's friendly name; empty or unsafe → id-only alias.
 func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity, name string) (string, error) {
 	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
 	end := fmt.Sprintf(sshConfigBlockEnd, alias)
@@ -763,20 +760,21 @@ func probeSSH(ctx context.Context, alias string) error {
 	return last
 }
 
-// launchEditor spawns the user's editor with the SSH remote pre-selected.
-// Detaches from stdin/stdout so the shell prompt returns immediately.
-func launchEditor(editor, alias string) error {
-	// alias is regex-validated (editorAliasRE ^sb-[0-9a-z]{26}$);
-	// editor is one of a fixed allow-list.
+// launchEditor spawns the user's editor. Uses the friendly name when safe
+// so the editor's status bar shows "nostalgic-cartwright" instead of a ULID.
+func launchEditor(editor, alias, name string) error {
+	display := alias
+	if n := strings.TrimSpace(name); n != "" && n != alias && editorNameRE.MatchString(n) {
+		display = n
+	}
 	var cmd *exec.Cmd
 	switch editor {
 	case "zed":
-		// Zed accepts ssh://<host>/<path>. `/root` is devbox's default HOME.
-		cmd = exec.CommandContext(context.Background(), "zed", fmt.Sprintf("ssh://%s/root", alias)) //nolint:gosec // G204 false positive; alias validated
+		cmd = exec.CommandContext(context.Background(), "zed", fmt.Sprintf("ssh://%s/root", display)) //nolint:gosec // G204 false positive; display validated
 	case "cursor":
-		cmd = exec.CommandContext(context.Background(), "cursor", "--remote", "ssh-remote+"+alias, "/root") //nolint:gosec // G204 false positive; alias validated
+		cmd = exec.CommandContext(context.Background(), "cursor", "--remote", "ssh-remote+"+display, "/root") //nolint:gosec // G204 false positive; display validated
 	case "code":
-		cmd = exec.CommandContext(context.Background(), "code", "--remote", "ssh-remote+"+alias, "/root") //nolint:gosec // G204 false positive; alias validated
+		cmd = exec.CommandContext(context.Background(), "code", "--remote", "ssh-remote+"+display, "/root") //nolint:gosec // G204 false positive; display validated
 	default:
 		return fmt.Errorf("unknown editor %q", editor)
 	}
@@ -792,23 +790,20 @@ func launchEditor(editor, alias string) error {
 }
 
 // printFollowup shows the next-step hints when we didn't auto-launch.
-func printFollowup(alias string) {
+func printFollowup(alias, name string) {
+	display := alias
+	if n := strings.TrimSpace(name); n != "" && n != alias && editorNameRE.MatchString(n) {
+		display = n
+	}
 	pterm.Info.Println("connect anytime:")
-	pterm.Info.Printfln("  ssh %s", alias)
-	pterm.Info.Printfln("  zed ssh://%s/root", alias)
-	pterm.Info.Printfln("  code --remote ssh-remote+%s /root", alias)
-	pterm.Info.Printfln("  cursor --remote ssh-remote+%s /root", alias)
+	pterm.Info.Printfln("  ssh %s", display)
+	pterm.Info.Printfln("  zed ssh://%s/root", display)
+	pterm.Info.Printfln("  code --remote ssh-remote+%s /root", display)
+	pterm.Info.Printfln("  cursor --remote ssh-remote+%s /root", display)
 }
 
-// sweepStaleBlocks walks ~/.ssh/config for our editor-owned blocks and
-// prunes any whose sandbox the server can't find or considers dead
-// (destroyed / failed). Skips the alias the caller is about to write.
-// Returns the aliases actually removed.
-//
-// Concurrency budget: parallel GetSandbox calls with a small pool so the
-// sweep doesn't inflate editor-command latency on users with many
-// entries. Errors that aren't "not found" (network hiccups, 5xx) leave
-// the block alone — we never destroy user config on transient failures.
+// sweepStaleBlocks prunes our config blocks whose sandbox is 404 or in
+// a terminal state. Transient failures leave blocks alone.
 func sweepStaleBlocks(ctx context.Context, client *api.SandboxClient, keep string) ([]string, error) {
 	path, err := sshConfigPath()
 	if err != nil {
@@ -864,8 +859,6 @@ func sweepStaleBlocks(ctx context.Context, client *api.SandboxClient, keep strin
 	return pruned, nil
 }
 
-// collectCreateosAliases returns every alias marked by our "# BEGIN
-// createos <alias>" delimiter in ~/.ssh/config.
 func collectCreateosAliases(cfg string) []string {
 	out := make([]string, 0)
 	const prefix = "# BEGIN createos "
@@ -881,10 +874,8 @@ func collectCreateosAliases(cfg string) []string {
 	return out
 }
 
-// isSandboxGone returns true only when we're confident the sandbox no
-// longer belongs to the user or has reached a terminal state. A network
-// error, 5xx, or auth failure returns false so we don't nuke config on
-// transient issues.
+// isSandboxGone returns true only on 404 or terminal status. Network
+// errors return false — never nuke config on transient issues.
 func isSandboxGone(ctx context.Context, client *api.SandboxClient, alias string) bool {
 	sctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
