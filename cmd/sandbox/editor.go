@@ -1,16 +1,3 @@
-// Package sandbox — `createos sandbox editor` connects a local remote-dev
-// editor (Zed, Cursor, VS Code) to a sandbox in one command.
-//
-// The command is interactive by default (mode + editor pickers) and takes
-// flags for scripted use. Two transports are supported:
-//
-//   - tunnel: SSH via the createos gateway using OpenSSH ProxyJump. Zero
-//     background processes; works anywhere OpenSSH does.
-//   - vpn:    Direct connection to the sandbox's overlay IP via the CreateOS
-//     WireGuard tunnel. Grants full network access, not just SSH.
-//
-// The default mode picks vpn if the cosvpn interface is already up,
-// otherwise tunnel.
 package sandbox
 
 import (
@@ -35,16 +22,15 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
-// Input validation — these values end up spliced into a ProxyCommand
-// shell line, so anything permissive here becomes a local-code-exec bug.
+// These values end up spliced into a ProxyCommand shell line, so
+// anything permissive becomes a local-code-exec bug.
 var (
 	editorUserRE  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$`)
 	editorHostRE  = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,253}$`)
 	editorAliasRE = regexp.MustCompile(`^sb-[0-9a-z]{26}$`)
 )
 
-// createosSSHBlockBegin / End delimit the block we own in ~/.ssh/config.
-// One block per sandbox id — re-runs of `sandbox editor` rewrite in place.
+// One block per sandbox id in ~/.ssh/config; re-runs rewrite in place.
 const (
 	sshConfigBlockBegin = "# BEGIN createos %s"
 	sshConfigBlockEnd   = "# END createos %s"
@@ -182,10 +168,8 @@ func runEditor(c *cli.Context) error {
 	}
 
 	// --- 2. Ensure a dedicated per-sandbox keypair --------------------------
-	// We never touch the user's real ~/.ssh/id_ed25519. Every sandbox gets
-	// its own throwaway ed25519 keypair under ~/.config/createos/keys/<sid>
-	// so compromising or losing a sandbox never affects the user's other
-	// SSH identities. Idempotent: reused if it already exists.
+	// Every sandbox gets its own throwaway keypair — the user's ~/.ssh/
+	// is never touched.
 	privPath, pubBytes, generated, err := ensureDedicatedKey(alias)
 	if err != nil {
 		return err
@@ -224,13 +208,16 @@ func runEditor(c *cli.Context) error {
 		return fmt.Errorf("vpn not up")
 	}
 
-	// --- 5. Register our dedicated pubkey + start sshd in the guest --------
-	// AddSSHPubkeys is idempotent server-side. Gateway (tunnel mode) and
-	// guest sshd (via the row-propagated authorized_keys) both trust the
-	// same list, so one push covers both transports.
+	// --- 5. Register our dedicated pubkey --------
+	// Gateway auths against sandboxes.ssh_pubkeys (DB); guest sshd reads
+	// /root/.ssh/authorized_keys. Both hops in the tunnel path need it.
 	sp, _ := pterm.DefaultSpinner.WithText("Registering our SSH key on the sandbox…").Start()
 	if _, err := client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
-		sp.Fail(fmt.Sprintf("could not register key: %v", err))
+		sp.Fail(fmt.Sprintf("could not register key with gateway: %v", err))
+		return err
+	}
+	if err := ensureAuthorizedKey(c, client, id, user, ref, pubBytes, true); err != nil {
+		sp.Fail(fmt.Sprintf("could not install key in guest: %v", err))
 		return err
 	}
 	sp.Success("SSH key registered on sandbox")
@@ -291,10 +278,6 @@ func runEditor(c *cli.Context) error {
 	return nil
 }
 
-// -----------------------------------------------------------------------------
-// mode + editor pickers
-// -----------------------------------------------------------------------------
-
 func chooseMode(c *cli.Context) (string, error) {
 	if v := strings.ToLower(strings.TrimSpace(c.String("via"))); v != "" {
 		if v != "tunnel" && v != "vpn" {
@@ -302,7 +285,6 @@ func chooseMode(c *cli.Context) (string, error) {
 		}
 		return v, nil
 	}
-	// Smart default: use VPN if it's already up, tunnel otherwise.
 	def := "tunnel"
 	if isVPNUp() {
 		def = "vpn"
@@ -349,8 +331,6 @@ func chooseEditor(c *cli.Context) (string, error) {
 	return sel, nil
 }
 
-// detectEditors returns the subset of {zed, cursor, code} present on PATH,
-// preserving that preference order.
 func detectEditors() []string {
 	out := []string{}
 	for _, e := range []string{"zed", "cursor", "code"} {
@@ -361,18 +341,10 @@ func detectEditors() []string {
 	return out
 }
 
-// -----------------------------------------------------------------------------
-// SSH config file management
-// -----------------------------------------------------------------------------
+func sshAlias(id string) string { return id }
 
-// sshAlias is the Host stanza in ~/.ssh/config for a sandbox.
-func sshAlias(id string) string {
-	// Full id is stable and searchable; e.g. sb-01k…-editor is too long.
-	return id
-}
-
-// keysDir is where per-sandbox dedicated keypairs live. Namespaced under
-// ~/.config/createos so the user's ~/.ssh stays untouched by us.
+// keysDir keeps per-sandbox keys under ~/.config/createos so the user's
+// ~/.ssh stays untouched.
 func keysDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -381,9 +353,6 @@ func keysDir() (string, error) {
 	return filepath.Join(home, ".config", "createos", "keys"), nil
 }
 
-// dedicatedKeyPath returns the (private, public) paths for a sandbox's
-// dedicated keypair. Never overlaps with ~/.ssh/id_* — those belong to
-// the user.
 func dedicatedKeyPath(alias string) (string, string, error) {
 	dir, err := keysDir()
 	if err != nil {
@@ -393,14 +362,10 @@ func dedicatedKeyPath(alias string) (string, string, error) {
 	return priv, priv + ".pub", nil
 }
 
-// ensureDedicatedKey guarantees a per-sandbox ed25519 keypair exists on
-// disk and returns (privPath, pubBytes, generatedThisCall, err). The
-// generated flag lets the caller print a friendly note only the first
-// time a sandbox gets its key.
-//
-// The key is unprotected (no passphrase) — it's single-purpose and lives
-// under 0700 dir + 0600 file. A stolen key grants access only to that
-// one sandbox until the user runs `--remove`.
+// ensureDedicatedKey generates an ed25519 keypair for the sandbox on
+// first call and reuses it after. Returns (privPath, pubBytes,
+// generatedThisCall). Key is unprotected — it's single-sandbox scope
+// and lives under 0700/0600 modes.
 func ensureDedicatedKey(alias string) (privPath string, pubBytes []byte, generated bool, err error) {
 	priv, pub, err := dedicatedKeyPath(alias)
 	if err != nil {
