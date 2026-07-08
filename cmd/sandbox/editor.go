@@ -202,10 +202,11 @@ func runEditor(c *cli.Context) error {
 		return fmt.Errorf("refusing shell-unsafe --user %q (allowed: %s)", user, editorUserRE)
 	}
 
-	// --- 4. Bring up VPN if needed ------------------------------------------
-	if mode == "vpn" && !isVPNUp() {
-		pterm.Info.Println("VPN isn't up — run `createos sb vpn up` in another terminal first, then re-run this command")
-		return fmt.Errorf("vpn not up")
+	// --- 4. VPN preflight ---------------------------------------------------
+	if mode == "vpn" {
+		if err := preflightVPN(c, client, sb.ID); err != nil {
+			return err
+		}
 	}
 
 	// --- 5. Register our dedicated pubkey --------
@@ -292,7 +293,7 @@ func chooseMode(c *cli.Context) (string, error) {
 	if c.Bool("yes") || !terminal.IsInteractive() {
 		return def, nil
 	}
-	opts := []string{"tunnel — SSH via gateway (no VPN needed)", "vpn — direct via WireGuard (full network access)"}
+	opts := []string{"tunnel — SSH via gateway", "vpn — direct to the sandbox (full network access)"}
 	sel, err := pterm.DefaultInteractiveSelect.
 		WithOptions(opts).
 		WithDefaultText("Connection mode").
@@ -560,9 +561,78 @@ func sshConfigPath() (string, error) {
 // helpers
 // -----------------------------------------------------------------------------
 
-// isVPNUp cheaply checks whether the createos WireGuard tunnel is active.
-// Mirrors the staleness probe in vpn.go: macOS uses the wg-quick name file,
-// Linux uses `wg show`. No sudo needed on either.
+// preflightVPN validates that (a) this machine is registered as a
+// device, (b) the device and sandbox share at least one network, and
+// (c) the VPN tunnel is up. Fails with a copy-pasteable next step
+// instead of a stack trace.
+func preflightVPN(c *cli.Context, client *api.SandboxClient, sandboxID string) error {
+	st, _ := loadDeviceState() //nolint:errcheck // missing file = not registered
+	if st == nil || st.DeviceID == "" {
+		pterm.Warning.Println("this machine isn't set up for the VPN yet.")
+		pterm.Println()
+		pterm.Println("    createos sandbox devices register")
+		pterm.Println()
+		pterm.Info.Println("then re-run this command.")
+		return fmt.Errorf("device not registered")
+	}
+	shared, err := sandboxSharesNetwork(c.Context, client, st.DeviceID, sandboxID)
+	if err != nil {
+		// Server-lost device (was deleted from account) → point user at
+		// the fix instead of dumping the raw API error.
+		if api.IsNotFound(err) {
+			pterm.Warning.Println("your saved device registration is stale — re-register this machine:")
+			pterm.Println()
+			pterm.Println("    createos sandbox devices register")
+			pterm.Println()
+			return fmt.Errorf("device registration stale")
+		}
+		return fmt.Errorf("checking your device's networks: %w", err)
+	}
+	if !shared {
+		pterm.Warning.Println("this sandbox and your device aren't in the same network yet.")
+		pterm.Println()
+		pterm.Println("  Add the sandbox to a network your device is in:")
+		pterm.Println("    createos sandbox network attach " + sandboxID + " <network>")
+		pterm.Println()
+		pterm.Println("  Or add the device to a network the sandbox is in:")
+		pterm.Println("    createos sandbox devices attach <network>")
+		return fmt.Errorf("device and sandbox are not on the same network")
+	}
+	if !isVPNUp() {
+		pterm.Warning.Println("VPN isn't running. Open a new terminal tab and start it:")
+		pterm.Println()
+		pterm.Println("    createos sandbox vpn up")
+		pterm.Println()
+		pterm.Info.Println("Leave it running (Ctrl-C stops it), then re-run this command.")
+		return fmt.Errorf("vpn not up")
+	}
+	return nil
+}
+
+// sandboxSharesNetwork returns true when the device and sandbox share
+// at least one private network. Uses ListDeviceNetworks + GetNetwork so
+// no new server surface is required.
+func sandboxSharesNetwork(ctx context.Context, client *api.SandboxClient, deviceID, sandboxID string) (bool, error) {
+	nets, err := client.ListDeviceNetworks(ctx, deviceID)
+	if err != nil {
+		return false, err
+	}
+	for _, n := range nets {
+		net, err := client.GetNetwork(ctx, n.NetworkID)
+		if err != nil {
+			continue
+		}
+		for _, m := range net.Members {
+			if m.SandboxID == sandboxID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// isVPNUp cheaply probes whether the createos tunnel interface is
+// active. macOS reads the wg-quick name file; Linux uses `wg show`.
 func isVPNUp() bool {
 	if _, err := os.Stat("/var/run/wireguard/cosvpn.name"); err == nil {
 		return true
