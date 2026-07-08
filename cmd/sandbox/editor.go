@@ -15,19 +15,32 @@ package sandbox
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
+)
+
+// Input validation — these values end up spliced into a ProxyCommand
+// shell line, so anything permissive here becomes a local-code-exec bug.
+var (
+	editorUserRE  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$`)
+	editorHostRE  = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,253}$`)
+	editorAliasRE = regexp.MustCompile(`^sb-[0-9a-z]{26}$`)
 )
 
 // createosSSHBlockBegin / End delimit the block we own in ~/.ssh/config.
@@ -39,9 +52,10 @@ const (
 
 func newEditorCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "editor",
-		Usage:     "Connect a remote editor (Zed, Cursor, VS Code) to a sandbox",
-		ArgsUsage: "[<sandbox>]",
+		Name:                   "editor",
+		Usage:                  "Connect a remote editor (Zed, Cursor, VS Code) to a sandbox",
+		ArgsUsage:              "[<sandbox>]",
+		UseShortOptionHandling: true,
 		Description: `Wire up a sandbox for remote-development in one command:
 
   - ensures your local SSH key is registered on the sandbox
@@ -66,7 +80,11 @@ Examples:
   createos sandbox editor                       # pick sandbox + mode + editor
   createos sandbox editor my-box                # interactive on named box
   createos sandbox editor my-box --via tunnel --editor zed --yes
-  createos sandbox editor my-box --forget       # remove the SSH config entry`,
+  createos sandbox editor --remove my-box       # remove the SSH config entry
+
+Note: flag options like --via and --remove must appear BEFORE the
+sandbox positional (urfave/cli stops flag parsing at the first
+positional).`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "via",
@@ -75,11 +93,6 @@ Examples:
 			&cli.StringFlag{
 				Name:  "editor",
 				Usage: "Editor to launch after connect: 'zed', 'cursor', 'code' (VS Code), or 'none' (config only)",
-			},
-			&cli.StringFlag{
-				Name:    "identity",
-				Aliases: []string{"i"},
-				Usage:   "Path to your SSH private key (defaults to ~/.ssh/id_ed25519, then id_rsa, then id_ecdsa)",
 			},
 			&cli.StringFlag{
 				Name:    "user",
@@ -97,7 +110,7 @@ Examples:
 				Usage: "Wire up SSH config but don't launch the editor",
 			},
 			&cli.BoolFlag{
-				Name:  "forget",
+				Name:  "remove",
 				Usage: "Remove this sandbox's block from ~/.ssh/config and exit",
 			},
 		},
@@ -138,17 +151,26 @@ func runEditor(c *cli.Context) error {
 	}
 
 	alias := sshAlias(id)
+	if !editorAliasRE.MatchString(alias) {
+		return fmt.Errorf("refusing to write shell-unsafe SSH alias %q", alias)
+	}
 
-	// --forget short-circuits: yank our block and exit.
-	if c.Bool("forget") {
-		removed, ferr := forgetSSHBlock(alias)
+	// --remove short-circuits: yank our block + delete our dedicated key.
+	if c.Bool("remove") {
+		removed, ferr := removeSSHBlock(alias)
 		if ferr != nil {
 			return ferr
 		}
-		if removed {
+		keyRemoved := removeDedicatedKey(alias)
+		switch {
+		case removed && keyRemoved:
+			pterm.Success.Printfln("removed ~/.ssh/config entry + local key for %s", alias)
+		case removed:
 			pterm.Success.Printfln("removed ~/.ssh/config entry: %s", alias)
-		} else {
-			pterm.Info.Printfln("no ~/.ssh/config entry for %s to remove", alias)
+		case keyRemoved:
+			pterm.Success.Printfln("removed local key for %s", alias)
+		default:
+			pterm.Info.Printfln("nothing to remove for %s", alias)
 		}
 		return nil
 	}
@@ -159,14 +181,17 @@ func runEditor(c *cli.Context) error {
 		return err
 	}
 
-	// --- 2. Resolve local SSH identity --------------------------------------
-	privPath, pubPath, err := resolveIdentity(c.String("identity"))
+	// --- 2. Ensure a dedicated per-sandbox keypair --------------------------
+	// We never touch the user's real ~/.ssh/id_ed25519. Every sandbox gets
+	// its own throwaway ed25519 keypair under ~/.config/createos/keys/<sid>
+	// so compromising or losing a sandbox never affects the user's other
+	// SSH identities. Idempotent: reused if it already exists.
+	privPath, pubBytes, generated, err := ensureDedicatedKey(alias)
 	if err != nil {
 		return err
 	}
-	pubBytes, err := os.ReadFile(pubPath) // #nosec G304 -- user's own pubkey
-	if err != nil {
-		return fmt.Errorf("could not read public key %s: %w", pubPath, err)
+	if generated {
+		pterm.Info.Printfln("generated a fresh SSH key for this sandbox: %s", privPath)
 	}
 
 	// --- 3. Load sandbox row + verify it's running --------------------------
@@ -189,6 +214,9 @@ func runEditor(c *cli.Context) error {
 	if user == "" {
 		user = "root"
 	}
+	if !editorUserRE.MatchString(user) {
+		return fmt.Errorf("refusing shell-unsafe --user %q (allowed: %s)", user, editorUserRE)
+	}
 
 	// --- 4. Bring up VPN if needed ------------------------------------------
 	if mode == "vpn" && !isVPNUp() {
@@ -196,10 +224,13 @@ func runEditor(c *cli.Context) error {
 		return fmt.Errorf("vpn not up")
 	}
 
-	// --- 5. Push SSH key + start sshd in the guest --------------------------
-	sp, _ := pterm.DefaultSpinner.WithText("Registering SSH key…").Start()
-	if err := ensureAuthorizedKey(c, client, id, user, ref, pubBytes, keyConsentGiven(c)); err != nil {
-		sp.Fail(err.Error())
+	// --- 5. Register our dedicated pubkey + start sshd in the guest --------
+	// AddSSHPubkeys is idempotent server-side. Gateway (tunnel mode) and
+	// guest sshd (via the row-propagated authorized_keys) both trust the
+	// same list, so one push covers both transports.
+	sp, _ := pterm.DefaultSpinner.WithText("Registering our SSH key on the sandbox…").Start()
+	if _, err := client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
+		sp.Fail(fmt.Sprintf("could not register key: %v", err))
 		return err
 	}
 	sp.Success("SSH key registered on sandbox")
@@ -215,6 +246,9 @@ func runEditor(c *cli.Context) error {
 	gwHost, gwPort, err := gatewayAddr(c)
 	if err != nil {
 		return err
+	}
+	if !editorHostRE.MatchString(gwHost) {
+		return fmt.Errorf("refusing shell-unsafe gateway host %q", gwHost)
 	}
 	block, err := renderSSHBlock(alias, mode, id, sbIP, gwHost, gwPort, user, privPath)
 	if err != nil {
@@ -337,6 +371,98 @@ func sshAlias(id string) string {
 	return id
 }
 
+// keysDir is where per-sandbox dedicated keypairs live. Namespaced under
+// ~/.config/createos so the user's ~/.ssh stays untouched by us.
+func keysDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve $HOME: %w", err)
+	}
+	return filepath.Join(home, ".config", "createos", "keys"), nil
+}
+
+// dedicatedKeyPath returns the (private, public) paths for a sandbox's
+// dedicated keypair. Never overlaps with ~/.ssh/id_* — those belong to
+// the user.
+func dedicatedKeyPath(alias string) (string, string, error) {
+	dir, err := keysDir()
+	if err != nil {
+		return "", "", err
+	}
+	priv := filepath.Join(dir, alias)
+	return priv, priv + ".pub", nil
+}
+
+// ensureDedicatedKey guarantees a per-sandbox ed25519 keypair exists on
+// disk and returns (privPath, pubBytes, generatedThisCall, err). The
+// generated flag lets the caller print a friendly note only the first
+// time a sandbox gets its key.
+//
+// The key is unprotected (no passphrase) — it's single-purpose and lives
+// under 0700 dir + 0600 file. A stolen key grants access only to that
+// one sandbox until the user runs `--remove`.
+func ensureDedicatedKey(alias string) (privPath string, pubBytes []byte, generated bool, err error) {
+	priv, pub, err := dedicatedKeyPath(alias)
+	if err != nil {
+		return "", nil, false, err
+	}
+	if b, rerr := os.ReadFile(pub); rerr == nil { // #nosec G304 -- our own generated pubkey
+		return priv, b, false, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(priv), 0o700); err != nil {
+		return "", nil, false, fmt.Errorf("mkdir keys dir: %w", err)
+	}
+	// Generate ed25519.
+	pubKey, privKey, kerr := ed25519.GenerateKey(rand.Reader)
+	if kerr != nil {
+		return "", nil, false, fmt.Errorf("generate ed25519 key: %w", kerr)
+	}
+	// Marshal PRIVATE key in OpenSSH format.
+	pemBlock, merr := ssh.MarshalPrivateKey(privKey, "createos-cli sandbox editor")
+	if merr != nil {
+		return "", nil, false, fmt.Errorf("marshal private key: %w", merr)
+	}
+	if werr := os.WriteFile(priv, pem.EncodeToMemory(pemBlock), 0o600); werr != nil {
+		return "", nil, false, fmt.Errorf("write %s: %w", priv, werr)
+	}
+	// Marshal PUBLIC key in authorized_keys format.
+	sshPub, perr := ssh.NewPublicKey(pubKey)
+	if perr != nil {
+		return "", nil, false, fmt.Errorf("wrap public key: %w", perr)
+	}
+	pubLine := append(ssh.MarshalAuthorizedKey(sshPub)[:0:0], ssh.MarshalAuthorizedKey(sshPub)...)
+	// Add a comment for humans reading the file later.
+	pubLine = append(bytesTrimRight(pubLine, "\n"), []byte(" createos-cli "+alias+"\n")...)
+	if werr := os.WriteFile(pub, pubLine, 0o600); werr != nil {
+		return "", nil, false, fmt.Errorf("write %s: %w", pub, werr)
+	}
+	return priv, pubLine, true, nil
+}
+
+// removeDedicatedKey deletes the private + public key files for a
+// sandbox alias. Returns whether anything was actually removed.
+func removeDedicatedKey(alias string) bool {
+	priv, pub, err := dedicatedKeyPath(alias)
+	if err != nil {
+		return false
+	}
+	removed := false
+	if err := os.Remove(priv); err == nil {
+		removed = true
+	}
+	if err := os.Remove(pub); err == nil {
+		removed = true
+	}
+	return removed
+}
+
+func bytesTrimRight(b []byte, cutset string) []byte {
+	for len(b) > 0 && strings.IndexByte(cutset, b[len(b)-1]) >= 0 {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
 // renderSSHBlock builds the ~/.ssh/config stanza for the sandbox.
 func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity string) (string, error) {
 	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
@@ -354,13 +480,17 @@ Host %s
 %s
 `, begin, alias, sbIP, user, identity, end), nil
 	case "tunnel":
+		// The inner `ssh -W` for the gateway needs its own
+		// StrictHostKeyChecking + UserKnownHostsFile — it doesn't inherit
+		// the outer Host block's options. Without these, the first
+		// connect fails on unknown gateway host key.
 		return fmt.Sprintf(`%s
 Host %s
     HostName          127.0.0.1
     Port              22
     User              %s
     IdentityFile      %s
-    ProxyCommand      ssh -W %%h:%%p %s@%s -p %d -i %s
+    ProxyCommand      ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts_createos -W %%h:%%p %s@%s -p %d -i %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
 %s
@@ -392,9 +522,9 @@ func writeSSHBlock(alias, block string) error {
 	return nil
 }
 
-// forgetSSHBlock removes any existing block for the alias. Returns
+// removeSSHBlock removes any existing block for the alias. Returns
 // (removed, err) — removed=false means the block wasn't present.
-func forgetSSHBlock(alias string) (bool, error) {
+func removeSSHBlock(alias string) (bool, error) {
 	path, err := sshConfigPath()
 	if err != nil {
 		return false, err
