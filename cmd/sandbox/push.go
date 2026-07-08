@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -28,6 +30,12 @@ Examples:
 
 Max 500 MB per file. The remote path must be absolute. Parent
 directories are created automatically.`,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "stats",
+				Usage: "Print elapsed time and average throughput after the upload",
+			},
+		},
 		Action: runPush,
 	}
 }
@@ -87,17 +95,77 @@ func runPush(c *cli.Context) error {
 	}
 	defer func() { _ = closer() }() //nolint:errcheck
 
+	stats := c.Bool("stats")
+	counted := &countingReader{r: src}
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Uploading %s → %s:%s", label, refLabel(ref, id), remote)) //nolint:errcheck
-	if err := client.UploadFile(c.Context, id, remote, src, size); err != nil {
+	start := time.Now()
+	if err := client.UploadFile(c.Context, id, remote, counted, size); err != nil {
 		spinner.Fail("Upload failed")
 		return err
 	}
-	if size > 0 {
-		spinner.Success(fmt.Sprintf("Uploaded %s → %s:%s (%s)", label, refLabel(ref, id), remote, humanBytes(size)))
+	elapsed := time.Since(start)
+	sent := size
+	if sent == 0 {
+		sent = counted.n // stdin path: use bytes actually read
+	}
+	if sent > 0 {
+		spinner.Success(fmt.Sprintf("Uploaded %s → %s:%s (%s)", label, refLabel(ref, id), remote, humanBytes(sent)))
 	} else {
 		spinner.Success(fmt.Sprintf("Uploaded %s → %s:%s", label, refLabel(ref, id), remote))
 	}
+	if stats {
+		pterm.Println(pterm.Gray(fmt.Sprintf("  %s in %s (%s)",
+			humanBytes(sent), formatElapsed(elapsed), throughput(sent, elapsed))))
+	}
 	return nil
+}
+
+// countingReader wraps a Reader and counts bytes read — used to get a
+// byte total when the source is stdin (unknown size up front).
+type countingReader struct {
+	r interface {
+		Read(p []byte) (int, error)
+	}
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// Guard: countingReader satisfies io.Reader.
+var _ io.Reader = (*countingReader)(nil)
+
+// formatElapsed renders a duration compactly: "182ms", "1.4s", "2m03s".
+func formatElapsed(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	case d < time.Minute:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	default:
+		m := int(d / time.Minute)
+		s := int((d % time.Minute) / time.Second)
+		return fmt.Sprintf("%dm%02ds", m, s)
+	}
+}
+
+// throughput renders bytes/duration as MB/s or kB/s, ready to display.
+func throughput(bytes int64, d time.Duration) string {
+	if d <= 0 || bytes <= 0 {
+		return "n/a"
+	}
+	bps := float64(bytes) / d.Seconds()
+	switch {
+	case bps >= 1<<20:
+		return fmt.Sprintf("%.1f MB/s", bps/(1<<20))
+	case bps >= 1<<10:
+		return fmt.Sprintf("%.1f kB/s", bps/(1<<10))
+	default:
+		return fmt.Sprintf("%.0f B/s", bps)
+	}
 }
 
 // humanBytes renders a size like "4.2 MB" — small, no units library.
