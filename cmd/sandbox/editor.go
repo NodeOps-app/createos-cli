@@ -28,6 +28,11 @@ var (
 	editorUserRE  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$`)
 	editorHostRE  = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,253}$`)
 	editorAliasRE = regexp.MustCompile(`^sb-[0-9a-z]{26}$`)
+	// editorNameRE gates a sandbox's friendly name before it lands on the
+	// `Host <id> <name>` line. SSH's Host aliases forbid whitespace, `?`,
+	// and `*`; we further restrict to plain identifier chars so a mutated
+	// name can't smuggle newlines / control bytes.
+	editorNameRE = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
 )
 
 // One block per sandbox id in ~/.ssh/config; re-runs rewrite in place.
@@ -104,6 +109,10 @@ positional).`,
 			&cli.BoolFlag{
 				Name:  "remove",
 				Usage: "Remove this sandbox's block from ~/.ssh/config and exit",
+			},
+			&cli.BoolFlag{
+				Name:  "no-sweep",
+				Usage: "Skip auto-cleanup of ~/.ssh/config blocks for sandboxes that no longer exist",
 			},
 		},
 		Action: runEditor,
@@ -240,12 +249,26 @@ func runEditor(c *cli.Context) error {
 	}
 	sp.Success("sshd running in the sandbox")
 
+	// Sweep other ~/.ssh/config blocks that reference sandboxes the user
+	// no longer owns / that no longer exist. Runs before we write the
+	// fresh block so the atomic tmp-rewrite flushes the pruning too.
+	if !c.Bool("no-sweep") {
+		if pruned, serr := sweepStaleBlocks(c.Context, client, alias); serr == nil && len(pruned) > 0 {
+			pterm.Info.Printfln("cleaned up %d stale entr%s: %s",
+				len(pruned), plural(len(pruned), "y", "ies"), strings.Join(pruned, ", "))
+		}
+	}
+
 	// --- 6. Write the ~/.ssh/config block -----------------------------------
 	gwHost, gwPort := gatewayAddr()
 	if !editorHostRE.MatchString(gwHost) {
 		return fmt.Errorf("refusing shell-unsafe gateway host %q", gwHost)
 	}
-	block, err := renderSSHBlock(alias, mode, id, sbIP, gwHost, gwPort, user, privPath)
+	sbName := ""
+	if sb.Name != nil {
+		sbName = *sb.Name
+	}
+	block, err := renderSSHBlock(alias, mode, id, sbIP, gwHost, gwPort, user, privPath, sbName)
 	if err != nil {
 		return err
 	}
@@ -441,10 +464,23 @@ func bytesTrimRight(b []byte, cutset string) []byte {
 	return b
 }
 
+// hostLine builds the `Host` line — dual alias when a friendly name
+// passes the regex, id-only otherwise. Same-name-as-id, blanks, and
+// anything with unsafe chars fall back to id-only.
+func hostLine(alias, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == alias || !editorNameRE.MatchString(name) {
+		return alias
+	}
+	return alias + " " + name
+}
+
 // renderSSHBlock builds the ~/.ssh/config stanza for the sandbox.
-func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity string) (string, error) {
+// `name` is the sandbox's friendly name; empty or unsafe → id-only alias.
+func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity, name string) (string, error) {
 	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
 	end := fmt.Sprintf(sshConfigBlockEnd, alias)
+	host := hostLine(alias, name)
 	switch mode {
 	case "vpn":
 		return fmt.Sprintf(`%s
@@ -456,7 +492,7 @@ Host %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
 %s
-`, begin, alias, sbIP, user, identity, end), nil
+`, begin, host, sbIP, user, identity, end), nil
 	case "tunnel":
 		// The inner `ssh -W` for the gateway needs its own
 		// StrictHostKeyChecking + UserKnownHostsFile — it doesn't inherit
@@ -472,7 +508,7 @@ Host %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
 %s
-`, begin, alias, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
+`, begin, host, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
 	default:
 		return "", fmt.Errorf("unknown mode %q", mode)
 	}
@@ -762,4 +798,110 @@ func printFollowup(alias string) {
 	pterm.Info.Printfln("  zed ssh://%s/root", alias)
 	pterm.Info.Printfln("  code --remote ssh-remote+%s /root", alias)
 	pterm.Info.Printfln("  cursor --remote ssh-remote+%s /root", alias)
+}
+
+// sweepStaleBlocks walks ~/.ssh/config for our editor-owned blocks and
+// prunes any whose sandbox the server can't find or considers dead
+// (destroyed / failed). Skips the alias the caller is about to write.
+// Returns the aliases actually removed.
+//
+// Concurrency budget: parallel GetSandbox calls with a small pool so the
+// sweep doesn't inflate editor-command latency on users with many
+// entries. Errors that aren't "not found" (network hiccups, 5xx) leave
+// the block alone — we never destroy user config on transient failures.
+func sweepStaleBlocks(ctx context.Context, client *api.SandboxClient, keep string) ([]string, error) {
+	path, err := sshConfigPath()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // #nosec G304 -- own ssh config
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	aliases := collectCreateosAliases(string(data))
+	if len(aliases) == 0 {
+		return nil, nil
+	}
+
+	// Check each alias in parallel — bounded pool of 8.
+	type verdict struct {
+		alias string
+		gone  bool
+	}
+	sem := make(chan struct{}, 8)
+	ch := make(chan verdict, len(aliases))
+	for _, a := range aliases {
+		if a == keep {
+			continue
+		}
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			gone := isSandboxGone(ctx, client, a)
+			ch <- verdict{alias: a, gone: gone}
+		}()
+	}
+	// Drain semaphore so we know all goroutines finished.
+	for i := 0; i < cap(sem); i++ {
+		sem <- struct{}{}
+	}
+	close(ch)
+
+	pruned := make([]string, 0, len(aliases))
+	for v := range ch {
+		if !v.gone {
+			continue
+		}
+		if _, rerr := removeSSHBlock(v.alias); rerr == nil {
+			removeDedicatedKey(v.alias)
+			pruned = append(pruned, v.alias)
+		}
+	}
+	return pruned, nil
+}
+
+// collectCreateosAliases returns every alias marked by our "# BEGIN
+// createos <alias>" delimiter in ~/.ssh/config.
+func collectCreateosAliases(cfg string) []string {
+	out := make([]string, 0)
+	const prefix = "# BEGIN createos "
+	for _, line := range strings.Split(cfg, "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		alias := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if editorAliasRE.MatchString(alias) {
+			out = append(out, alias)
+		}
+	}
+	return out
+}
+
+// isSandboxGone returns true only when we're confident the sandbox no
+// longer belongs to the user or has reached a terminal state. A network
+// error, 5xx, or auth failure returns false so we don't nuke config on
+// transient issues.
+func isSandboxGone(ctx context.Context, client *api.SandboxClient, alias string) bool {
+	sctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	sb, err := client.GetSandbox(sctx, alias)
+	if err != nil {
+		return api.IsNotFound(err)
+	}
+	switch sb.Status {
+	case "destroyed", "failed":
+		return true
+	}
+	return false
+}
+
+func plural(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
 }
