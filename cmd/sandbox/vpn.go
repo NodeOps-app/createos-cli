@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -154,6 +155,16 @@ func runVPNUp(c *cli.Context) error {
 				_ = sudoCommand(c.Context, "ifconfig", utun, "destroy").Run()                    //nolint:errcheck
 			}
 		}
+	}
+
+	// macOS: sweep stale utun leftovers before wg-quick brings up a
+	// new interface. wg-quick on darwin uses userspace wireguard-go and
+	// on hard shutdowns (kernel panic, force quit, laptop sleep) leaves
+	// utunN.sock + route entries behind. New tunnels get a fresh utun
+	// number, but the OLD utun's route for the sandbox subnet is still
+	// installed → packets vanish into a dead interface.
+	if runtime.GOOS == "darwin" {
+		cleanupStaleWGUtuns(c.Context, debug)
 	}
 
 	// Bring the tunnel up. wg-quick echoes every shell command it runs
@@ -411,4 +422,57 @@ func cidrsOverlap(a, b *net.IPNet) bool {
 		return false
 	}
 	return a.Contains(b.IP) || b.Contains(a.IP)
+}
+
+// cleanupStaleWGUtuns removes leftover wireguard-go interfaces on macOS
+// whose control socket exists at /var/run/wireguard/utunN.sock but the
+// backing wireguard-go process is gone. Their routes stick around and
+// steal traffic for the sandbox subnet, so a fresh wg-quick up ends up
+// dropping packets into a dead interface. Runs `wg show` per candidate;
+// on failure, tears down the routes it owns, destroys the utun, and
+// removes the stale sock + name files.
+func cleanupStaleWGUtuns(ctx context.Context, debug bool) {
+	const wgRunDir = "/var/run/wireguard"
+	// Only touch entries wg-quick manages. If the dir doesn't exist,
+	// nothing to clean up.
+	entries, err := os.ReadDir(wgRunDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		// utunN.sock only — skip *.name / anything else.
+		if !strings.HasPrefix(name, "utun") || !strings.HasSuffix(name, ".sock") {
+			continue
+		}
+		utun := strings.TrimSuffix(name, ".sock")
+		// #nosec G204 -- utun name comes from a filename in the wg-controlled
+		// /var/run/wireguard/ dir; the "utun" prefix + ".sock" suffix
+		// checked above bound the shape further.
+		if err := exec.CommandContext(ctx, "wg", "show", utun).Run(); err == nil {
+			continue
+		}
+		// Dead → tear it down. Route deletes are best-effort; some may
+		// not exist. On any error we keep going: worst case wg-quick up
+		// fails and prints a helpful message.
+		if debug {
+			fmt.Fprintf(os.Stderr, "wg-quick preflight: cleaning stale %s\n", utun)
+		}
+		// Wipe any routes still pointing at this dead interface. macOS
+		// stores them keyed by interface, so `route delete -interface`
+		// nukes them without needing to enumerate every subnet.
+		_ = sudoCommand(ctx, "route", "-n", "delete", "-inet", "-interface", utun).Run() //nolint:errcheck
+		_ = sudoCommand(ctx, "ifconfig", utun, "destroy").Run()                          //nolint:errcheck
+		_ = sudoCommand(ctx, "rm", "-f", filepath.Join(wgRunDir, utun+".sock")).Run()    //nolint:errcheck
+	}
+	// If cosvpn.name points at a utun that's now gone, drop the mapping
+	// too so wg-quick up doesn't try to reuse a dead handle.
+	if nameFile, err := os.ReadFile(filepath.Join(wgRunDir, "cosvpn.name")); err == nil {
+		mapped := strings.TrimSpace(string(nameFile))
+		if mapped != "" {
+			if err := exec.CommandContext(ctx, "wg", "show", mapped).Run(); err != nil { //nolint:gosec // G204 false positive; mapped is a utun name read from wg-controlled /var/run/wireguard/
+				_ = sudoCommand(ctx, "rm", "-f", filepath.Join(wgRunDir, "cosvpn.name")).Run() //nolint:errcheck
+			}
+		}
+	}
 }

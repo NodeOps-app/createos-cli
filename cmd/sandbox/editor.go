@@ -36,6 +36,12 @@ const (
 	sshConfigBlockEnd   = "# END createos %s"
 )
 
+// editorMinMemMiB is the smallest sandbox we allow remote-editor connections
+// on. Zed's remote-server and VS Code's Remote-SSH easily eat >1 GiB just
+// hosting the language server; on the 1 GiB shapes the sandbox OOMs mid-
+// session. Set to 2049 = strictly larger than 2 GiB (the pool default).
+const editorMinMemMiB = 2049
+
 func newEditorCommand() *cli.Command {
 	return &cli.Command{
 		Name:                   "editor",
@@ -74,7 +80,7 @@ positional).`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "via",
-				Usage: "Transport: 'tunnel' (SSH via gateway) or 'vpn' (direct via WireGuard). Auto-picks based on VPN state when omitted.",
+				Usage: "Transport: 'tunnel' (SSH via gateway) or 'vpn' (direct via CreateOS VPN). Auto-picks based on VPN state when omitted.",
 			},
 			&cli.StringFlag{
 				Name:  "editor",
@@ -186,6 +192,10 @@ func runEditor(c *cli.Context) error {
 	if sb.Status != "running" {
 		return fmt.Errorf("sandbox %s is %s — resume or wait for it to be running", ref, sb.Status)
 	}
+	if sb.MemMib < editorMinMemMiB {
+		return fmt.Errorf("sandbox %s has %d MiB memory — remote editors need at least %d MiB (use a shape >2 GiB, e.g. s-4vcpu-4gb)",
+			ref, sb.MemMib, editorMinMemMiB)
+	}
 	sbIP := ""
 	if sb.IP != nil {
 		sbIP = strings.TrimSpace(*sb.IP)
@@ -204,37 +214,34 @@ func runEditor(c *cli.Context) error {
 
 	// --- 4. VPN preflight ---------------------------------------------------
 	if mode == "vpn" {
-		if err := preflightVPN(c, client, sb.ID); err != nil {
-			return err
+		if perr := preflightVPN(c, client, sb.ID); perr != nil {
+			return perr
 		}
 	}
 
 	// --- 5. Register our dedicated pubkey --------
 	// Gateway auths against sandboxes.ssh_pubkeys (DB); guest sshd reads
 	// /root/.ssh/authorized_keys. Both hops in the tunnel path need it.
-	sp, _ := pterm.DefaultSpinner.WithText("Registering our SSH key on the sandbox…").Start()
-	if _, err := client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
-		sp.Fail(fmt.Sprintf("could not register key with gateway: %v", err))
-		return err
+	sp, _ := pterm.DefaultSpinner.WithText("Registering our SSH key on the sandbox…").Start() //nolint:errcheck // spinner init failure is benign UI-only
+	if _, addErr := client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); addErr != nil {
+		sp.Fail(fmt.Sprintf("could not register key with gateway: %v", addErr))
+		return addErr
 	}
-	if err := ensureAuthorizedKey(c, client, id, user, ref, pubBytes, true); err != nil {
-		sp.Fail(fmt.Sprintf("could not install key in guest: %v", err))
-		return err
+	if authErr := ensureAuthorizedKey(c, client, id, user, ref, pubBytes, true); authErr != nil {
+		sp.Fail(fmt.Sprintf("could not install key in guest: %v", authErr))
+		return authErr
 	}
 	sp.Success("SSH key registered on sandbox")
 
-	sp, _ = pterm.DefaultSpinner.WithText("Starting sshd inside the sandbox…").Start()
-	if err := startGuestSshd(c, client, id, user); err != nil {
-		sp.Fail(err.Error())
-		return err
+	sp, _ = pterm.DefaultSpinner.WithText("Starting sshd inside the sandbox…").Start() //nolint:errcheck // spinner init failure is benign UI-only
+	if sshdErr := startGuestSshd(c, client, id, user); sshdErr != nil {
+		sp.Fail(sshdErr.Error())
+		return sshdErr
 	}
 	sp.Success("sshd running in the sandbox")
 
 	// --- 6. Write the ~/.ssh/config block -----------------------------------
-	gwHost, gwPort, err := gatewayAddr(c)
-	if err != nil {
-		return err
-	}
+	gwHost, gwPort := gatewayAddr()
 	if !editorHostRE.MatchString(gwHost) {
 		return fmt.Errorf("refusing shell-unsafe gateway host %q", gwHost)
 	}
@@ -242,16 +249,16 @@ func runEditor(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := writeSSHBlock(alias, block); err != nil {
-		return err
+	if writeErr := writeSSHBlock(alias, block); writeErr != nil {
+		return writeErr
 	}
 	pterm.Success.Printfln("~/.ssh/config: entry %s (%s)", alias, mode)
 
 	// --- 7. Wait for :22 to be reachable -------------------------------------
-	sp, _ = pterm.DefaultSpinner.WithText("Waiting for sshd to accept connections…").Start()
+	sp, _ = pterm.DefaultSpinner.WithText("Waiting for sshd to accept connections…").Start() //nolint:errcheck // spinner init failure is benign UI-only
 	probeCtx, cancel := context.WithTimeout(c.Context, 15*time.Second)
 	defer cancel()
-	if err := probeSSH(probeCtx, alias); err != nil {
+	if probeErr := probeSSH(probeCtx, alias); probeErr != nil {
 		sp.Warning("sshd didn't answer in 15 s — connection may still work; try `ssh " + alias + "` yourself.")
 	} else {
 		sp.Success("sshd is answering")
@@ -320,7 +327,11 @@ func chooseEditor(c *cli.Context) (string, error) {
 	if c.Bool("yes") || !terminal.IsInteractive() {
 		return installed[0], nil
 	}
-	opts := append(installed, "none")
+	// Copy first so we don't mutate detectEditors' return slice on the
+	// off chance it's cached elsewhere.
+	opts := make([]string, 0, len(installed)+1)
+	opts = append(opts, installed...)
+	opts = append(opts, "none")
 	sel, err := pterm.DefaultInteractiveSelect.
 		WithOptions(opts).
 		WithDefaultText("Editor to launch").
@@ -396,9 +407,10 @@ func ensureDedicatedKey(alias string) (privPath string, pubBytes []byte, generat
 	if perr != nil {
 		return "", nil, false, fmt.Errorf("wrap public key: %w", perr)
 	}
-	pubLine := append(ssh.MarshalAuthorizedKey(sshPub)[:0:0], ssh.MarshalAuthorizedKey(sshPub)...)
-	// Add a comment for humans reading the file later.
-	pubLine = append(bytesTrimRight(pubLine, "\n"), []byte(" createos-cli "+alias+"\n")...)
+	base := ssh.MarshalAuthorizedKey(sshPub)
+	pubLine := make([]byte, 0, len(base)+len(alias)+16)
+	pubLine = append(pubLine, bytesTrimRight(base, "\n")...)
+	pubLine = append(pubLine, []byte(" createos-cli "+alias+"\n")...)
 	if werr := os.WriteFile(pub, pubLine, 0o600); werr != nil {
 		return "", nil, false, fmt.Errorf("write %s: %w", pub, werr)
 	}
@@ -476,10 +488,10 @@ func writeSSHBlock(alias, block string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("mkdir ~/.ssh: %w", err)
 	}
-	existing, _ := os.ReadFile(path) // #nosec G304 -- user's own ssh config
+	existing, _ := os.ReadFile(path) //nolint:errcheck // #nosec G304 -- missing file is fine (fresh install); read failure falls through to write
 	updated := replaceOrAppendBlock(string(existing), alias, block)
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil { //nolint:gosec // path derives from user's own $HOME, alias regex-validated
 		return fmt.Errorf("write ~/.ssh/config.tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -507,7 +519,7 @@ func removeSSHBlock(alias string) (bool, error) {
 		return false, nil
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil { //nolint:gosec // path derives from user's own $HOME, alias regex-validated
 		return false, err
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -638,25 +650,22 @@ func isVPNUp() bool {
 		return true
 	}
 	if _, err := exec.LookPath("wg"); err == nil {
-		if err := exec.Command("wg", "show", "cosvpn").Run(); err == nil {
+		if err := exec.CommandContext(context.Background(), "wg", "show", "cosvpn").Run(); err == nil {
 			return true
 		}
 	}
 	return false
 }
 
-// gatewayAddr resolves the gateway host:port from config. Uses the same
-// resolver the tunnel command uses so the values match.
-func gatewayAddr(c *cli.Context) (string, int, error) {
-	// TODO: pull from config once we have a dedicated resolver. For now
-	// use the env override so devs can point at staging, falling back to
-	// the mizar EU gateway that we've been shipping to end users.
+// gatewayAddr resolves the gateway host:port. CREATEOS_GATEWAY_HOST
+// overrides for devs pointing at staging; default is the mizar EU
+// gateway shipped to end users.
+func gatewayAddr() (string, int) {
 	host := strings.TrimSpace(os.Getenv("CREATEOS_GATEWAY_HOST"))
 	if host == "" {
 		host = "gateway.sb.createos.sh"
 	}
-	port := 2222
-	return host, port, nil
+	return host, 2222
 }
 
 // startGuestSshd runs the same prep script `shell --ssh` runs. Kept small
@@ -702,6 +711,7 @@ func probeSSH(ctx context.Context, alias string) error {
 	defer cancel()
 	last := fmt.Errorf("no attempt")
 	for deadline.Err() == nil {
+		// #nosec G204 -- alias is regex-validated (editorAliasRE ^sb-[0-9a-z]{26}$) before it lands here.
 		cmd := exec.CommandContext(deadline, "ssh",
 			"-o", "BatchMode=yes",
 			"-o", "ConnectTimeout=3",
@@ -709,7 +719,7 @@ func probeSSH(ctx context.Context, alias string) error {
 			alias, "true")
 		if err := cmd.Run(); err == nil {
 			return nil
-		} else {
+		} else { //nolint:revive // clearer as-is; last needs setting on failure
 			last = err
 		}
 		time.Sleep(time.Second)
@@ -720,15 +730,17 @@ func probeSSH(ctx context.Context, alias string) error {
 // launchEditor spawns the user's editor with the SSH remote pre-selected.
 // Detaches from stdin/stdout so the shell prompt returns immediately.
 func launchEditor(editor, alias string) error {
+	// alias is regex-validated (editorAliasRE ^sb-[0-9a-z]{26}$);
+	// editor is one of a fixed allow-list.
 	var cmd *exec.Cmd
 	switch editor {
 	case "zed":
 		// Zed accepts ssh://<host>/<path>. `/root` is devbox's default HOME.
-		cmd = exec.Command("zed", fmt.Sprintf("ssh://%s/root", alias))
+		cmd = exec.CommandContext(context.Background(), "zed", fmt.Sprintf("ssh://%s/root", alias)) //nolint:gosec // G204 false positive; alias validated
 	case "cursor":
-		cmd = exec.Command("cursor", "--remote", "ssh-remote+"+alias, "/root")
+		cmd = exec.CommandContext(context.Background(), "cursor", "--remote", "ssh-remote+"+alias, "/root") //nolint:gosec // G204 false positive; alias validated
 	case "code":
-		cmd = exec.Command("code", "--remote", "ssh-remote+"+alias, "/root")
+		cmd = exec.CommandContext(context.Background(), "code", "--remote", "ssh-remote+"+alias, "/root") //nolint:gosec // G204 false positive; alias validated
 	default:
 		return fmt.Errorf("unknown editor %q", editor)
 	}
