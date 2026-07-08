@@ -1,0 +1,588 @@
+// Package sandbox — `createos sandbox editor` connects a local remote-dev
+// editor (Zed, Cursor, VS Code) to a sandbox in one command.
+//
+// The command is interactive by default (mode + editor pickers) and takes
+// flags for scripted use. Two transports are supported:
+//
+//   - tunnel: SSH via the createos gateway using OpenSSH ProxyJump. Zero
+//     background processes; works anywhere OpenSSH does.
+//   - vpn:    Direct connection to the sandbox's overlay IP via the CreateOS
+//     WireGuard tunnel. Grants full network access, not just SSH.
+//
+// The default mode picks vpn if the cosvpn interface is already up,
+// otherwise tunnel.
+package sandbox
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/pterm/pterm"
+	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
+)
+
+// createosSSHBlockBegin / End delimit the block we own in ~/.ssh/config.
+// One block per sandbox id — re-runs of `sandbox editor` rewrite in place.
+const (
+	sshConfigBlockBegin = "# BEGIN createos %s"
+	sshConfigBlockEnd   = "# END createos %s"
+)
+
+func newEditorCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "editor",
+		Usage:     "Connect a remote editor (Zed, Cursor, VS Code) to a sandbox",
+		ArgsUsage: "[<sandbox>]",
+		Description: `Wire up a sandbox for remote-development in one command:
+
+  - ensures your local SSH key is registered on the sandbox
+  - starts sshd inside the sandbox (via devbox:1's openssh-server)
+  - writes an entry into ~/.ssh/config so plain 'ssh <alias>' works
+  - launches your editor with the remote pre-selected
+
+Two transports:
+
+  --via tunnel  (default when VPN is down)
+    SSH through the gateway using OpenSSH ProxyJump. No background
+    processes. Works anywhere.
+
+  --via vpn     (default when the VPN is already up)
+    Direct connection to the sandbox's overlay IP via the CreateOS
+    WireGuard tunnel. Full network access, not just SSH.
+
+The command is interactive by default — pass all three flags plus --yes
+to run without prompts.
+
+Examples:
+  createos sandbox editor                       # pick sandbox + mode + editor
+  createos sandbox editor my-box                # interactive on named box
+  createos sandbox editor my-box --via tunnel --editor zed --yes
+  createos sandbox editor my-box --forget       # remove the SSH config entry`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "via",
+				Usage: "Transport: 'tunnel' (SSH via gateway) or 'vpn' (direct via WireGuard). Auto-picks based on VPN state when omitted.",
+			},
+			&cli.StringFlag{
+				Name:  "editor",
+				Usage: "Editor to launch after connect: 'zed', 'cursor', 'code' (VS Code), or 'none' (config only)",
+			},
+			&cli.StringFlag{
+				Name:    "identity",
+				Aliases: []string{"i"},
+				Usage:   "Path to your SSH private key (defaults to ~/.ssh/id_ed25519, then id_rsa, then id_ecdsa)",
+			},
+			&cli.StringFlag{
+				Name:    "user",
+				Aliases: []string{"u"},
+				Value:   "root",
+				Usage:   "Username inside the sandbox",
+			},
+			&cli.BoolFlag{
+				Name:    "yes",
+				Aliases: []string{"y"},
+				Usage:   "Skip prompts; accept smart defaults (key upload, editor auto-detect, etc.)",
+			},
+			&cli.BoolFlag{
+				Name:  "no-launch",
+				Usage: "Wire up SSH config but don't launch the editor",
+			},
+			&cli.BoolFlag{
+				Name:  "forget",
+				Usage: "Remove this sandbox's block from ~/.ssh/config and exit",
+			},
+		},
+		Action: runEditor,
+	}
+}
+
+func runEditor(c *cli.Context) error {
+	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
+	if !ok {
+		return fmt.Errorf("you're not signed in — run 'createos login' first")
+	}
+
+	// Resolve sandbox — mirror the shell command's picker so the UX
+	// is consistent (interactive picker on no-arg, name-or-id lookup
+	// otherwise).
+	ref := strings.TrimSpace(c.Args().First())
+	var id string
+	if ref == "" {
+		if !terminal.IsInteractive() {
+			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox editor my-box")
+		}
+		pickedID, label, err := pickByStatus(c, client, "Edit which sandbox?", "running")
+		if err != nil {
+			return err
+		}
+		if pickedID == "" {
+			fmt.Println("Cancelled. Nothing happened.")
+			return nil
+		}
+		id, ref = pickedID, label
+	} else {
+		resolved, err := resolveSandboxRef(c.Context, client, ref)
+		if err != nil {
+			return err
+		}
+		id = resolved
+	}
+
+	alias := sshAlias(id)
+
+	// --forget short-circuits: yank our block and exit.
+	if c.Bool("forget") {
+		removed, ferr := forgetSSHBlock(alias)
+		if ferr != nil {
+			return ferr
+		}
+		if removed {
+			pterm.Success.Printfln("removed ~/.ssh/config entry: %s", alias)
+		} else {
+			pterm.Info.Printfln("no ~/.ssh/config entry for %s to remove", alias)
+		}
+		return nil
+	}
+
+	// --- 1. Pick transport mode ---------------------------------------------
+	mode, err := chooseMode(c)
+	if err != nil {
+		return err
+	}
+
+	// --- 2. Resolve local SSH identity --------------------------------------
+	privPath, pubPath, err := resolveIdentity(c.String("identity"))
+	if err != nil {
+		return err
+	}
+	pubBytes, err := os.ReadFile(pubPath) // #nosec G304 -- user's own pubkey
+	if err != nil {
+		return fmt.Errorf("could not read public key %s: %w", pubPath, err)
+	}
+
+	// --- 3. Load sandbox row + verify it's running --------------------------
+	sb, err := client.GetSandbox(c.Context, id)
+	if err != nil {
+		return fmt.Errorf("could not fetch sandbox %s: %w", ref, err)
+	}
+	if sb.Status != "running" {
+		return fmt.Errorf("sandbox %s is %s — resume or wait for it to be running", ref, sb.Status)
+	}
+	sbIP := ""
+	if sb.IP != nil {
+		sbIP = strings.TrimSpace(*sb.IP)
+	}
+	if mode == "vpn" && sbIP == "" {
+		return fmt.Errorf("sandbox %s has no overlay IP yet — try --via tunnel", ref)
+	}
+
+	user := strings.TrimSpace(c.String("user"))
+	if user == "" {
+		user = "root"
+	}
+
+	// --- 4. Bring up VPN if needed ------------------------------------------
+	if mode == "vpn" && !isVPNUp() {
+		pterm.Info.Println("VPN isn't up — run `createos sb vpn up` in another terminal first, then re-run this command")
+		return fmt.Errorf("vpn not up")
+	}
+
+	// --- 5. Push SSH key + start sshd in the guest --------------------------
+	sp, _ := pterm.DefaultSpinner.WithText("Registering SSH key…").Start()
+	if err := ensureAuthorizedKey(c, client, id, user, ref, pubBytes, keyConsentGiven(c)); err != nil {
+		sp.Fail(err.Error())
+		return err
+	}
+	sp.Success("SSH key registered on sandbox")
+
+	sp, _ = pterm.DefaultSpinner.WithText("Starting sshd inside the sandbox…").Start()
+	if err := startGuestSshd(c, client, id, user); err != nil {
+		sp.Fail(err.Error())
+		return err
+	}
+	sp.Success("sshd running in the sandbox")
+
+	// --- 6. Write the ~/.ssh/config block -----------------------------------
+	gwHost, gwPort, err := gatewayAddr(c)
+	if err != nil {
+		return err
+	}
+	block, err := renderSSHBlock(alias, mode, id, sbIP, gwHost, gwPort, user, privPath)
+	if err != nil {
+		return err
+	}
+	if err := writeSSHBlock(alias, block); err != nil {
+		return err
+	}
+	pterm.Success.Printfln("~/.ssh/config: entry %s (%s)", alias, mode)
+
+	// --- 7. Wait for :22 to be reachable -------------------------------------
+	sp, _ = pterm.DefaultSpinner.WithText("Waiting for sshd to accept connections…").Start()
+	probeCtx, cancel := context.WithTimeout(c.Context, 15*time.Second)
+	defer cancel()
+	if err := probeSSH(probeCtx, alias); err != nil {
+		sp.Warning("sshd didn't answer in 15 s — connection may still work; try `ssh " + alias + "` yourself.")
+	} else {
+		sp.Success("sshd is answering")
+	}
+
+	// --- 8. Launch editor ----------------------------------------------------
+	if c.Bool("no-launch") {
+		printFollowup(alias)
+		return nil
+	}
+	choice, err := chooseEditor(c)
+	if err != nil {
+		return err
+	}
+	if choice == "none" {
+		printFollowup(alias)
+		return nil
+	}
+	if err := launchEditor(choice, alias); err != nil {
+		pterm.Warning.Printfln("could not launch %s: %v", choice, err)
+		printFollowup(alias)
+		return nil
+	}
+	pterm.Success.Printfln("launched %s", choice)
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// mode + editor pickers
+// -----------------------------------------------------------------------------
+
+func chooseMode(c *cli.Context) (string, error) {
+	if v := strings.ToLower(strings.TrimSpace(c.String("via"))); v != "" {
+		if v != "tunnel" && v != "vpn" {
+			return "", fmt.Errorf("--via must be 'tunnel' or 'vpn', got %q", v)
+		}
+		return v, nil
+	}
+	// Smart default: use VPN if it's already up, tunnel otherwise.
+	def := "tunnel"
+	if isVPNUp() {
+		def = "vpn"
+	}
+	if c.Bool("yes") || !terminal.IsInteractive() {
+		return def, nil
+	}
+	opts := []string{"tunnel — SSH via gateway (no VPN needed)", "vpn — direct via WireGuard (full network access)"}
+	sel, err := pterm.DefaultInteractiveSelect.
+		WithOptions(opts).
+		WithDefaultText("Connection mode").
+		WithDefaultOption(opts[0]).
+		Show()
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(sel, "vpn") {
+		return "vpn", nil
+	}
+	return "tunnel", nil
+}
+
+func chooseEditor(c *cli.Context) (string, error) {
+	if v := strings.ToLower(strings.TrimSpace(c.String("editor"))); v != "" {
+		return v, nil
+	}
+	installed := detectEditors()
+	if len(installed) == 0 {
+		pterm.Warning.Println("no supported editor found on PATH (zed / cursor / code)")
+		return "none", nil
+	}
+	if c.Bool("yes") || !terminal.IsInteractive() {
+		return installed[0], nil
+	}
+	opts := append(installed, "none")
+	sel, err := pterm.DefaultInteractiveSelect.
+		WithOptions(opts).
+		WithDefaultText("Editor to launch").
+		WithDefaultOption(opts[0]).
+		Show()
+	if err != nil {
+		return "", err
+	}
+	return sel, nil
+}
+
+// detectEditors returns the subset of {zed, cursor, code} present on PATH,
+// preserving that preference order.
+func detectEditors() []string {
+	out := []string{}
+	for _, e := range []string{"zed", "cursor", "code"} {
+		if _, err := exec.LookPath(e); err == nil {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// -----------------------------------------------------------------------------
+// SSH config file management
+// -----------------------------------------------------------------------------
+
+// sshAlias is the Host stanza in ~/.ssh/config for a sandbox.
+func sshAlias(id string) string {
+	// Full id is stable and searchable; e.g. sb-01k…-editor is too long.
+	return id
+}
+
+// renderSSHBlock builds the ~/.ssh/config stanza for the sandbox.
+func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity string) (string, error) {
+	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
+	end := fmt.Sprintf(sshConfigBlockEnd, alias)
+	switch mode {
+	case "vpn":
+		return fmt.Sprintf(`%s
+Host %s
+    HostName          %s
+    Port              22
+    User              %s
+    IdentityFile      %s
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile ~/.ssh/known_hosts_createos
+%s
+`, begin, alias, sbIP, user, identity, end), nil
+	case "tunnel":
+		return fmt.Sprintf(`%s
+Host %s
+    HostName          127.0.0.1
+    Port              22
+    User              %s
+    IdentityFile      %s
+    ProxyCommand      ssh -W %%h:%%p %s@%s -p %d -i %s
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile ~/.ssh/known_hosts_createos
+%s
+`, begin, alias, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
+	default:
+		return "", fmt.Errorf("unknown mode %q", mode)
+	}
+}
+
+// writeSSHBlock atomically rewrites ~/.ssh/config, replacing any existing
+// block for this alias. Preserves all other content.
+func writeSSHBlock(alias, block string) error {
+	path, err := sshConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("mkdir ~/.ssh: %w", err)
+	}
+	existing, _ := os.ReadFile(path) // #nosec G304 -- user's own ssh config
+	updated := replaceOrAppendBlock(string(existing), alias, block)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+		return fmt.Errorf("write ~/.ssh/config.tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename ~/.ssh/config: %w", err)
+	}
+	return nil
+}
+
+// forgetSSHBlock removes any existing block for the alias. Returns
+// (removed, err) — removed=false means the block wasn't present.
+func forgetSSHBlock(alias string) (bool, error) {
+	path, err := sshConfigPath()
+	if err != nil {
+		return false, err
+	}
+	existing, err := os.ReadFile(path) // #nosec G304 -- user's own ssh config
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	updated, removed := stripBlock(string(existing), alias)
+	if !removed {
+		return false, nil
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+		return false, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// replaceOrAppendBlock strips any existing block for alias, then appends
+// the new one at the end. Blank-line trimming keeps the file tidy.
+func replaceOrAppendBlock(existing, alias, block string) string {
+	stripped, _ := stripBlock(existing, alias)
+	stripped = strings.TrimRight(stripped, "\n")
+	if stripped != "" {
+		stripped += "\n\n"
+	}
+	return stripped + strings.TrimRight(block, "\n") + "\n"
+}
+
+// stripBlock removes the block for alias from existing. Returns the new
+// content and whether anything was removed.
+func stripBlock(existing, alias string) (string, bool) {
+	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
+	end := fmt.Sprintf(sshConfigBlockEnd, alias)
+	i := strings.Index(existing, begin)
+	if i < 0 {
+		return existing, false
+	}
+	j := strings.Index(existing[i:], end)
+	if j < 0 {
+		// Malformed — keep the file as-is rather than corrupt it further.
+		return existing, false
+	}
+	// j is relative to i; advance past the end-marker line.
+	cut := i + j + len(end)
+	if cut < len(existing) && existing[cut] == '\n' {
+		cut++
+	}
+	return existing[:i] + existing[cut:], true
+}
+
+func sshConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve $HOME: %w", err)
+	}
+	return filepath.Join(home, ".ssh", "config"), nil
+}
+
+// -----------------------------------------------------------------------------
+// helpers
+// -----------------------------------------------------------------------------
+
+// isVPNUp cheaply checks whether the createos WireGuard tunnel is active.
+// Mirrors the staleness probe in vpn.go: macOS uses the wg-quick name file,
+// Linux uses `wg show`. No sudo needed on either.
+func isVPNUp() bool {
+	if _, err := os.Stat("/var/run/wireguard/cosvpn.name"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("wg"); err == nil {
+		if err := exec.Command("wg", "show", "cosvpn").Run(); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// gatewayAddr resolves the gateway host:port from config. Uses the same
+// resolver the tunnel command uses so the values match.
+func gatewayAddr(c *cli.Context) (string, int, error) {
+	// TODO: pull from config once we have a dedicated resolver. For now
+	// use the env override so devs can point at staging, falling back to
+	// the mizar EU gateway that we've been shipping to end users.
+	host := strings.TrimSpace(os.Getenv("CREATEOS_GATEWAY_HOST"))
+	if host == "" {
+		host = "gateway.sb.createos.sh"
+	}
+	port := 2222
+	return host, port, nil
+}
+
+// startGuestSshd runs the same prep script `shell --ssh` runs. Kept small
+// so a future extraction into a shared internal/guest package is cheap.
+func startGuestSshd(c *cli.Context, client *api.SandboxClient, id, user string) error {
+	authPath := authorizedKeysPath(user)
+	prepScript := fmt.Sprintf(`
+set -e
+if ! [ -x /usr/sbin/sshd ]; then
+  echo "this image does not ship sshd — use a rootfs that does (e.g. devbox:1)" >&2
+  exit 100
+fi
+mkdir -p %[1]s /run/sshd
+chmod 700 %[1]s
+chmod 600 %[1]s/authorized_keys
+chown -R %[2]s:%[2]s %[1]s 2>/dev/null || true
+if ! awk 'NR>1{print $2}' /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -qi ':0016$'; then
+  /usr/sbin/sshd
+fi
+`, filepath.Dir(authPath), user)
+	resp, err := client.ExecSandbox(c.Context, id, api.SandboxExecReq{
+		Cmd:  "sh",
+		Args: []string{"-c", prepScript},
+	})
+	if err != nil {
+		return fmt.Errorf("prep sshd: %w", err)
+	}
+	if resp.Result.ExitCode == 100 {
+		return fmt.Errorf("sandbox image doesn't have sshd — use a rootfs that does (e.g. devbox:1)")
+	}
+	if resp.Result.ExitCode != 0 {
+		return fmt.Errorf("sshd prep failed: %s", strings.TrimSpace(resp.Result.Stderr))
+	}
+	return nil
+}
+
+// probeSSH runs `ssh -o BatchMode=yes -o ConnectTimeout=3 -G <alias>` to
+// verify the config is parseable, then attempts a 1-second TCP probe by
+// running `ssh -o BatchMode=yes -o ConnectTimeout=3 <alias> true`. Any
+// non-nil error signals the caller to warn but not fail.
+func probeSSH(ctx context.Context, alias string) error {
+	deadline, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	last := fmt.Errorf("no attempt")
+	for deadline.Err() == nil {
+		cmd := exec.CommandContext(deadline, "ssh",
+			"-o", "BatchMode=yes",
+			"-o", "ConnectTimeout=3",
+			"-o", "StrictHostKeyChecking=accept-new",
+			alias, "true")
+		if err := cmd.Run(); err == nil {
+			return nil
+		} else {
+			last = err
+		}
+		time.Sleep(time.Second)
+	}
+	return last
+}
+
+// launchEditor spawns the user's editor with the SSH remote pre-selected.
+// Detaches from stdin/stdout so the shell prompt returns immediately.
+func launchEditor(editor, alias string) error {
+	var cmd *exec.Cmd
+	switch editor {
+	case "zed":
+		// Zed accepts ssh://<host>/<path>. `/root` is devbox's default HOME.
+		cmd = exec.Command("zed", fmt.Sprintf("ssh://%s/root", alias))
+	case "cursor":
+		cmd = exec.Command("cursor", "--remote", "ssh-remote+"+alias, "/root")
+	case "code":
+		cmd = exec.Command("code", "--remote", "ssh-remote+"+alias, "/root")
+	default:
+		return fmt.Errorf("unknown editor %q", editor)
+	}
+	// Detach — we don't want to block on the editor's process.
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if runtime.GOOS != "windows" {
+		// Don't inherit our controlling terminal.
+		cmd.Env = os.Environ()
+	}
+	return cmd.Start()
+}
+
+// printFollowup shows the next-step hints when we didn't auto-launch.
+func printFollowup(alias string) {
+	pterm.Info.Println("connect anytime:")
+	pterm.Info.Printfln("  ssh %s", alias)
+	pterm.Info.Printfln("  zed ssh://%s/root", alias)
+	pterm.Info.Printfln("  code --remote ssh-remote+%s /root", alias)
+	pterm.Info.Printfln("  cursor --remote ssh-remote+%s /root", alias)
+}

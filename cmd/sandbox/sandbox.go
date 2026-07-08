@@ -26,6 +26,7 @@ func NewSandboxCommand() *cli.Command {
 			newPushCommand(),
 			newPullCommand(),
 			newShellCommand(),
+			newEditorCommand(),
 			newSyncCommand(),
 			newTunnelCommand(),
 			newDiskCommand(),
