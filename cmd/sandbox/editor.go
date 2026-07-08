@@ -772,7 +772,7 @@ func launchEditor(editor, alias, name string) error {
 	case "zed":
 		cmd = exec.CommandContext(context.Background(), "zed", fmt.Sprintf("ssh://%s/root", display)) //nolint:gosec // G204 false positive; display validated
 	case "cursor":
-		cmd = exec.CommandContext(context.Background(), "cursor", "--remote", "ssh-remote+"+display, "/root") //nolint:gosec // G204 false positive; display validated
+		cmd = exec.CommandContext(context.Background(), "cursor", "--folder-uri", "vscode-remote://ssh-remote+"+display+"/root") //nolint:gosec // G204 false positive; display validated
 	case "code":
 		cmd = exec.CommandContext(context.Background(), "code", "--remote", "ssh-remote+"+display, "/root") //nolint:gosec // G204 false positive; display validated
 	default:
@@ -799,7 +799,7 @@ func printFollowup(alias, name string) {
 	pterm.Info.Printfln("  ssh %s", display)
 	pterm.Info.Printfln("  zed ssh://%s/root", display)
 	pterm.Info.Printfln("  code --remote ssh-remote+%s /root", display)
-	pterm.Info.Printfln("  cursor --remote ssh-remote+%s /root", display)
+	pterm.Info.Printfln("  cursor --folder-uri vscode-remote://ssh-remote+%s/root", display)
 }
 
 // sweepStaleBlocks prunes our config blocks whose sandbox is 404 or in
