@@ -42,6 +42,9 @@ func NewWhoamiCommand() *cli.Command {
 			fmt.Println()
 			pterm.Printfln("  %s  %s", pterm.Gray("Email        "), u.Email)
 			pterm.Printfln("  %s  %s", pterm.Gray("ID           "), u.ID)
+			if u.PlanName != "" {
+				pterm.Printfln("  %s  %s", pterm.Gray("Plan         "), u.PlanName)
+			}
 			pterm.Printfln("  %s  %s", pterm.Gray("Member since "), memberSince)
 			fmt.Println()
 

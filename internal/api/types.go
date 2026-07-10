@@ -96,6 +96,7 @@ type User struct {
 	SuspendedAt      *string `json:"suspendedAt"`
 	CreatedAt        string  `json:"createdAt"`
 	UpdatedAt        string  `json:"updatedAt"`
+	PlanName         string  `json:"planName,omitempty"`
 }
 
 // Response wraps a single-item API response envelope.
