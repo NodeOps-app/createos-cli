@@ -77,8 +77,11 @@ func runTunnel(c *cli.Context) error {
 	}
 	tty := terminal.IsInteractive()
 
-	// 1. Sandbox.
-	ref := strings.TrimSpace(c.Args().First())
+	// 1. Sandbox + ports. Re-scan args by hand so flags work in any
+	// position: urfave/cli v2 stops flag parsing at the first positional
+	// (see parseEditArgs in edit.go), so `tunnel my-sb --remote 8000`
+	// would otherwise drop --remote and fail "--remote <port> is required".
+	ref, local, remote, bind := parseTunnelArgs(c)
 	var id string
 	if ref == "" {
 		if !tty {
@@ -102,7 +105,6 @@ func runTunnel(c *cli.Context) error {
 	}
 
 	// 2. Ports. Prompt on TTY when missing.
-	remote := c.Int("remote")
 	if remote <= 0 {
 		if !tty {
 			return fmt.Errorf("--remote <port> is required\n\n  Example:\n    createos sandbox tunnel %s --local 8080 --remote 8000", ref)
@@ -119,7 +121,6 @@ func runTunnel(c *cli.Context) error {
 		}
 		remote = p
 	}
-	local := c.Int("local")
 	if local <= 0 {
 		// On TTY ask; non-TTY just mirror the remote port.
 		if tty {
@@ -144,7 +145,6 @@ func runTunnel(c *cli.Context) error {
 			local = remote
 		}
 	}
-	bind := strings.TrimSpace(c.String("bind"))
 	if bind == "" {
 		bind = "127.0.0.1"
 	}
@@ -192,4 +192,49 @@ func runTunnel(c *cli.Context) error {
 		}
 		go bridgeOne(c.Context, ctrlURL, authHeader, token, id, remote, conn)
 	}
+}
+
+// parseTunnelArgs re-scans the raw args so --local/--remote/--bind work in
+// any position. urfave/cli v2 stops flag parsing at the first positional, so
+// `tunnel my-sb --remote 8000` loses --remote otherwise (mirrors
+// parseEditArgs in edit.go). Seeds from c.* first to keep flags placed before
+// the positional working, then lets a later occurrence override.
+func parseTunnelArgs(c *cli.Context) (ref string, local, remote int, bind string) {
+	local = c.Int("local")
+	remote = c.Int("remote")
+	bind = strings.TrimSpace(c.String("bind"))
+
+	atoi := func(s string) int { n, _ := strconv.Atoi(strings.TrimSpace(s)); return n }
+	args := c.Args().Slice()
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--remote":
+			if i+1 < len(args) {
+				remote = atoi(args[i+1])
+				i++
+			}
+		case strings.HasPrefix(a, "--remote="):
+			remote = atoi(strings.TrimPrefix(a, "--remote="))
+		case a == "--local":
+			if i+1 < len(args) {
+				local = atoi(args[i+1])
+				i++
+			}
+		case strings.HasPrefix(a, "--local="):
+			local = atoi(strings.TrimPrefix(a, "--local="))
+		case a == "--bind":
+			if i+1 < len(args) {
+				bind = strings.TrimSpace(args[i+1])
+				i++
+			}
+		case strings.HasPrefix(a, "--bind="):
+			bind = strings.TrimSpace(strings.TrimPrefix(a, "--bind="))
+		default:
+			if ref == "" && !strings.HasPrefix(a, "-") {
+				ref = strings.TrimSpace(a)
+			}
+		}
+	}
+	return ref, local, remote, bind
 }
