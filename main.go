@@ -16,7 +16,7 @@ func main() {
 	// Load .env file from the current directory if it exists.
 	// Existing environment variables are NOT overwritten.
 	// Error is intentionally ignored — missing .env is normal.
-	godotenv.Load() //nolint:errcheck
+	godotenv.Load() //nolint:errcheck,gosec
 
 	app := root.NewApp()
 
