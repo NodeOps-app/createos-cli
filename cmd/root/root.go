@@ -53,10 +53,12 @@ func NewApp() *cli.App {
 				EnvVars: []string{"CREATEOS_DEBUG"},
 			},
 			&cli.StringFlag{
-				Name:    "api-url",
-				Usage:   "Override the API base URL",
-				EnvVars: []string{"CREATEOS_API_URL"},
-				Value:   api.DefaultBaseURL,
+				Name:  "api-url",
+				Usage: "Override the API base URL",
+				EnvVars: []string{"CREATEOS_API_URL",
+					"CREATEOS_PLAN_API_URL",
+					"CREATEOS_PROJECT_API_URL"},
+				Value: api.DefaultBaseURL,
 			},
 			&cli.StringFlag{
 				Name:    "sandbox-api-url",
@@ -71,9 +73,11 @@ func NewApp() *cli.App {
 				Value:   "gateway.sb.createos.sh:2222",
 			},
 			&cli.StringFlag{
-				Name:    "api-key",
-				Usage:   "API key for authentication (overrides stored token)",
-				EnvVars: []string{"CREATEOS_API_KEY"},
+				Name:  "api-key",
+				Usage: "API key for authentication (overrides stored token)",
+				EnvVars: []string{"CREATEOS_API_KEY",
+					"CREATEOS_PLAN_API_KEY",
+					"CREATEOS_PROJECT_API_KEY"},
 			},
 			&cli.StringFlag{
 				Name:    "output",

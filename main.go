@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/pterm/pterm"
 
 	"github.com/NodeOps-app/createos-cli/cmd/root"
@@ -12,6 +13,10 @@ import (
 )
 
 func main() {
+	// Load .env file from the current directory if it exists.
+	// Existing environment variables are NOT overwritten.
+	_ = godotenv.Load()
+
 	app := root.NewApp()
 
 	if err := app.Run(os.Args); err != nil {
