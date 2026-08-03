@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newCreateCommand() *cli.Command {
@@ -193,6 +194,15 @@ func runCreate(c *cli.Context) error {
 
 	if autoPauseSecs != nil {
 		req.AutoPauseAfterSeconds = autoPauseSecs
+	}
+
+	if output.IsJSON(c) {
+		resp, err := client.CreateSandbox(c.Context, req)
+		if err != nil {
+			return err
+		}
+		output.Render(c, resp, func() {})
+		return nil
 	}
 
 	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck

@@ -68,9 +68,11 @@ func runNetworkCreate(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Created network %s (%s)", n.Name, n.ID)
-	pterm.Println(pterm.Gray("  Attach at create time:  createos sandbox create --network " + n.Name))
-	pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach <sandbox> " + n.Name))
+	output.Render(c, n, func() {
+		pterm.Success.Printfln("Created network %s (%s)", n.Name, n.ID)
+		pterm.Println(pterm.Gray("  Attach at create time:  createos sandbox create --network " + n.Name))
+		pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach <sandbox> " + n.Name))
+	})
 	return nil
 }
 

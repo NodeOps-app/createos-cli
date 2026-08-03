@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -78,6 +79,23 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 	}
 	if egress := c.StringSlice("egress"); len(egress) > 0 {
 		req.Egress = egress
+	}
+
+	if output.IsJSON(c) {
+		view, err := client.ForkSandbox(c.Context, srcID, req)
+		if err != nil {
+			return err
+		}
+		target := "running"
+		if req.StartPaused {
+			target = "paused"
+		}
+		sb, err := waitForStatus(c.Context, client, view.ID, target)
+		if err != nil {
+			return err
+		}
+		output.Render(c, sb, func() {})
+		return nil
 	}
 
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Forking %s…", refLabel(ref, srcID))) //nolint:errcheck

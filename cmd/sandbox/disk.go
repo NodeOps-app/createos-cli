@@ -123,6 +123,19 @@ func runDiskCreate(c *cli.Context) error {
 		return fmt.Errorf("missing required values\n\n  Need: <name>, --bucket, --endpoint, --access-key, --secret-key\n  Optional: --region, --path-style")
 	}
 
+	if output.IsJSON(c) {
+		d, err := client.CreateDisk(c.Context, api.DiskCreateReq{
+			Name: name, Kind: "s3",
+			Config:      api.DiskConfig{Bucket: bucket, Endpoint: endpoint, Region: region, UsePathStyle: pathStyle},
+			Credentials: api.DiskCredentials{AccessKey: access, SecretKey: secret},
+		})
+		if err != nil {
+			return err
+		}
+		output.Render(c, d, func() {})
+		return nil
+	}
+
 	spinner, _ := pterm.DefaultSpinner.Start("Checking the bucket…") //nolint:errcheck
 	d, err := client.CreateDisk(c.Context, api.DiskCreateReq{
 		Name: name,
