@@ -204,7 +204,13 @@ func parseTunnelArgs(c *cli.Context) (ref string, local, remote int, bind string
 	remote = c.Int("remote")
 	bind = strings.TrimSpace(c.String("bind"))
 
-	atoi := func(s string) int { n, _ := strconv.Atoi(strings.TrimSpace(s)); return n }
+	atoi := func(s string) int {
+		n, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil {
+			return 0
+		}
+		return n
+	}
 	args := c.Args().Slice()
 	for i := 0; i < len(args); i++ {
 		a := args[i]

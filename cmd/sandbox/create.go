@@ -197,11 +197,11 @@ func runCreate(c *cli.Context) error {
 	}
 
 	if output.IsJSON(c) {
-		resp, err := client.CreateSandbox(c.Context, req)
-		if err != nil {
-			return err
+		jsonResp, jsonErr := client.CreateSandbox(c.Context, req)
+		if jsonErr != nil {
+			return jsonErr
 		}
-		output.Render(c, resp, func() {})
+		output.Render(c, jsonResp, func() {})
 		return nil
 	}
 
