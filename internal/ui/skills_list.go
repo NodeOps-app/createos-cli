@@ -74,7 +74,7 @@ func (m skillsListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installing = false
 		if msg.err != nil {
 			m.statusErr = true
-			m.statusMsg = "Error: " + msg.err.Error()
+			m.statusMsg = "Error: something went wrong — please try again"
 		} else {
 			m.statusErr = false
 			m.statusMsg = "Installed successfully"
@@ -86,7 +86,7 @@ func (m skillsListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installing = false
 		if msg.err != nil {
 			m.statusErr = true
-			m.statusMsg = "Error: " + msg.err.Error()
+			m.statusMsg = "Error: something went wrong — please try again"
 		} else {
 			m.statusErr = false
 			m.statusMsg = "Uninstalled successfully"

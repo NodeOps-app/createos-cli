@@ -108,12 +108,12 @@ func runRm(c *cli.Context) error {
 	for _, ref := range ids {
 		id, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
+			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
 			failed++
 			continue
 		}
 		if err := client.DestroySandbox(c.Context, id); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
+			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
 			failed++
 			continue
 		}

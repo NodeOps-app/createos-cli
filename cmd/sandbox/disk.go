@@ -317,7 +317,7 @@ func runDiskRm(c *cli.Context) error {
 	failed := 0
 	for _, ref := range refs {
 		if err := deleteDiskCascade(c, client, ref); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
+			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
 			failed++
 			continue
 		}

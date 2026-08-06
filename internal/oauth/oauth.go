@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,19 +42,19 @@ func FetchServerMetadata(baseURL string) (*ServerMetadata, error) {
 	metaURL := strings.TrimRight(baseURL, "/") + "/.well-known/openid-configuration"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, metaURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("could not build metadata request: %w", err)
+		return nil, fmt.Errorf("could not reach authorization server")
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach authorization server: %w", err)
+		return nil, fmt.Errorf("could not reach authorization server — check your internet connection")
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("authorization server returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("could not reach authorization server — please try again")
 	}
 	var meta ServerMetadata
 	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return nil, fmt.Errorf("could not parse server metadata: %w", err)
+		return nil, fmt.Errorf("could not reach authorization server — unexpected response")
 	}
 	return &meta, nil
 }
@@ -105,24 +104,20 @@ func ExchangeCode(tokenEndpoint, clientID, code, redirectURI, verifier string) (
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("could not build token request: %w", err)
+		return nil, fmt.Errorf("login failed — could not initiate token exchange")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("token exchange failed: %w", err)
+		return nil, fmt.Errorf("login failed — could not reach token server, check your internet connection")
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		b, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return nil, fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
-		}
-		return nil, fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("login failed — please try again or use 'createos login --token'")
 	}
 	var token TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
-		return nil, fmt.Errorf("could not parse token response: %w", err)
+		return nil, fmt.Errorf("login failed — unexpected response from server")
 	}
 	return &token, nil
 }
@@ -136,24 +131,20 @@ func RefreshTokens(tokenEndpoint, clientID, refreshToken string) (*TokenResponse
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("could not build refresh request: %w", err)
+		return nil, fmt.Errorf("session refresh failed — could not initiate request")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("token refresh failed: %w", err)
+		return nil, fmt.Errorf("session refresh failed — check your internet connection")
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		b, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return nil, fmt.Errorf("token refresh returned status %d", resp.StatusCode)
-		}
-		return nil, fmt.Errorf("token refresh returned status %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("session expired — run 'createos login' to sign in again")
 	}
 	var token TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
-		return nil, fmt.Errorf("could not parse token refresh response: %w", err)
+		return nil, fmt.Errorf("session refresh failed — unexpected response from server")
 	}
 	return &token, nil
 }
@@ -200,7 +191,7 @@ func StartCallbackServer(port int) (code string, state string, err error) {
 				code  string
 				state string
 				err   error
-			}{"", "", fmt.Errorf("callback server error: %w", serveErr)}
+			}{"", "", fmt.Errorf("login callback server failed — please try again")}
 		}
 	}()
 
@@ -208,7 +199,7 @@ func StartCallbackServer(port int) (code string, state string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if shutdownErr := srv.Shutdown(ctx); shutdownErr != nil && result.err == nil {
-		result.err = fmt.Errorf("could not shut down callback server: %w", shutdownErr)
+		result.err = fmt.Errorf("login completed but cleanup failed — you may need to retry")
 	}
 
 	return result.code, result.state, result.err
