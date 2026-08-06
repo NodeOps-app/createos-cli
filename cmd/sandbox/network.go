@@ -71,7 +71,7 @@ func runNetworkCreate(c *cli.Context) error {
 	output.Render(c, n, func() {
 		pterm.Success.Printfln("Created network %s (%s)", n.Name, n.ID)
 		pterm.Println(pterm.Gray("  Attach at create time:  createos sandbox create --network " + n.Name))
-		pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach <sandbox> " + n.Name))
+		pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach " + n.Name + " <sandbox>"))
 	})
 	return nil
 }
@@ -315,7 +315,7 @@ func newNetworkAttachCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "attach",
 		Usage:     "Add a sandbox or device to a network",
-		ArgsUsage: "[<sandbox|device> <network>]",
+		ArgsUsage: "[<network> <sandbox|device>]",
 		Action:    runNetworkAttach,
 	}
 }
@@ -334,31 +334,17 @@ func runNetworkAttach(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	args := c.Args().Slice()
-	ref, netRef := "", ""
+	netRef, ref := "", ""
 	if len(args) > 0 {
-		ref = args[0]
+		netRef = args[0]
 	}
 	if len(args) > 1 {
-		netRef = args[1]
+		ref = args[1]
 	}
 	tty := terminal.IsInteractive()
-	if ref == "" {
-		if !tty {
-			return fmt.Errorf("usage: createos sandbox network attach <sandbox|device> <network>")
-		}
-		picked, err := pickEndpoint(c, client, "Attach what?")
-		if err != nil {
-			return err
-		}
-		if picked == "" {
-			fmt.Println("Cancelled.")
-			return nil
-		}
-		ref = picked
-	}
 	if netRef == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network attach <sandbox|device> <network>")
+			return fmt.Errorf("usage: createos sandbox network attach <network> <sandbox|device>")
 		}
 		picked, err := pickNetwork(c, client, "Attach to which network?")
 		if err != nil {
@@ -369,6 +355,20 @@ func runNetworkAttach(c *cli.Context) error {
 			return nil
 		}
 		netRef = picked
+	}
+	if ref == "" {
+		if !tty {
+			return fmt.Errorf("usage: createos sandbox network attach <network> <sandbox|device>")
+		}
+		picked, err := pickEndpoint(c, client, "Attach what?")
+		if err != nil {
+			return err
+		}
+		if picked == "" {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+		ref = picked
 	}
 	if isDeviceRef(ref) {
 		if err := client.AttachDeviceToNetwork(c.Context, ref, netRef); err != nil {
@@ -396,7 +396,7 @@ func newNetworkDetachCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "detach",
 		Usage:     "Remove a sandbox or device from a network",
-		ArgsUsage: "[<sandbox|device> <network>]",
+		ArgsUsage: "[<network> <sandbox|device>]",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Skip the confirmation prompt"},
 		},
@@ -410,31 +410,17 @@ func runNetworkDetach(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 	args := c.Args().Slice()
-	ref, netRef := "", ""
+	netRef, ref := "", ""
 	if len(args) > 0 {
-		ref = args[0]
+		netRef = args[0]
 	}
 	if len(args) > 1 {
-		netRef = args[1]
+		ref = args[1]
 	}
 	tty := terminal.IsInteractive()
-	if ref == "" {
-		if !tty {
-			return fmt.Errorf("usage: createos sandbox network detach <sandbox|device> <network>")
-		}
-		picked, err := pickEndpoint(c, client, "Detach what?")
-		if err != nil {
-			return err
-		}
-		if picked == "" {
-			fmt.Println("Cancelled.")
-			return nil
-		}
-		ref = picked
-	}
 	if netRef == "" {
 		if !tty {
-			return fmt.Errorf("usage: createos sandbox network detach <sandbox|device> <network>")
+			return fmt.Errorf("usage: createos sandbox network detach <network> <sandbox|device>")
 		}
 		picked, err := pickNetwork(c, client, "Detach from which network?")
 		if err != nil {
@@ -445,6 +431,20 @@ func runNetworkDetach(c *cli.Context) error {
 			return nil
 		}
 		netRef = picked
+	}
+	if ref == "" {
+		if !tty {
+			return fmt.Errorf("usage: createos sandbox network detach <network> <sandbox|device>")
+		}
+		picked, err := pickEndpoint(c, client, "Detach what?")
+		if err != nil {
+			return err
+		}
+		if picked == "" {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+		ref = picked
 	}
 	force := c.Bool("yes")
 	if !tty && !force {
