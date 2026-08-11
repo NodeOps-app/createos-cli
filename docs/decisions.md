@@ -150,3 +150,49 @@ Resolved as follows:
   Still worth it for shell users.
 - **Shape price hints in the picker** — `api.Shape` carries no pricing. That
   is an `fc` change, not a CLI change.
+
+## 2026-08-11 — Six-agent fleet test against a compiled binary, real account
+
+Before treating the JSON-output work as done, six agents drove a locally
+compiled binary against a real authenticated account in parallel — each one
+briefed only on the feature surface, not told what to expect — covering the
+full create→exec→rm lifecycle, exec's stdin contract, flag placement and the
+error envelope, `NO_COLOR`/non-TTY hygiene, the network mutation lifecycle,
+and a cold-start agent with zero prior knowledge of the CLI working from
+`--help` alone. Full transcripts aren't kept here; the two real bugs they
+surfaced and their fixes are.
+
+**Bug 1 — `exec`'s own flags silently no-op after the ref.** `exec <ref>
+--stdin file -- cmd` and `exec <ref> --env K=V -- cmd` both sent nothing,
+with no error — exactly the ordering shown in the command's own `--help`
+examples, so the documented usage didn't work as documented. Root cause:
+`parseExecArgs` (added when `--stdin` shipped) only recovered `ref`/`cmd`
+from the raw tokens around `--`, never `--stdin`/`--env`/`--stream`
+themselves — those still went through `c.String("stdin")` etc., which is
+empty because urfave/cli v2 stops flag parsing at the first positional (the
+ref). This is the identical bug class `parseSyncArgs` already exists to work
+around in `sync.go`; `--env` had silently had this bug since before this
+work started, `--stdin` inherited it on arrival. Fixed with a
+`parseExecFlags` following `parseSyncArgs`'s exact shape: seed from whatever
+urfave did parse, override with anything found in the ref..`--` window.
+
+**Bug 2 — batch-delete error messages collapsed to a generic placeholder.**
+Traced to the `57d2ebf` merge conflict resolution: `resolveSandboxRef`'s
+"no sandbox named X" error was a bare `fmt.Errorf`, not an `*api.APIError`.
+Passing it through `api.UserMessageVerbose` — correct for actually-raw Go
+errors, which is what that function exists to sanitize — flattened it to
+"something went wrong — please try again or contact support" in every batch
+result (`rm`, and by the same path `disk rm`/`network rm`/`template rm`
+share). It also meant every direct not-found (`get`, `pause`, …) reported
+`"code": "not_found"`'s intended slug as the placeholder `"code": "error"`
+instead. Fixed by shaping `resolveSandboxRef`'s not-found error as a real
+`*api.APIError` (404) — the one client-side "not found" in the CLI, so this
+was a one-function fix, not a policy change to `UserMessageVerbose` itself.
+
+**Found, not fixed — flagged for follow-up:** `network attach|detach --yes`
+silently fails to parse when `--yes` trails the two positionals (same class
+of bug as above, but on a command with no re-scanner of its own yet — would
+need a `parseNetworkArgs` mirroring `parseSyncArgs`/`parseExecFlags`).
+Everything else the fleet touched — JSON shape, batch results, `NO_COLOR`,
+stdout/stderr separation, flag hoisting, the redirect-safety boundary on
+`exec`'s stdout — held up clean on live account against real and bogus refs.
