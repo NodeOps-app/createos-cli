@@ -195,6 +195,8 @@ func runCreate(c *cli.Context) error {
 		req.AutoPauseAfterSeconds = autoPauseSecs
 	}
 
+	// One call path for both formats: the spinner writes to stderr, so it
+	// cannot corrupt a JSON document on stdout.
 	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck
 	resp, err := client.CreateSandbox(c.Context, req)
 	if err != nil {
@@ -203,7 +205,7 @@ func runCreate(c *cli.Context) error {
 	}
 	spinner.Success("Sandbox is ready")
 
-	renderResult(c, "created", map[string]any{
+	renderResult(c, "created", withResponse(resp, map[string]any{
 		"id":            resp.ID,
 		"name":          str(resp.Name),
 		"shape":         resp.Shape,
@@ -211,7 +213,7 @@ func runCreate(c *cli.Context) error {
 		"ip":            resp.IP,
 		"ingress_url":   resp.IngressURLTemplate,
 		"shell_command": fmt.Sprintf("createos sandbox shell %s", resp.ID),
-	}, func() { printCreateResult(resp) })
+	}), func() { printCreateResult(resp) })
 	return nil
 }
 

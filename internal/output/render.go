@@ -60,26 +60,32 @@ func Render(c *cli.Context, data any, tableRenderer func()) {
 }
 
 // RenderError outputs an error as JSON if --output json is set, otherwise returns false.
-func RenderError(c *cli.Context, code string, message string) bool {
-	return AppRenderError(c.App, code, message)
+func RenderError(c *cli.Context, code string, message string, hint string) bool {
+	return AppRenderError(c.App, code, message, hint)
 }
 
 // AppRenderError is RenderError for callers that only hold the *cli.App.
 // The envelope goes to stdout so a JSON consumer reading one stream still
 // gets valid JSON on failure; the human-readable path in main.go writes to
 // stderr instead.
-func AppRenderError(app *cli.App, code string, message string) bool {
+//
+// hint carries the same next-step suggestion humans get (APIError.Hint) and
+// is omitted when empty — an agent relaying a failure to a user should be
+// able to pass on the same advice.
+func AppRenderError(app *cli.App, code string, message string, hint string) bool {
 	if !AppIsJSON(app) {
 		return false
 	}
+	body := map[string]string{
+		"code":    code,
+		"message": message,
+	}
+	if hint != "" {
+		body["hint"] = hint
+	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	}); err != nil {
+	if err := enc.Encode(map[string]any{"error": body}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
 	return true

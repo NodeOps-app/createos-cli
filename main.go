@@ -23,18 +23,27 @@ func main() {
 	app := root.NewApp()
 
 	if err := app.Run(cliargs.Hoist(os.Args)); err != nil {
-		code, message := "error", err.Error()
+		code, message, hint := "error", err.Error(), ""
 		var apiErr *api.APIError
 		if errors.As(err, &apiErr) {
-			code, message = apiErr.Code(), apiErr.Message
+			code, message, hint = apiErr.Code(), apiErr.Message, apiErr.Hint()
 		}
 
 		// JSON mode emits a machine-readable envelope on stdout so a
 		// consumer reading a single stream still parses valid JSON.
 		// Otherwise the human-readable error goes to stderr, keeping
 		// stdout clean for data in pipes and CI logs.
-		if !output.AppRenderError(app, code, message) {
-			pterm.Error.WithWriter(os.Stderr).Println(message)
+		if !output.AppRenderError(app, code, message, hint) {
+			errOut := pterm.Error.WithWriter(os.Stderr)
+			errOut.Println(message)
+			if hint != "" {
+				pterm.Fprintln(os.Stderr, pterm.Gray("  Hint: "+hint))
+			}
+			// Raw error text is withheld unless the user asked for it:
+			// Go errors can carry syscall details and local paths.
+			if apiErr == nil && api.DebugEnabled() {
+				pterm.Fprintln(os.Stderr, pterm.Gray("  debug: "+err.Error()))
+			}
 		}
 		os.Exit(1)
 	}

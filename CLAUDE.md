@@ -113,6 +113,14 @@ The human renderer goes in the closure; it runs only in table mode. Rules:
 - `action` names what happened (past tense: `created`, `paused`, `disk_attached`).
 - Field names match the read commands — a caller diffs `create` against `get`.
 - Nullable API pointers go through `str()` so a key is always present.
+- Wrap the fields in `withResponse(resp, …)` when the API returns a struct, so
+  callers also get everything the server sent. Curated keys win on collision.
+- Never branch the API call on output format. One call path serves both; the
+  spinner already writes to stderr. Two paths drift — that is how a JSON-mode
+  `fork` once skipped its status check and reported a failed fork as success.
+- Error strings in results go through `api.UserMessageVerbose(err)`, never
+  `err.Error()` — raw Go errors leak syscall detail and local paths into JSON
+  just as readily as into the terminal.
 - Batch commands return a `results` array with one entry per ref, plus
   `deleted` / `failed` counts. An exit code cannot express a partial batch.
 - Interactive streams (`shell`, `sync`, `editor`, `exec --stream`,

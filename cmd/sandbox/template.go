@@ -387,8 +387,11 @@ func runTemplateRm(c *cli.Context) error {
 	results := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		if err := client.DeleteTemplate(c.Context, ref); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
-			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": err.Error()})
+			// Sanitized in the JSON result too — a raw Go error leaks
+			// syscall detail and local paths whichever stream it lands on.
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": msg})
 			failed++
 			continue
 		}

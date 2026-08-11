@@ -340,8 +340,8 @@ Sandboxes are fast-booting VMs — isolated environments you can exec into, sync
 | `createos sandbox network create <name>`       | Create a private network                                 |
 | `createos sandbox network ls`                  | List your networks                                       |
 | `createos sandbox network show <name\|id>`     | Show a network and its attached sandboxes                |
-| `createos sandbox network attach <sb> <net>`   | Add a sandbox to a network                               |
-| `createos sandbox network detach <sb> <net>`   | Remove a sandbox from a network                          |
+| `createos sandbox network attach <net> <sb>`   | Add a sandbox to a network                               |
+| `createos sandbox network detach <net> <sb>`   | Remove a sandbox from a network                          |
 | `createos sandbox network rm <name\|id>`       | Delete a network (auto-detaches first)                   |
 | `createos sandbox firewall show <sandbox>`     | Show what the sandbox is allowed to reach                |
 | `createos sandbox firewall set <sb> <host…>`   | Replace the outbound allowlist                           |
@@ -525,8 +525,8 @@ createos sandbox disk rm my-data --yes
 # Sandbox networks
 createos sandbox network create my-net
 createos sandbox network ls
-createos sandbox network attach my-box my-net
-createos sandbox network detach my-box my-net --yes
+createos sandbox network attach my-net my-box
+createos sandbox network detach my-net my-box --yes
 createos sandbox network rm my-net --yes
 
 # Sandbox firewall

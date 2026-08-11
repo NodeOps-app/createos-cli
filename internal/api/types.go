@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 )
@@ -28,6 +29,35 @@ func IsNotFound(err error) bool {
 		return ae.StatusCode == http.StatusNotFound
 	}
 	return false
+}
+
+// UserMessage extracts a safe, user-facing message from any error.
+// If err wraps an *APIError, returns its Message field.
+// Otherwise returns a generic fallback so internal Go errors
+// (syscall details, file paths, struct names) never leak to the user.
+func UserMessage(err error) string {
+	var ae *APIError
+	if errors.As(err, &ae) {
+		return ae.Message
+	}
+	return "something went wrong — please try again or contact support"
+}
+
+// DebugEnabled reports whether the CLI is running in debug mode.
+// Checks for the --debug flag via the CREATEOS_DEBUG env var.
+func DebugEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("CREATEOS_DEBUG")))
+	return v == "1" || v == "true"
+}
+
+// UserMessageVerbose works like UserMessage but appends the raw error
+// when debug mode is active, so developers can see the underlying cause.
+func UserMessageVerbose(err error) string {
+	msg := UserMessage(err)
+	if DebugEnabled() {
+		msg += fmt.Sprintf("\n  debug: %v", err)
+	}
+	return msg
 }
 
 // Hint returns a contextual suggestion based on the HTTP status code.

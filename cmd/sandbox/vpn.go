@@ -238,7 +238,7 @@ func runVPNUp(c *cli.Context) error {
 					return
 				}
 				misses++
-				pterm.Warning.Printfln("renew failed (%d/2): %v", misses, err)
+				pterm.Warning.Printfln("renew failed (%d/2): %s", misses, api.UserMessageVerbose(err))
 				if misses >= 2 {
 					pterm.Error.Println("renewal repeatedly failed — assuming server lost session")
 					select {

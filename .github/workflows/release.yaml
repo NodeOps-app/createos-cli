@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})
-    runs-on: ubuntu-latest
+    runs-on: createos
     strategy:
       matrix:
         include:
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -61,7 +61,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: createos
     env:
       GH_TOKEN: ${{ github.token }}
     steps:

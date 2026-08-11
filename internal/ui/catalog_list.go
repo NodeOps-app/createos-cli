@@ -83,7 +83,7 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searching = false
 		if msg.err != nil {
 			m.statusErr = true
-			m.statusMsg = "Error: " + msg.err.Error()
+			m.statusMsg = "Error: something went wrong — please try again"
 			m.currentView = catalogDetailView
 			return m, nil
 		}
@@ -101,7 +101,7 @@ func (m catalogListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.purchasing = false
 		if msg.err != nil {
 			m.statusErr = true
-			m.statusMsg = "Error: " + msg.err.Error()
+			m.statusMsg = "Error: something went wrong — please try again"
 			m.currentView = catalogDetailView
 			return m, nil
 		}

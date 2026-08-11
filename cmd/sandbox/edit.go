@@ -241,7 +241,7 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 				continue
 			}
 			if err := applyAddSSHKeys(c, client, label, id, []string{path}); err != nil {
-				pterm.Error.Printfln("%v", err)
+				pterm.Error.Printfln("%s", api.UserMessageVerbose(err))
 				continue
 			}
 			// Refresh so the next pass shows the new count.
@@ -271,7 +271,7 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 			bytes := int64(picked) << 30 // GiB, matches humanBytes() display
 			updated, rerr := client.RechargeBandwidth(c.Context, id, bytes)
 			if rerr != nil {
-				pterm.Error.Printfln("%v", rerr)
+				pterm.Error.Printfln("%s", api.UserMessageVerbose(rerr))
 				continue
 			}
 			bw = updated
@@ -295,7 +295,7 @@ func runEditMenu(c *cli.Context, client *api.SandboxClient, label, id string) er
 				continue
 			}
 			if err := applyAutoPauseFlag(c, client, label, id, input); err != nil {
-				pterm.Error.Printfln("%v", err)
+				pterm.Error.Printfln("%s", api.UserMessageVerbose(err))
 				continue
 			}
 			if refreshed, err := client.GetSandbox(c.Context, id); err == nil {

@@ -63,7 +63,7 @@ func newEnvironmentsListCommand() *cli.Command {
 					})
 				}
 				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
-					pterm.Error.Println(err)
+					pterm.Error.Println("could not display table")
 				}
 				fmt.Println()
 			})

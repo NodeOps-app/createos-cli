@@ -236,7 +236,7 @@ func runDeviceUnregister(c *cli.Context) error {
 	ctx, cancel := context.WithTimeout(c.Context, 10*time.Second)
 	defer cancel()
 	if err := client.DeleteDevice(ctx, st.DeviceID); err != nil {
-		pterm.Warning.Printfln("Server-side revoke failed: %v", err)
+		pterm.Warning.Printfln("Server-side revoke failed: %s", api.UserMessageVerbose(err))
 		pterm.Println(pterm.Gray("  (clearing local state anyway; revoke from the UI to be safe)"))
 	}
 	if err := clearDeviceState(); err != nil {

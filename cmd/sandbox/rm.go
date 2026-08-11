@@ -111,14 +111,18 @@ func runRm(c *cli.Context) error {
 	for _, ref := range ids {
 		id, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
-			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": err.Error()})
+			// Sanitized in the JSON result too — a raw Go error leaks
+			// syscall detail and local paths whichever stream it lands on.
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": msg})
 			failed++
 			continue
 		}
 		if err := client.DestroySandbox(c.Context, id); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
-			results = append(results, map[string]any{"ref": ref, "id": id, "deleted": false, "error": err.Error()})
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "id": id, "deleted": false, "error": msg})
 			failed++
 			continue
 		}

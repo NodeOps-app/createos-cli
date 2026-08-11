@@ -123,6 +123,19 @@ func runDiskCreate(c *cli.Context) error {
 		return fmt.Errorf("missing required values\n\n  Need: <name>, --bucket, --endpoint, --access-key, --secret-key\n  Optional: --region, --path-style")
 	}
 
+	if output.IsJSON(c) {
+		d, err := client.CreateDisk(c.Context, api.DiskCreateReq{
+			Name: name, Kind: "s3",
+			Config:      api.DiskConfig{Bucket: bucket, Endpoint: endpoint, Region: region, UsePathStyle: pathStyle},
+			Credentials: api.DiskCredentials{AccessKey: access, SecretKey: secret},
+		})
+		if err != nil {
+			return err
+		}
+		output.Render(c, d, func() {})
+		return nil
+	}
+
 	spinner, _ := pterm.DefaultSpinner.Start("Checking the bucket…") //nolint:errcheck
 	d, err := client.CreateDisk(c.Context, api.DiskCreateReq{
 		Name: name,
@@ -310,8 +323,11 @@ func runDiskRm(c *cli.Context) error {
 	results := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		if err := deleteDiskCascade(c, client, ref); err != nil {
-			pterm.Error.Printfln("%s: %v", ref, err)
-			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": err.Error()})
+			// Sanitized in the JSON result too — a raw Go error leaks
+			// syscall detail and local paths whichever stream it lands on.
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": msg})
 			failed++
 			continue
 		}

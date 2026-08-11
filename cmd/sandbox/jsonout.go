@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"maps"
 
 	"github.com/urfave/cli/v2"
@@ -22,6 +23,26 @@ func renderResult(c *cli.Context, action string, fields map[string]any, human fu
 	obj["action"] = action
 	maps.Copy(obj, fields)
 	output.Render(c, obj, human)
+}
+
+// withResponse folds an API response's own JSON fields into a result object,
+// so a caller gets everything the server returned (vcpu, mem_mib, egress,
+// quotas…) as well as the action and the convenience keys. Curated keys win
+// on collision — those are the documented, stable ones.
+//
+// This keeps the whole-payload behaviour of the earlier per-command JSON
+// branches while routing every command through one code path.
+func withResponse(resp any, fields map[string]any) map[string]any {
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return fields
+	}
+	var flat map[string]any
+	if err := json.Unmarshal(raw, &flat); err != nil {
+		return fields
+	}
+	maps.Copy(flat, fields)
+	return flat
 }
 
 // str dereferences an optional API string field. The sandbox API returns

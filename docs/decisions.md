@@ -109,6 +109,37 @@ Known limitation: consuming piped stdin means it is not available for
 interactive prompts. In practice a caller that pipes data also passes the
 sandbox ref and command explicitly, so no prompt is reached.
 
+### D7. Reconciling with the JSON work that landed on main first
+
+While this branch was open, `33c6f8a` ("fix: json output for create") added JSON
+to `create`, `fork`, `disk create`, and `network create` by a different route:
+an `if output.IsJSON(c)` early-return that repeats the API call and renders the
+raw response struct. `57d2ebf` separately added `api.UserMessageVerbose()` to
+stop raw Go errors leaking to users.
+
+Resolved as follows:
+
+- **Structure — kept the single path.** The early-return branch calls
+  `client.CreateSandbox` twice in two places, so a change to one silently
+  misses the other. It had already drifted: the `fork` branch skipped the
+  `sb.Status != target` check, so a fork that ended in the wrong state
+  reported success in JSON mode. The spinner writes to stderr, so one path
+  serves both formats safely.
+- **Payload — kept the whole response.** Rendering the raw struct returned
+  more than the curated key set (`vcpu`, `mem_mib`, `disk_mib`, `egress`,
+  quotas). Dropping those would regress anyone on today's `main`, so
+  `withResponse` folds the response's own JSON fields in underneath the
+  curated keys, which win on collision.
+- **Sanitization — extended to JSON.** Batch results now carry
+  `api.UserMessageVerbose(err)` rather than `err.Error()`. A raw Go error
+  leaks syscall detail and local paths whichever stream it lands on, so the
+  machine-readable field gets the same treatment as the human one.
+- **`Hint()` — added to the envelope.** `main.go` on main had started showing
+  `APIError.Hint()` to humans. The JSON envelope carries the same string as an
+  optional `hint`, so an agent relaying a failure can pass on the same advice.
+- **Arg order — theirs wins.** `05f45b6` swapped `network attach|detach` to
+  `<network> <sandbox|device>`; the result objects were adapted to it.
+
 ### Not done (and why)
 
 - **`--wait` on create/get** — real CI value, but a caller can poll `get`.
