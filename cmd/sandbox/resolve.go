@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -89,7 +90,17 @@ func resolveSandboxRef(ctx context.Context, client *api.SandboxClient, ref strin
 		}
 	}
 	if len(matches) == 0 {
-		return "", fmt.Errorf("no sandbox named %q\n\n  To see your sandboxes, run:\n    createos sandbox list", ref)
+		// Shaped as an *api.APIError, not a bare fmt.Errorf, even though
+		// this never touched the network: it's the only client-side "not
+		// found" in the whole CLI, and without this every consumer of the
+		// error — main.go's JSON envelope code/hint, batch-loop results in
+		// rm/disk/network/template — silently lost both the "not_found"
+		// code and, through api.UserMessageVerbose's raw-error fallback,
+		// the message itself down to a generic "something went wrong".
+		return "", &api.APIError{
+			StatusCode: http.StatusNotFound,
+			Message:    fmt.Sprintf("no sandbox named %q\n\n  To see your sandboxes, run:\n    createos sandbox list", ref),
+		}
 	}
 	// Most-recent wins. Stable sort so deterministic when timestamps tie.
 	sort.SliceStable(matches, func(i, j int) bool {
