@@ -10,6 +10,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cliargs"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -23,11 +25,17 @@ func newExecCommand() *cli.Command {
 arrives all at once when the command finishes. Pass --stream to see
 stdout/stderr live as it happens.
 
+Anything piped in is forwarded to the command's standard input, so
+'cat script.sh | createos sandbox exec my-box -- bash' works. Use
+--stdin to read from a file instead.
+
 Examples:
   createos sandbox exec my-box -- uname -a
   createos sandbox exec my-box -- python3 -c 'print("hi")'
   createos sandbox exec my-box --stream -- pip install requests
   createos sandbox exec my-box -- bash -c "echo $USER && date"
+  echo "hello" | createos sandbox exec my-box -- cat
+  createos sandbox exec my-box --stdin ./setup.sh -- bash
 
 The command's exit code is preserved — if the program inside the
 sandbox exits with 1, this CLI also exits with 1.`,
@@ -36,6 +44,10 @@ sandbox exits with 1, this CLI also exits with 1.`,
 				Name:    "stream",
 				Aliases: []string{"s"},
 				Usage:   "Show output live as the command runs",
+			},
+			&cli.StringFlag{
+				Name:  "stdin",
+				Usage: "Read the command's standard input from `FILE` ('-' for piped input)",
 			},
 			&cli.StringSliceFlag{
 				Name: "env",
@@ -108,10 +120,15 @@ func runExec(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	stdin, err := readExecStdin(c)
+	if err != nil {
+		return err
+	}
 	req := api.SandboxExecReq{
-		Cmd:  cmd,
-		Args: args,
-		Env:  envs,
+		Cmd:   cmd,
+		Args:  args,
+		Env:   envs,
+		Stdin: stdin,
 	}
 
 	if c.Bool("stream") {
@@ -120,11 +137,52 @@ func runExec(c *cli.Context) error {
 	return runExecBuffered(c, client, id, req)
 }
 
+// readExecStdin collects the payload for the command's standard input:
+// an explicit --stdin FILE, or whatever was piped in. On a TTY with no
+// --stdin there is nothing to read, so the command gets empty stdin
+// rather than blocking on the keyboard.
+func readExecStdin(c *cli.Context) (string, error) {
+	path := c.String("stdin")
+
+	switch {
+	case path != "" && path != "-":
+		data, err := os.ReadFile(path) // #nosec G304 -- the user names the file to send
+		if err != nil {
+			return "", fmt.Errorf("could not read %s\n\n  Check the path is correct and the file exists", path)
+		}
+		return string(data), nil
+	case path == "-" || terminal.HasPipedStdin():
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("could not read the piped input: %w", err)
+		}
+		return string(data), nil
+	}
+	return "", nil
+}
+
 func runExecBuffered(c *cli.Context, client *api.SandboxClient, id string, req api.SandboxExecReq) error {
 	resp, err := client.ExecSandbox(c.Context, id, req)
 	if err != nil {
 		return err
 	}
+
+	// JSON mode keeps stdout a single parseable document: the command's
+	// own output becomes fields rather than raw bytes on the stream.
+	if output.IsJSONExplicit(c) {
+		output.Render(c, map[string]any{
+			"sandbox_id": id,
+			"exit_code":  resp.Result.ExitCode,
+			"stdout":     resp.Result.Stdout,
+			"stderr":     resp.Result.Stderr,
+			"error":      resp.Result.Error,
+		}, func() {})
+		if resp.Result.ExitCode != 0 {
+			os.Exit(resp.Result.ExitCode)
+		}
+		return nil
+	}
+
 	if resp.Result.Stdout != "" {
 		fmt.Print(resp.Result.Stdout)
 		if !strings.HasSuffix(resp.Result.Stdout, "\n") {
@@ -190,10 +248,13 @@ func parseExecArgs(c *cli.Context) (ref, cmd string, args []string) {
 		return "", "", nil
 	}
 
-	// First: did the user write `... exec -- …`? Scan os.Args.
+	// First: did the user write `... exec -- …`? Scan os.Args, hoisted the
+	// same way main.go hoists it, so a global flag typed after the
+	// subcommand ("exec --output json -- ls") doesn't hide the separator.
+	argv := cliargs.Hoist(os.Args)
 	leadingDoubleDash := false
-	for i, a := range os.Args {
-		if a == "exec" && i+1 < len(os.Args) && os.Args[i+1] == "--" {
+	for i, a := range argv {
+		if a == "exec" && i+1 < len(argv) && argv[i+1] == "--" {
 			leadingDoubleDash = true
 			break
 		}

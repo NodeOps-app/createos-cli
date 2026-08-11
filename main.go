@@ -10,6 +10,8 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/cmd/root"
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cliargs"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func main() {
@@ -20,12 +22,19 @@ func main() {
 
 	app := root.NewApp()
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(cliargs.Hoist(os.Args)); err != nil {
+		code, message := "error", err.Error()
 		var apiErr *api.APIError
 		if errors.As(err, &apiErr) {
-			pterm.Error.Println(apiErr.Message)
-		} else {
-			pterm.Error.Println(err.Error())
+			code, message = apiErr.Code(), apiErr.Message
+		}
+
+		// JSON mode emits a machine-readable envelope on stdout so a
+		// consumer reading a single stream still parses valid JSON.
+		// Otherwise the human-readable error goes to stderr, keeping
+		// stdout clean for data in pipes and CI logs.
+		if !output.AppRenderError(app, code, message) {
+			pterm.Error.WithWriter(os.Stderr).Println(message)
 		}
 		os.Exit(1)
 	}

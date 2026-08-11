@@ -16,7 +16,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 // deviceState is what we persist locally after `devices register`. The
@@ -204,9 +203,15 @@ func runDeviceRegister(c *cli.Context) error {
 	if err := saveDeviceState(st); err != nil {
 		return fmt.Errorf("could not save device state: %w", err)
 	}
-	pterm.Success.Printfln("Registered %q (%s)", view.Name, view.ClientIP)
-	pterm.Println(pterm.Gray("  Attach this device to a network in the UI, then:"))
-	pterm.Println(pterm.Gray("    createos sb vpn up"))
+	renderResult(c, "device_registered", map[string]any{
+		"id":        view.ID,
+		"name":      view.Name,
+		"client_ip": view.ClientIP,
+	}, func() {
+		pterm.Success.Printfln("Registered %q (%s)", view.Name, view.ClientIP)
+		pterm.Println(pterm.Gray("  Attach this device to a network in the UI, then:"))
+		pterm.Println(pterm.Gray("    createos sb vpn up"))
+	})
 	return nil
 }
 
@@ -237,7 +242,12 @@ func runDeviceUnregister(c *cli.Context) error {
 	if err := clearDeviceState(); err != nil {
 		return fmt.Errorf("clear local state: %w", err)
 	}
-	pterm.Success.Printfln("Unregistered %q.", st.Name)
+	renderResult(c, "device_unregistered", map[string]any{
+		"id":   st.DeviceID,
+		"name": st.Name,
+	}, func() {
+		pterm.Success.Printfln("Unregistered %q.", st.Name)
+	})
 	return nil
 }
 
@@ -364,15 +374,24 @@ func runDeviceRemove(c *cli.Context) error {
 	if err := client.DeleteDevice(ctx, target.ID); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Removed %q (%s).", target.Name, target.ClientIP)
-
+	clearedLocal := false
 	// If we just deleted the row backing this machine's device.json,
 	// scrub local state too so `vpn up` doesn't loop against a ghost id.
 	if local, _ := loadDeviceState(); local != nil && local.DeviceID == target.ID { //nolint:errcheck
 		_ = clearDeviceState() //nolint:errcheck
-		pterm.Println(pterm.Gray("  (also cleared local device.json for this machine)"))
+		clearedLocal = true
 	}
+
+	renderResult(c, "device_removed", map[string]any{
+		"id":                  target.ID,
+		"name":                target.Name,
+		"client_ip":           target.ClientIP,
+		"cleared_local_state": clearedLocal,
+	}, func() {
+		pterm.Success.Printfln("Removed %q (%s).", target.Name, target.ClientIP)
+		if clearedLocal {
+			pterm.Println(pterm.Gray("  (also cleared local device.json for this machine)"))
+		}
+	})
 	return nil
 }
-
-var _ = output.Render

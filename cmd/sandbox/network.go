@@ -68,9 +68,14 @@ func runNetworkCreate(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Created network %s (%s)", n.Name, n.ID)
-	pterm.Println(pterm.Gray("  Attach at create time:  createos sandbox create --network " + n.Name))
-	pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach <sandbox> " + n.Name))
+	renderResult(c, "network_created", map[string]any{
+		"id":   n.ID,
+		"name": n.Name,
+	}, func() {
+		pterm.Success.Printfln("Created network %s (%s)", n.Name, n.ID)
+		pterm.Println(pterm.Gray("  Attach at create time:  createos sandbox create --network " + n.Name))
+		pterm.Println(pterm.Gray("  Or live-attach later:   createos sandbox network attach <sandbox> " + n.Name))
+	})
 	return nil
 }
 
@@ -240,14 +245,22 @@ func runNetworkRm(c *cli.Context) error {
 		}
 	}
 	failed := 0
+	results := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		if err := deleteNetworkCascade(c, client, ref); err != nil {
 			pterm.Error.Printfln("%s: %v", ref, err)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": err.Error()})
 			failed++
 			continue
 		}
+		results = append(results, map[string]any{"ref": ref, "deleted": true})
 		pterm.Success.Printfln("Deleted network %s", ref)
 	}
+	renderResult(c, "network_deleted", map[string]any{
+		"results": results,
+		"deleted": len(results) - failed,
+		"failed":  failed,
+	}, func() {})
 	if failed > 0 {
 		return fmt.Errorf("%d of %d deletes failed", failed, len(refs))
 	}
@@ -372,8 +385,14 @@ func runNetworkAttach(c *cli.Context) error {
 		if err := client.AttachDeviceToNetwork(c.Context, ref, netRef); err != nil {
 			return err
 		}
-		pterm.Success.Printfln("Attached device %s → network %s", ref, netRef)
-		pterm.Println(pterm.Gray("  The device can now reach VMs on this network once it brings up the tunnel."))
+		renderResult(c, "network_attached", map[string]any{
+			"network":  netRef,
+			"endpoint": ref,
+			"type":     "device",
+		}, func() {
+			pterm.Success.Printfln("Attached device %s → network %s", ref, netRef)
+			pterm.Println(pterm.Gray("  The device can now reach VMs on this network once it brings up the tunnel."))
+		})
 		return nil
 	}
 	sandboxID, err := resolveSandboxRef(c.Context, client, ref)
@@ -383,8 +402,14 @@ func runNetworkAttach(c *cli.Context) error {
 	if err := client.AttachNetwork(c.Context, sandboxID, netRef); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Attached %s → network %s", refLabel(ref, sandboxID), netRef)
-	pterm.Println(pterm.Gray("  Other sandboxes on this network can now reach this one by name."))
+	renderResult(c, "network_attached", map[string]any{
+		"network":  netRef,
+		"endpoint": sandboxID,
+		"type":     "sandbox",
+	}, func() {
+		pterm.Success.Printfln("Attached %s → network %s", refLabel(ref, sandboxID), netRef)
+		pterm.Println(pterm.Gray("  Other sandboxes on this network can now reach this one by name."))
+	})
 	return nil
 }
 
@@ -474,7 +499,13 @@ func runNetworkDetach(c *cli.Context) error {
 		if err := client.DetachDeviceFromNetwork(c.Context, ref, netRef); err != nil {
 			return err
 		}
-		pterm.Success.Printfln("Detached device %s from network %s", ref, netRef)
+		renderResult(c, "network_detached", map[string]any{
+			"network":  netRef,
+			"endpoint": ref,
+			"type":     "device",
+		}, func() {
+			pterm.Success.Printfln("Detached device %s from network %s", ref, netRef)
+		})
 		return nil
 	}
 	sandboxID, err := resolveSandboxRef(c.Context, client, ref)
@@ -484,7 +515,13 @@ func runNetworkDetach(c *cli.Context) error {
 	if err := client.DetachNetwork(c.Context, sandboxID, netRef); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Detached %s from network %s", refLabel(ref, sandboxID), netRef)
+	renderResult(c, "network_detached", map[string]any{
+		"network":  netRef,
+		"endpoint": sandboxID,
+		"type":     "sandbox",
+	}, func() {
+		pterm.Success.Printfln("Detached %s from network %s", refLabel(ref, sandboxID), netRef)
+	})
 	return nil
 }
 

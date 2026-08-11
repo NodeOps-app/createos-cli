@@ -101,16 +101,24 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", sb.ID, sb.Status, sb.ID)
 	}
 
-	name := ""
-	if sb.Name != nil {
-		name = *sb.Name
-	}
+	name := str(sb.Name)
 	spinner.Success(fmt.Sprintf("Forked into %s", refLabel(name, sb.ID)))
-	if sb.IP != nil && *sb.IP != "" {
-		fmt.Printf("    IP: %s\n", *sb.IP)
-	}
-	if sb.IngressURLTemplate != "" {
-		fmt.Printf("    URL: %s\n", sb.IngressURLTemplate)
-	}
+
+	renderResult(c, "forked", map[string]any{
+		"id":            sb.ID,
+		"name":          name,
+		"status":        sb.Status,
+		"ip":            str(sb.IP),
+		"ingress_url":   sb.IngressURLTemplate,
+		"source_id":     srcID,
+		"shell_command": fmt.Sprintf("createos sandbox shell %s", sb.ID),
+	}, func() {
+		if sb.IP != nil && *sb.IP != "" {
+			fmt.Printf("    IP: %s\n", *sb.IP)
+		}
+		if sb.IngressURLTemplate != "" {
+			fmt.Printf("    URL: %s\n", sb.IngressURLTemplate)
+		}
+	})
 	return nil
 }

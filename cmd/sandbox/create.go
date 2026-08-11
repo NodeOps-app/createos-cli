@@ -203,7 +203,15 @@ func runCreate(c *cli.Context) error {
 	}
 	spinner.Success("Sandbox is ready")
 
-	printCreateResult(resp)
+	renderResult(c, "created", map[string]any{
+		"id":            resp.ID,
+		"name":          str(resp.Name),
+		"shape":         resp.Shape,
+		"rootfs":        str(resp.Rootfs),
+		"ip":            resp.IP,
+		"ingress_url":   resp.IngressURLTemplate,
+		"shell_command": fmt.Sprintf("createos sandbox shell %s", resp.ID),
+	}, func() { printCreateResult(resp) })
 	return nil
 }
 

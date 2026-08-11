@@ -143,8 +143,13 @@ func runDiskCreate(c *cli.Context) error {
 		return err
 	}
 	spinner.Success(fmt.Sprintf("Registered disk %s (%s)", d.Name, d.ID))
-	pterm.Println(pterm.Gray("  Attach it at create time:    createos sandbox create --disk " + d.Name + ":/mnt/data"))
-	pterm.Println(pterm.Gray("  Or live-attach it later:     createos sandbox disk attach <sandbox> " + d.Name + " /mnt/data"))
+	renderResult(c, "disk_created", map[string]any{
+		"id":   d.ID,
+		"name": d.Name,
+	}, func() {
+		pterm.Println(pterm.Gray("  Attach it at create time:    createos sandbox create --disk " + d.Name + ":/mnt/data"))
+		pterm.Println(pterm.Gray("  Or live-attach it later:     createos sandbox disk attach <sandbox> " + d.Name + " /mnt/data"))
+	})
 	return nil
 }
 
@@ -302,14 +307,22 @@ func runDiskRm(c *cli.Context) error {
 		}
 	}
 	failed := 0
+	results := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		if err := deleteDiskCascade(c, client, ref); err != nil {
 			pterm.Error.Printfln("%s: %v", ref, err)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": err.Error()})
 			failed++
 			continue
 		}
+		results = append(results, map[string]any{"ref": ref, "deleted": true})
 		pterm.Success.Printfln("Deleted disk %s", ref)
 	}
+	renderResult(c, "disk_deleted", map[string]any{
+		"results": results,
+		"deleted": len(results) - failed,
+		"failed":  failed,
+	}, func() {})
 	if failed > 0 {
 		return fmt.Errorf("%d of %d deletes failed", failed, len(refs))
 	}
@@ -484,7 +497,13 @@ func runDiskAttach(c *cli.Context) error {
 		return err
 	}
 	spinner.Success(fmt.Sprintf("Attached %s → %s:%s", diskRef, refLabel(sandboxRef, sandboxID), mountPath))
-	pterm.Println(pterm.Gray("  The mount appears inside the sandbox within a few seconds."))
+	renderResult(c, "disk_attached", map[string]any{
+		"disk":       diskRef,
+		"sandbox_id": sandboxID,
+		"mount_path": mountPath,
+	}, func() {
+		pterm.Println(pterm.Gray("  The mount appears inside the sandbox within a few seconds."))
+	})
 	return nil
 }
 
@@ -596,7 +615,13 @@ func runDiskDetach(c *cli.Context) error {
 	if err := client.DetachDisk(c.Context, sandboxID, diskRef, mountPath); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Detached %s from %s at %s", diskRef, refLabel(sandboxRef, sandboxID), mountPath)
+	renderResult(c, "disk_detached", map[string]any{
+		"disk":       diskRef,
+		"sandbox_id": sandboxID,
+		"mount_path": mountPath,
+	}, func() {
+		pterm.Success.Printfln("Detached %s from %s at %s", diskRef, refLabel(sandboxRef, sandboxID), mountPath)
+	})
 	return nil
 }
 

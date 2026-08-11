@@ -14,9 +14,33 @@ import (
 // FormatKey is the metadata key for the output format.
 const FormatKey = "output_format"
 
+// FormatExplicitKey records whether the format came from --output rather
+// than from TTY detection.
+const FormatExplicitKey = "output_format_explicit"
+
+// IsJSONExplicit reports whether the user actually asked for JSON with
+// --output json. Commands whose stdout IS the payload — `sandbox exec`
+// forwarding a program's own output — must use this instead of IsJSON, or
+// a plain `… exec box -- cat data.csv > out` would silently write a JSON
+// envelope instead of the file the caller expected.
+func IsJSONExplicit(c *cli.Context) bool {
+	explicit, ok := c.App.Metadata[FormatExplicitKey].(bool)
+	return ok && explicit && IsJSON(c)
+}
+
 // IsJSON returns true if the output format is JSON.
 func IsJSON(c *cli.Context) bool {
-	if f, ok := c.App.Metadata[FormatKey].(string); ok {
+	return AppIsJSON(c.App)
+}
+
+// AppIsJSON reports whether the app is in JSON mode. It reads the same
+// metadata IsJSON does, but works from the *cli.App alone — main.go handles
+// errors after Run returns, where no *cli.Context is available.
+func AppIsJSON(app *cli.App) bool {
+	if app == nil {
+		return false
+	}
+	if f, ok := app.Metadata[FormatKey].(string); ok {
 		return f == "json"
 	}
 	return false
@@ -37,7 +61,15 @@ func Render(c *cli.Context, data any, tableRenderer func()) {
 
 // RenderError outputs an error as JSON if --output json is set, otherwise returns false.
 func RenderError(c *cli.Context, code string, message string) bool {
-	if !IsJSON(c) {
+	return AppRenderError(c.App, code, message)
+}
+
+// AppRenderError is RenderError for callers that only hold the *cli.App.
+// The envelope goes to stdout so a JSON consumer reading one stream still
+// gets valid JSON on failure; the human-readable path in main.go writes to
+// stderr instead.
+func AppRenderError(app *cli.App, code string, message string) bool {
+	if !AppIsJSON(app) {
 		return false
 	}
 	enc := json.NewEncoder(os.Stdout)

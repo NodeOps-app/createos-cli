@@ -491,6 +491,8 @@ createos sandbox list --status paused --quiet | xargs createos sandbox rm --forc
 createos sandbox get <id>
 createos sandbox exec my-box -- uname -a
 createos sandbox exec my-box --stream -- pip install requests
+echo "hello" | createos sandbox exec my-box -- cat
+createos sandbox exec my-box --stdin ./setup.sh -- bash
 createos sandbox shell my-box
 createos sandbox shell my-box --ssh
 createos sandbox push my-box ./script.py /root/script.py
@@ -594,6 +596,90 @@ To force JSON output in a TTY, use `--output json` (or `-o json`):
 createos projects get --project <id> --output json
 createos environments list --project <id> -o json
 ```
+
+### Global flags work anywhere on the line
+
+`--output`, `--debug`, `--api-url`, `--api-key`, `--sandbox-api-url`, and
+`--sandbox-gateway` can go before or after the subcommand — both of these
+are the same command:
+
+```bash
+createos --output json sandbox create
+createos sandbox create --output json
+```
+
+Anything after a bare `--` is passed through untouched, so
+`createos sandbox exec my-box -- ./ci.sh --debug` still sends `--debug` to
+your script rather than to the CLI.
+
+### Sandbox commands that change something
+
+Every `sandbox` subcommand that creates, changes, or deletes something also
+reports its result as JSON. Each object carries an `action` naming what
+happened, plus the ids needed to chain the next command:
+
+```bash
+$ createos sandbox create --output json
+{
+  "action": "created",
+  "id": "sb-01k...",
+  "name": "quiet-lake-4821",
+  "shape": "s-2vcpu-4gb",
+  "rootfs": "devbox",
+  "ip": "10.0.4.19",
+  "ingress_url": "https://<port>-sb-01k....sb.createos.sh",
+  "shell_command": "createos sandbox shell sb-01k..."
+}
+
+# chain it
+ID=$(createos sandbox create -o json | jq -r .id)
+createos sandbox exec "$ID" -- uname -a
+createos sandbox rm "$ID" --force
+```
+
+Batch commands (`rm`, `disk rm`, `network rm`, `template rm`) return one
+entry per reference you passed, so you can tell which ones actually went:
+
+```json
+{
+  "action": "deleted",
+  "results": [
+    { "ref": "my-box", "id": "sb-01k...", "deleted": true },
+    { "ref": "typo-box", "deleted": false, "error": "no sandbox named typo-box" }
+  ],
+  "deleted": 1,
+  "failed": 1
+}
+```
+
+`sandbox shell`, `sandbox sync`, `sandbox editor`, and `sandbox exec --stream`
+stay human-readable — they are interactive streams with no single result to
+report. `sandbox tunnel` and `sandbox vpn up` print their JSON result when the
+connection comes up, before they block.
+
+### Errors
+
+Errors go to **stderr**, so `2>/dev/null` and pipes behave. In JSON mode the
+error is a machine-readable envelope on stdout:
+
+```bash
+$ createos sandbox get nope --output json
+{
+  "error": {
+    "code": "not_found",
+    "message": "no sandbox named nope"
+  }
+}
+```
+
+Codes: `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`,
+`rate_limited`, `server_error`, `api_error`, `error`. The exit code is 1 for
+any failure.
+
+### Colour
+
+ANSI colour is switched off automatically when stdout is not a terminal, and
+whenever `NO_COLOR` is set. CI logs stay greppable without any flag.
 
 ## Options
 

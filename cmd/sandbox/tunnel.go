@@ -169,8 +169,16 @@ func runTunnel(c *cli.Context) error {
 		return err
 	}
 
-	pterm.Success.Printfln("Forwarding %s → %s:%d", listenAddr, refLabel(ref, id), remote)
-	pterm.Println(pterm.Gray("  Press Ctrl+C to stop."))
+	// Emitted before the blocking accept loop: a caller in JSON mode needs
+	// the bound address now, not when the tunnel is torn down.
+	renderResult(c, "tunnel_started", map[string]any{
+		"id":          id,
+		"listen_addr": listenAddr,
+		"remote_port": remote,
+	}, func() {
+		pterm.Success.Printfln("Forwarding %s → %s:%d", listenAddr, refLabel(ref, id), remote)
+		pterm.Println(pterm.Gray("  Press Ctrl+C to stop."))
+	})
 
 	// Trap Ctrl+C so we can close cleanly and not leave half-open conns.
 	sigCh := make(chan os.Signal, 1)

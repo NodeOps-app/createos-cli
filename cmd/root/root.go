@@ -4,8 +4,10 @@ package root
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
+	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/cmd/ask"
@@ -36,6 +38,7 @@ import (
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
+	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 // NewApp creates and configures the root CLI application.
@@ -89,6 +92,23 @@ func NewApp() *cli.App {
 		Before: func(c *cli.Context) error {
 			// Store the output format in metadata
 			c.App.Metadata[output.FormatKey] = output.DetectFormat(c)
+			c.App.Metadata[output.FormatExplicitKey] = c.String("output") != ""
+
+			// One choke point for colour: a pipe, a CI log, or NO_COLOR
+			// must never receive ANSI escapes. pterm styles every helper
+			// through this global, so disabling it here covers every
+			// command at once.
+			if os.Getenv("NO_COLOR") != "" || !terminal.IsInteractive() {
+				pterm.DisableStyling()
+			}
+
+			// In JSON mode stdout carries one machine-readable document and
+			// nothing else. Sending every pterm print to stderr keeps that
+			// true even for commands that still narrate progress, so a
+			// consumer never has to strip prose out of the stream.
+			if output.IsJSON(c) {
+				pterm.SetDefaultOutput(os.Stderr)
+			}
 
 			// Skip auth for --help / -h on any command
 			for _, a := range c.Args().Slice() {

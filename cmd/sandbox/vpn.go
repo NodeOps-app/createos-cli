@@ -183,10 +183,19 @@ func runVPNUp(c *cli.Context) error {
 	}
 
 	ifaceName := strings.TrimSuffix(filepath.Base(confPath), ".conf")
-	pterm.Success.Printfln("VPN connected as %s (%s).", st.Name, st.ClientIP)
-	pterm.Println(pterm.Gray(fmt.Sprintf("  device: %s", st.Name)))
-	pterm.Println(pterm.Gray(fmt.Sprintf("  iface:  %s", ifaceName)))
-	pterm.Println(pterm.Gray("Press Ctrl-C to disconnect."))
+	// Emitted before the block on Ctrl-C, for the same reason as the
+	// tunnel: the caller needs the interface and address up front.
+	renderResult(c, "vpn_connected", map[string]any{
+		"device_id": st.DeviceID,
+		"device":    st.Name,
+		"client_ip": st.ClientIP,
+		"interface": ifaceName,
+	}, func() {
+		pterm.Success.Printfln("VPN connected as %s (%s).", st.Name, st.ClientIP)
+		pterm.Println(pterm.Gray(fmt.Sprintf("  device: %s", st.Name)))
+		pterm.Println(pterm.Gray(fmt.Sprintf("  iface:  %s", ifaceName)))
+		pterm.Println(pterm.Gray("Press Ctrl-C to disconnect."))
+	})
 
 	// Block until Ctrl-C / SIGTERM (user disconnect) or until the
 	// renewal goroutine signals that the server-side session is gone.
