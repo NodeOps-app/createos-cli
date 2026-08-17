@@ -292,6 +292,18 @@ Sensitive and noisy files are always excluded: `.env`, `.env.*`, secrets/keys (`
 
 Sandboxes are fast-booting VMs — isolated environments you can exec into, sync files to, tunnel ports through, and snapshot at will.
 
+Anywhere a command takes a sandbox, you can pass its full ID, its name, or
+just the first few characters of either — the same shortcut Docker allows:
+
+```bash
+createos sandbox rm sb-01243e     # enough of the ID to be unique
+createos sandbox get my-box       # the name you gave it
+createos sandbox exec my-b -- ls  # enough of the name to be unique
+```
+
+If what you type matches more than one sandbox, the CLI lists the matches and
+asks for a few more characters rather than guessing.
+
 | Command                            | Description                                                   |
 | ---------------------------------- | ------------------------------------------------------------- |
 | `createos sandbox create`          | Create a new sandbox                                          |
