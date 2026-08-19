@@ -37,7 +37,7 @@ func newListCommand() *cli.Command {
 					tableData = append(tableData, []string{
 						item.ID,
 						item.Name,
-						item.CreatedAt.Format("2006-01-02 15:04:05"),
+						item.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
 				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {

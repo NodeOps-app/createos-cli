@@ -48,7 +48,7 @@ func newWebhooksGetCommand() *cli.Command {
 				}
 				fmt.Printf("%s %s\n", label.Sprint("Events:"), events)
 				fmt.Printf("%s %d\n", label.Sprint("Failures:"), ep.FailureCount)
-				fmt.Printf("%s %s\n", label.Sprint("Created:"), ep.CreatedAt.Format("2006-01-02 15:04:05 UTC"))
+				fmt.Printf("%s %s\n", label.Sprint("Created:"), ep.CreatedAt.Local().Format("2006-01-02 15:04:05 MST"))
 				fmt.Println()
 
 				if len(result.Deliveries) == 0 {
@@ -66,7 +66,7 @@ func newWebhooksGetCommand() *cli.Command {
 						d.EventAction,
 						deliveryStatusIcon(d.Status),
 						fmt.Sprintf("%d", d.Attempts),
-						d.CreatedAt.Format("2006-01-02 15:04"),
+						d.CreatedAt.Local().Format("2006-01-02 15:04"),
 					})
 				}
 				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck

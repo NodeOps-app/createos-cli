@@ -40,7 +40,7 @@ func newListCommand() *cli.Command {
 						p.DisplayName,
 						p.Status,
 						p.Type,
-						p.CreatedAt.Format("2006-01-02 15:04:05"),
+						p.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
 				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck

@@ -53,13 +53,12 @@ private helper, test-only — is **not** a shared surface, so skip the mesh for 
 cmd/
   auth/        login, logout, whoami commands
   projects/    projects subcommands (list, get, delete)
-  skills/      skills subcommands (catalog, purchased)
   root/        app wiring, Before hook, default action
 internal/
   api/         resty client, types, all API methods
   config/      token storage (~/.createos/.token)
   intro/       ASCII banner
-  ui/          interactive TUI components (skills catalog)
+  ui/          interactive TUI components
 main.go        entry point — error display only
 ```
 

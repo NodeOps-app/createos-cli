@@ -23,7 +23,6 @@ Use the `bash` tool to run `createos` commands on behalf of the user. Always run
 - `createos vms` — Deploy, list, get, resize, ssh, reboot, terminate VM instances (`--vm <id>`)
 - `createos oauth-clients` — List, create, get instructions, delete OAuth clients (`--client <id>`)
 - `createos me` — List and revoke OAuth consents (`--client <id>`)
-- `createos skills` — Browse and list purchased skills
 - `createos init` — Link the current directory to a project
 - `createos status` — Show a project's health and deployment status
 - `createos open` — Open a project's live URL in the browser

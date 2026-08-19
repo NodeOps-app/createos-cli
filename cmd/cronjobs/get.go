@@ -61,7 +61,7 @@ func newCronjobsGetCommand() *cli.Command {
 
 			if cj.SuspendedAt != nil {
 				label.Print("Suspended At:  ")
-				fmt.Println(cj.SuspendedAt.Format("2006-01-02 15:04:05"))
+				fmt.Println(cj.SuspendedAt.Local().Format("2006-01-02 15:04:05"))
 			}
 			if cj.SuspendText != nil && *cj.SuspendText != "" {
 				label.Print("Suspend Text:  ")
@@ -93,9 +93,9 @@ func newCronjobsGetCommand() *cli.Command {
 			}
 
 			label.Print("Created At:    ")
-			fmt.Println(cj.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(cj.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 			label.Print("Updated At:    ")
-			fmt.Println(cj.UpdatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(cj.UpdatedAt.Local().Format("2006-01-02 15:04:05"))
 
 			return nil
 		},

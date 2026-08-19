@@ -78,7 +78,7 @@ func pickDeployment(client *api.APIClient, projectID string, statusFilter []stri
 			d.ID,
 			d.Status,
 			d.Extra.Endpoint,
-			d.CreatedAt.Format("2006-01-02 15:04:05"),
+			d.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 		})
 	}
 	fmt.Println()
@@ -93,7 +93,7 @@ func pickDeployment(client *api.APIClient, projectID string, statusFilter []stri
 		if len(id) > 8 {
 			id = id[:8]
 		}
-		label := fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id)
+		label := fmt.Sprintf("%s  %s  %s", d.CreatedAt.Local().Format("Jan 02 15:04"), d.Status, id)
 		if d.Source != nil && d.Source.Commit != "" {
 			commit := d.Source.Commit
 			if len(commit) > 7 {
@@ -103,7 +103,7 @@ func pickDeployment(client *api.APIClient, projectID string, statusFilter []stri
 			if len(msg) > 50 {
 				msg = msg[:50] + "…"
 			}
-			label = fmt.Sprintf("%s  %s  %s  %s %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id, commit, msg)
+			label = fmt.Sprintf("%s  %s  %s  %s %s", d.CreatedAt.Local().Format("Jan 02 15:04"), d.Status, id, commit, msg)
 		}
 		options[i] = label
 	}

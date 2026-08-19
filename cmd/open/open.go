@@ -94,7 +94,7 @@ func NewOpenCommand() *cli.Command {
 						if len(id) > 8 {
 							id = id[:8]
 						}
-						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Format("Jan 02 15:04"), d.Status, id)
+						options[i] = fmt.Sprintf("%s  %s  %s", d.CreatedAt.Local().Format("Jan 02 15:04"), d.Status, id)
 					}
 					if !terminal.IsInteractive() {
 						return fmt.Errorf("multiple deployments found — use 'createos deployments list' and pass the deployment ID")

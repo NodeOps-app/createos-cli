@@ -107,7 +107,7 @@ func runNetworkList(c *cli.Context) error {
 			table = append(table, []string{
 				n.Name, n.ID,
 				fmt.Sprintf("%d", n.MemberCount),
-				n.CreatedAt.Format("2006-01-02 15:04"),
+				n.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
 		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
@@ -162,7 +162,7 @@ func runNetworkShow(c *cli.Context) error {
 		pterm.Println()
 		pterm.NewStyle(pterm.FgCyan, pterm.Bold).Printfln("  %s (%s)", n.Name, n.ID)
 		pterm.Println()
-		row("Created", n.CreatedAt.Format("2006-01-02 15:04:05"))
+		row("Created", n.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 		row("Sandboxes", fmt.Sprintf("%d", n.MemberCount))
 
 		if len(n.Members) > 0 {

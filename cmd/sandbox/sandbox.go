@@ -23,6 +23,7 @@ func NewSandboxCommand() *cli.Command {
 			newResumeCommand(),
 			newForkCommand(),
 			newExecCommand(),
+			newProcessCommand(),
 			newPushCommand(),
 			newPullCommand(),
 			newShellCommand(),

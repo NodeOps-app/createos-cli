@@ -19,7 +19,7 @@ func newCreateCommand() *cli.Command {
 		Aliases:   []string{"c"},
 		Usage:     "Create a new sandbox",
 		ArgsUsage: " ",
-		Description: `Create a new sandbox on fc-spawn.
+		Description: `Create a new sandbox.
 
 Examples:
   # Smallest possible sandbox
