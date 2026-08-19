@@ -31,8 +31,16 @@ func newShellCommand() *cli.Command {
 		Aliases:   []string{"sh"},
 		Usage:     "Open an interactive shell inside a sandbox",
 		ArgsUsage: "[<sandbox>]",
-		Description: `Open a real terminal session inside a sandbox.
-Works with tools that need a TTY — vim, htop, bash prompts.
+		Description: `Open an immediate interactive terminal inside a sandbox.
+
+Use this when you just want to work in a shell now. It gives you a real
+TTY for bash prompts, vim, htop, btop, and other terminal apps.
+
+This command is attached to your current CLI process: when you exit or
+disconnect, there is no managed process ID to list or reconnect later.
+Use 'sandbox process shell' when you want a persistent shell session
+that can be detached, listed, and reattached.
+Use 'sandbox exec' for quick non-interactive commands.
 
 By default this opens a PTY directly through the control plane — no
 SSH keys, no sshd setup. Your existing API token is the only auth.

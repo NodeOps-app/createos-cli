@@ -89,7 +89,7 @@ func printSandbox(s *api.SandboxView, bw *api.BandwidthView) {
 		if t == nil {
 			return
 		}
-		row(k, t.Format("2006-01-02 15:04:05"))
+		row(k, t.Local().Format("2006-01-02 15:04:05"))
 	}
 
 	// Header

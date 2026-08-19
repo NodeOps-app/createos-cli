@@ -191,7 +191,7 @@ func runDiskList(c *cli.Context) error {
 		for _, d := range disks {
 			table = append(table, []string{
 				d.Name, d.ID, d.Kind, d.Config.Bucket,
-				d.CreatedAt.Format("2006-01-02 15:04"),
+				d.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
 		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
@@ -253,7 +253,7 @@ func runDiskShow(c *cli.Context) error {
 		if d.Config.UsePathStyle {
 			row("Path style", "yes")
 		}
-		row("Created", d.CreatedAt.Format("2006-01-02 15:04:05"))
+		row("Created", d.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 	})
 	return nil
 }

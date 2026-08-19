@@ -50,7 +50,7 @@ func newCronjobsListCommand() *cli.Command {
 						cj.Schedule,
 						cj.Type,
 						cj.Status,
-						cj.CreatedAt.Format("2006-01-02 15:04:05"),
+						cj.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
 				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck

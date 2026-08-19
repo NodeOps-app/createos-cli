@@ -65,7 +65,7 @@ func newTemplatesInfoCommand() *cli.Command {
 			fmt.Println(tmpl.Status)
 
 			cyan.Printf("  Created:     ")
-			fmt.Println(tmpl.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(tmpl.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 
 			fmt.Println()
 			return nil

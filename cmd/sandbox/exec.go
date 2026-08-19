@@ -18,10 +18,18 @@ func newExecCommand() *cli.Command {
 		Name:      "exec",
 		Usage:     "Run a command inside a sandbox",
 		ArgsUsage: "<sandbox> -- <cmd> [args…]",
-		Description: `Run a one-shot command inside a sandbox. Anything after the literal
-'--' becomes the command. The default is a buffered exec — output
+		Description: `Run a one-shot command inside a sandbox.
+
+Use this for quick non-interactive commands where you do not need a
+process ID, reconnect, stdin after start, or a TTY. Anything after the
+literal '--' becomes the command. The default is buffered exec — output
 arrives all at once when the command finishes. Pass --stream to see
 stdout/stderr live as it happens.
+
+Use 'sandbox shell' for an immediate interactive terminal.
+Use 'sandbox process' for long-running or reconnectable commands.
+Use 'sandbox process run --pty' when the command needs a TTY but should
+also be managed as a process.
 
 Examples:
   createos sandbox exec my-box -- uname -a

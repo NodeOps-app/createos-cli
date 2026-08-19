@@ -248,7 +248,7 @@ func (m skillsListModel) detailViewRender() string {
 	s += dividerStyle.Render(strings.Repeat("─", 70)) + "\n"
 	s += "\n"
 	s += labelStyle.Render("Categories  ") + valueStyle.Render(categories) + "\n"
-	s += labelStyle.Render("Created     ") + valueStyle.Render(skill.CreatedAt.Format("January 2, 2006")) + "\n"
+	s += labelStyle.Render("Created     ") + valueStyle.Render(skill.CreatedAt.Local().Format("January 2, 2006")) + "\n"
 	s += "\n"
 	s += labelStyle.Render("Overview") + "\n"
 	for _, line := range strings.Split(wordWrap(overview, 60), "\n") {

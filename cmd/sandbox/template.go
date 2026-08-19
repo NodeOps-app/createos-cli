@@ -152,7 +152,7 @@ func runTemplateList(c *cli.Context) error {
 			table = append(table, []string{
 				t.Name, t.ID, t.Status,
 				humanBytes(t.Ext4SizeBytes),
-				t.CreatedAt.Format("2006-01-02 15:04"),
+				t.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
 		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
@@ -208,9 +208,9 @@ func runTemplateShow(c *cli.Context) error {
 		if t.Ext4SizeBytes > 0 {
 			row("Size", humanBytes(t.Ext4SizeBytes))
 		}
-		row("Created", t.CreatedAt.Format("2006-01-02 15:04:05"))
+		row("Created", t.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 		if t.BuiltAt != nil {
-			row("Built", t.BuiltAt.Format("2006-01-02 15:04:05"))
+			row("Built", t.BuiltAt.Local().Format("2006-01-02 15:04:05"))
 		}
 		switch t.Status {
 		case "failed":
@@ -420,7 +420,7 @@ func resolveTemplateRefArg(c *cli.Context, client *api.SandboxClient, prompt str
 	options := make([]string, 0, len(tpls))
 	byOpt := make(map[string]string, len(tpls))
 	for _, t := range tpls {
-		opt := fmt.Sprintf("%s   (%s, %s)", t.Name, t.Status, t.CreatedAt.Format("2006-01-02 15:04"))
+		opt := fmt.Sprintf("%s   (%s, %s)", t.Name, t.Status, t.CreatedAt.Local().Format("2006-01-02 15:04"))
 		options = append(options, opt)
 		byOpt[opt] = t.Name
 	}
@@ -449,7 +449,7 @@ func pickTemplatesForDelete(c *cli.Context, client *api.SandboxClient) ([]string
 	options := make([]string, 0, len(tpls))
 	byOpt := make(map[string]string, len(tpls))
 	for _, t := range tpls {
-		opt := fmt.Sprintf("%s   (%s, %s)", t.Name, t.Status, t.CreatedAt.Format("2006-01-02 15:04"))
+		opt := fmt.Sprintf("%s   (%s, %s)", t.Name, t.Status, t.CreatedAt.Local().Format("2006-01-02 15:04"))
 		options = append(options, opt)
 		byOpt[opt] = t.Name
 	}

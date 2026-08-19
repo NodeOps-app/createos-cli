@@ -67,7 +67,7 @@ func newCronjobsActivitiesCommand() *cli.Command {
 						a.ID,
 						success,
 						statusCode,
-						a.ScheduledAt.Format("2006-01-02 15:04:05"),
+						a.ScheduledAt.Local().Format("2006-01-02 15:04:05"),
 						log,
 					})
 				}

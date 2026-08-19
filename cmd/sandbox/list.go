@@ -139,7 +139,7 @@ func runList(c *cli.Context) error {
 				r.Status,
 				r.Shape,
 				ptrOrDash(r.IP),
-				r.CreatedAt.Format("2006-01-02 15:04"),
+				r.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
 		_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck

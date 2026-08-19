@@ -47,7 +47,7 @@ func newDeploymentsListCommand() *cli.Command {
 						d.ID,
 						d.Status,
 						d.Extra.Endpoint,
-						d.CreatedAt.Format("2006-01-02 15:04:05"),
+						d.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
 				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {

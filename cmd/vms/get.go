@@ -67,10 +67,10 @@ func newVMGetCommand() *cli.Command {
 			fmt.Println(len(vm.Inputs.SSHKeys))
 
 			cyan.Printf("Created At:  ")
-			fmt.Println(vm.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(vm.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 
 			cyan.Printf("Updated At:  ")
-			fmt.Println(vm.UpdatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(vm.UpdatedAt.Local().Format("2006-01-02 15:04:05"))
 
 			fmt.Println()
 			return nil

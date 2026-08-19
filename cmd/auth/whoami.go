@@ -34,7 +34,7 @@ func NewWhoamiCommand() *cli.Command {
 			createdAt, err := time.Parse(time.RFC3339Nano, u.CreatedAt)
 			memberSince := u.CreatedAt
 			if err == nil {
-				memberSince = createdAt.Format("January 2, 2006")
+				memberSince = createdAt.Local().Format("January 2, 2006")
 			}
 
 			fmt.Println()

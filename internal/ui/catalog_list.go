@@ -329,7 +329,7 @@ func (m catalogListModel) catalogDetailRender() string {
 	s += "\n"
 	s += labelStyle.Render("Price      ") + valueStyle.Render(formatCredits(skill.Amount)) + "\n"
 	s += labelStyle.Render("Categories ") + valueStyle.Render(categories) + "\n"
-	s += labelStyle.Render("Created    ") + valueStyle.Render(skill.CreatedAt.Format("January 2, 2006")) + "\n"
+	s += labelStyle.Render("Created    ") + valueStyle.Render(skill.CreatedAt.Local().Format("January 2, 2006")) + "\n"
 	s += "\n"
 	s += labelStyle.Render("Use cases") + "\n"
 	for _, line := range strings.Split(wordWrap(useCases, 60), "\n") {

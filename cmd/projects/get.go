@@ -81,7 +81,7 @@ func newGetCommand() *cli.Command {
 			fmt.Println(project.Status)
 
 			cyan.Printf("Created At:  ")
-			fmt.Println(project.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Println(project.CreatedAt.Local().Format("2006-01-02 15:04:05"))
 
 			return nil
 		},

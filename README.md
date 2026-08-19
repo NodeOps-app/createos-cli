@@ -304,6 +304,7 @@ Sandboxes are fast-booting VMs — isolated environments you can exec into, sync
 | `createos sandbox rm`              | Delete one or more sandboxes                                  |
 | `createos sandbox exec`            | Run a command inside a sandbox                                |
 | `createos sandbox shell`           | Open an interactive shell inside a sandbox                    |
+| `createos sandbox process`         | Manage reconnectable processes and shell sessions             |
 | `createos sandbox sync`            | Two-way file sync between your laptop and a sandbox           |
 | `createos sandbox push`            | Copy a local file into a sandbox                              |
 | `createos sandbox pull`            | Copy a file out of a sandbox                                  |
@@ -326,6 +327,28 @@ Sandboxes are fast-booting VMs — isolated environments you can exec into, sync
 | `--disk`        | S3 disk to mount at creation (repeatable): `<name\|id>:/mount/path`             |
 | `--ingress`     | Give the sandbox a public HTTPS URL                                               |
 | `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
+
+**When to use `exec`, `shell`, `process`, and PTY:**
+
+Use `sandbox exec` for quick non-interactive one-shot commands. Use `sandbox shell` when you want an immediate interactive terminal and do not need to reconnect later. Use `sandbox process` when the command should be manageable after it starts — list it, reconnect to output, send input, wait for it, signal it, or stop it. Add `--pty`/`--tty`/`-t` to `process run` or `process start` when the managed command needs terminal behavior.
+
+| Command                                      | Description                                                  |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `createos sandbox process run <sb> -- <cmd>` | Run a managed command, stream output, and return its exit code |
+| `createos sandbox process start <sb> -- <cmd>` | Start a managed command and print its process ID           |
+| `createos sandbox process shell <sb>`        | Start a persistent shell session that can be reattached      |
+| `createos sandbox process attach <sb> <proc>` | Reconnect to process output or a shell session              |
+| `createos sandbox process attach <sb>`       | Pick a running shell session and attach/switch to it         |
+| `createos sandbox process list <sb>`         | List managed processes and shell sessions                    |
+| `createos sandbox process get <sb> <proc>`   | Show details for one managed process                         |
+| `createos sandbox process input <sb> <proc>` | Write input to a process or shell session                    |
+| `createos sandbox process close-stdin <sb> <proc>` | Close stdin for a pipe process                         |
+| `createos sandbox process resize <sb> <proc>` | Resize a managed shell session                              |
+| `createos sandbox process signal <sb> <proc> <signal>` | Send a signal such as `SIGINT` or `SIGTERM`        |
+| `createos sandbox process wait <sb> <proc>`  | Wait for a managed process to exit                           |
+| `createos sandbox process stop <sb> <proc>`  | Stop a process and anything it started                       |
+
+Managed shell attach shortcuts are fixed: `Ctrl-]` detaches, `Ctrl-N` creates a new shell and switches to it, and `Ctrl-P` picks another running shell session.
 
 **Sandbox sub-resource commands:**
 
@@ -493,6 +516,19 @@ createos sandbox exec my-box -- uname -a
 createos sandbox exec my-box --stream -- pip install requests
 createos sandbox shell my-box
 createos sandbox shell my-box --ssh
+createos sandbox process run my-box -- npm test
+createos sandbox process start my-box -- python -m http.server 8000
+createos sandbox process shell my-box
+createos sandbox process attach my-box proc_abc123
+createos sandbox process attach my-box        # pick a running shell session
+createos sandbox process ps my-box
+createos sandbox process input my-box proc_abc123 --text "hello\n"
+createos sandbox process signal my-box proc_abc123 SIGINT
+createos sandbox process wait my-box proc_abc123 --all
+createos sandbox process stop my-box proc_abc123 --grace 1s
+# Inside a managed shell session, the fixed bottom bar shows active shortcuts.
+# detach closes the local attach; new creates a shell and switches;
+# switch picks another shell; `exit` closes the current shell.
 createos sandbox push my-box ./script.py /root/script.py
 createos sandbox pull my-box /root/output.csv ./output.csv
 createos sandbox tunnel my-box --local 8080 --remote 8000

@@ -109,6 +109,15 @@ func ParseAPIError(statusCode int, body []byte) *APIError {
 				msg = strings.Join(parts, "; ")
 			}
 		}
+		// 3. generic object with an "error" string, used by the process API.
+		if msg == "" {
+			var fields map[string]any
+			if err := json.Unmarshal(envelope.Data, &fields); err == nil {
+				if s, ok := fields["error"].(string); ok && s != "" {
+					msg = strings.ReplaceAll(s, "_", " ")
+				}
+			}
+		}
 	}
 	if msg == "" {
 		msg = fmt.Sprintf("request failed with status %d", statusCode)

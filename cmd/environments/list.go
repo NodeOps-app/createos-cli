@@ -59,7 +59,7 @@ func newEnvironmentsListCommand() *cli.Command {
 						env.Status,
 						env.Extra.Endpoint,
 						domains,
-						env.CreatedAt.Format("2006-01-02 15:04:05"),
+						env.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
 				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
