@@ -173,7 +173,12 @@ func runFirewallClear(c *cli.Context) error {
 	if _, err := client.SetEgress(c.Context, id, []string{}); err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Firewall cleared on %s — all outbound traffic allowed.", refLabel(ref, id))
+	renderResult(c, "firewall_cleared", map[string]any{
+		"id":    id,
+		"rules": []string{},
+	}, func() {
+		pterm.Success.Printfln("Firewall cleared on %s — all outbound traffic allowed.", refLabel(ref, id))
+	})
 	return nil
 }
 
@@ -183,10 +188,15 @@ func applyFirewall(c *cli.Context, client *api.SandboxClient, id, ref string, ru
 	if err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Firewall updated on %s — %d rule(s) active.", refLabel(ref, id), len(stored))
-	for _, r := range stored {
-		pterm.Println(pterm.Gray("  • " + r))
-	}
+	renderResult(c, "firewall_updated", map[string]any{
+		"id":    id,
+		"rules": stored,
+	}, func() {
+		pterm.Success.Printfln("Firewall updated on %s — %d rule(s) active.", refLabel(ref, id), len(stored))
+		for _, r := range stored {
+			pterm.Println(pterm.Gray("  • " + r))
+		}
+	})
 	return nil
 }
 

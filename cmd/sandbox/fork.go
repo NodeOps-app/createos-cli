@@ -8,7 +8,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -81,23 +80,9 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		req.Egress = egress
 	}
 
-	if output.IsJSON(c) {
-		view, err := client.ForkSandbox(c.Context, srcID, req)
-		if err != nil {
-			return err
-		}
-		target := "running"
-		if req.StartPaused {
-			target = "paused"
-		}
-		sb, err := waitForStatus(c.Context, client, view.ID, target)
-		if err != nil {
-			return err
-		}
-		output.Render(c, sb, func() {})
-		return nil
-	}
-
+	// One call path for both formats — the spinner writes to stderr. A
+	// separate JSON branch here used to skip the status check below, so a
+	// fork that landed in the wrong state reported success.
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Forking %s…", refLabel(ref, srcID))) //nolint:errcheck
 	view, err := client.ForkSandbox(c.Context, srcID, req)
 	if err != nil {
@@ -119,16 +104,24 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", sb.ID, sb.Status, sb.ID)
 	}
 
-	name := ""
-	if sb.Name != nil {
-		name = *sb.Name
-	}
+	name := str(sb.Name)
 	spinner.Success(fmt.Sprintf("Forked into %s", refLabel(name, sb.ID)))
-	if sb.IP != nil && *sb.IP != "" {
-		fmt.Printf("    IP: %s\n", *sb.IP)
-	}
-	if sb.IngressURLTemplate != "" {
-		fmt.Printf("    URL: %s\n", sb.IngressURLTemplate)
-	}
+
+	renderResult(c, "forked", withResponse(sb, map[string]any{
+		"id":            sb.ID,
+		"name":          name,
+		"status":        sb.Status,
+		"ip":            str(sb.IP),
+		"ingress_url":   sb.IngressURLTemplate,
+		"source_id":     srcID,
+		"shell_command": fmt.Sprintf("createos sandbox shell %s", sb.ID),
+	}), func() {
+		if sb.IP != nil && *sb.IP != "" {
+			fmt.Printf("    IP: %s\n", *sb.IP)
+		}
+		if sb.IngressURLTemplate != "" {
+			fmt.Printf("    URL: %s\n", sb.IngressURLTemplate)
+		}
+	})
 	return nil
 }

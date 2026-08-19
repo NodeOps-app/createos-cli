@@ -67,5 +67,10 @@ func runPauseByID(c *cli.Context, client *api.SandboxClient, ref, id string) err
 		return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", refLabel(ref, id), sb.Status, id)
 	}
 	spinner.Success(fmt.Sprintf("Paused %s", refLabel(ref, id)))
+	renderResult(c, "paused", map[string]any{
+		"id":     sb.ID,
+		"name":   str(sb.Name),
+		"status": sb.Status,
+	}, func() {})
 	return nil
 }

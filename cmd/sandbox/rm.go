@@ -105,18 +105,28 @@ func runRm(c *cli.Context) error {
 	// are reported per-ref so a typo in one name doesn't kill the rest
 	// of the batch.
 	failed := 0
+	// One entry per ref, deleted or not, so a batch caller can tell which
+	// of the refs it passed actually went away.
+	results := make([]map[string]any, 0, len(ids))
 	for _, ref := range ids {
 		id, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {
-			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
+			// Sanitized in the JSON result too — a raw Go error leaks
+			// syscall detail and local paths whichever stream it lands on.
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": msg})
 			failed++
 			continue
 		}
 		if err := client.DestroySandbox(c.Context, id); err != nil {
-			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "id": id, "deleted": false, "error": msg})
 			failed++
 			continue
 		}
+		results = append(results, map[string]any{"ref": ref, "id": id, "deleted": true})
 		// Echo the friendly ref the user typed; if it was already an
 		// id this reads the same, if it was a name they see what was
 		// actually removed.
@@ -126,6 +136,13 @@ func runRm(c *cli.Context) error {
 			pterm.Success.Printfln("Deleted %s", id)
 		}
 	}
+
+	renderResult(c, "deleted", map[string]any{
+		"results": results,
+		"deleted": len(results) - failed,
+		"failed":  failed,
+	}, func() {})
+
 	if failed > 0 {
 		// Non-zero exit so scripts can tell something went wrong.
 		os.Exit(1)

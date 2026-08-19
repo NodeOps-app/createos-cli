@@ -117,6 +117,12 @@ func runPush(c *cli.Context) error {
 		pterm.Println(pterm.Gray(fmt.Sprintf("  %s in %s (%s)",
 			humanBytes(sent), formatElapsed(elapsed), throughput(sent, elapsed))))
 	}
+	renderResult(c, "pushed", map[string]any{
+		"id":          id,
+		"remote_path": remote,
+		"bytes":       sent,
+		"elapsed_ms":  elapsed.Milliseconds(),
+	}, func() {})
 	return nil
 }
 

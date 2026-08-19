@@ -69,5 +69,11 @@ func runPull(c *cli.Context) error {
 		return err
 	}
 	spinner.Success(fmt.Sprintf("Downloaded %s:%s → %s (%s)", refLabel(ref, id), remote, local, humanBytes(n)))
+	renderResult(c, "pulled", map[string]any{
+		"id":          id,
+		"remote_path": remote,
+		"local_path":  local,
+		"bytes":       n,
+	}, func() {})
 	return nil
 }

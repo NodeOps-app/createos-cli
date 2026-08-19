@@ -10,6 +10,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/cliargs"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -23,11 +25,17 @@ func newExecCommand() *cli.Command {
 arrives all at once when the command finishes. Pass --stream to see
 stdout/stderr live as it happens.
 
+Anything piped in is forwarded to the command's standard input, so
+'cat script.sh | createos sandbox exec my-box -- bash' works. Use
+--stdin to read from a file instead.
+
 Examples:
   createos sandbox exec my-box -- uname -a
   createos sandbox exec my-box -- python3 -c 'print("hi")'
   createos sandbox exec my-box --stream -- pip install requests
   createos sandbox exec my-box -- bash -c "echo $USER && date"
+  echo "hello" | createos sandbox exec my-box -- cat
+  createos sandbox exec my-box --stdin ./setup.sh -- bash
 
 The command's exit code is preserved — if the program inside the
 sandbox exits with 1, this CLI also exits with 1.`,
@@ -36,6 +44,10 @@ sandbox exits with 1, this CLI also exits with 1.`,
 				Name:    "stream",
 				Aliases: []string{"s"},
 				Usage:   "Show output live as the command runs",
+			},
+			&cli.StringFlag{
+				Name:  "stdin",
+				Usage: "Read the command's standard input from `FILE` ('-' for piped input)",
 			},
 			&cli.StringSliceFlag{
 				Name: "env",
@@ -104,20 +116,110 @@ func runExec(c *cli.Context) error {
 		}
 	}
 
-	envs, err := parseEnvFlags(c.StringSlice("env"))
+	stdinPath, envFlags, stream := parseExecFlags(c)
+
+	envs, err := parseEnvFlags(envFlags)
+	if err != nil {
+		return err
+	}
+	stdin, err := readExecStdin(stdinPath)
 	if err != nil {
 		return err
 	}
 	req := api.SandboxExecReq{
-		Cmd:  cmd,
-		Args: args,
-		Env:  envs,
+		Cmd:   cmd,
+		Args:  args,
+		Env:   envs,
+		Stdin: stdin,
 	}
 
-	if c.Bool("stream") {
+	if stream {
 		return runExecStream(c, client, id, req)
 	}
 	return runExecBuffered(c, client, id, req)
+}
+
+// parseExecFlags recovers exec's own flags (--stdin, --env, --stream) from
+// the raw tokens between the sandbox ref and the `--` command delimiter.
+// urfave/cli v2 stops flag parsing at the first positional (the ref), so
+// `exec <ref> --stdin file -- cmd` never reaches c.String("stdin") — the
+// CLI's own --help examples show exactly that ordering. Same class of bug,
+// same fix shape, as parseSyncArgs. Seeds from whatever urfave DID parse
+// (covers flags placed before the ref) and overrides with anything found in
+// the ref..`--` window, so either ordering works.
+func parseExecFlags(c *cli.Context) (stdin string, envs []string, stream bool) {
+	stdin = c.String("stdin")
+	envs = append([]string{}, c.StringSlice("env")...)
+	stream = c.Bool("stream")
+
+	all := c.Args().Slice()
+	sep := -1
+	for i, a := range all {
+		if a == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep <= 1 {
+		// No ref..`--` window to scan (no ref, or `--` is the first token).
+		return stdin, envs, stream
+	}
+
+	own := all[1:sep]
+	for i := 0; i < len(own); i++ {
+		a := strings.TrimSpace(own[i])
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		raw := strings.TrimLeft(a, "-")
+		key, inline, hasInline := raw, "", false
+		if eq := strings.IndexByte(raw, '='); eq >= 0 {
+			key, inline, hasInline = raw[:eq], raw[eq+1:], true
+		}
+		switch key {
+		case "stream", "s":
+			stream = true
+		case "stdin":
+			val := inline
+			if !hasInline && i+1 < len(own) {
+				val = own[i+1]
+				i++
+			}
+			stdin = strings.TrimSpace(val)
+		case "env":
+			val := inline
+			if !hasInline && i+1 < len(own) {
+				val = own[i+1]
+				i++
+			}
+			if val != "" {
+				envs = append(envs, val)
+			}
+		}
+	}
+	return stdin, envs, stream
+}
+
+// readExecStdin collects the payload for the command's standard input:
+// an explicit --stdin FILE, or whatever was piped in. On a TTY with no
+// --stdin there is nothing to read, so the command gets empty stdin
+// rather than blocking on the keyboard.
+func readExecStdin(path string) (string, error) {
+	switch {
+	case path != "" && path != "-":
+		data, err := os.ReadFile(path) // #nosec G304 -- the user names the file to send
+		if err != nil {
+			return "", fmt.Errorf("could not read %s\n\n  Check the path is correct and the file exists", path)
+		}
+		return string(data), nil
+	case path == "-" || terminal.HasPipedStdin():
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("could not read the piped input: %w", err)
+		}
+		return string(data), nil
+	}
+	return "", nil
 }
 
 func runExecBuffered(c *cli.Context, client *api.SandboxClient, id string, req api.SandboxExecReq) error {
@@ -125,6 +227,23 @@ func runExecBuffered(c *cli.Context, client *api.SandboxClient, id string, req a
 	if err != nil {
 		return err
 	}
+
+	// JSON mode keeps stdout a single parseable document: the command's
+	// own output becomes fields rather than raw bytes on the stream.
+	if output.IsJSONExplicit(c) {
+		output.Render(c, map[string]any{
+			"sandbox_id": id,
+			"exit_code":  resp.Result.ExitCode,
+			"stdout":     resp.Result.Stdout,
+			"stderr":     resp.Result.Stderr,
+			"error":      resp.Result.Error,
+		}, func() {})
+		if resp.Result.ExitCode != 0 {
+			os.Exit(resp.Result.ExitCode)
+		}
+		return nil
+	}
+
 	if resp.Result.Stdout != "" {
 		fmt.Print(resp.Result.Stdout)
 		if !strings.HasSuffix(resp.Result.Stdout, "\n") {
@@ -190,10 +309,13 @@ func parseExecArgs(c *cli.Context) (ref, cmd string, args []string) {
 		return "", "", nil
 	}
 
-	// First: did the user write `... exec -- …`? Scan os.Args.
+	// First: did the user write `... exec -- …`? Scan os.Args, hoisted the
+	// same way main.go hoists it, so a global flag typed after the
+	// subcommand ("exec --output json -- ls") doesn't hide the separator.
+	argv := cliargs.Hoist(os.Args)
 	leadingDoubleDash := false
-	for i, a := range os.Args {
-		if a == "exec" && i+1 < len(os.Args) && os.Args[i+1] == "--" {
+	for i, a := range argv {
+		if a == "exec" && i+1 < len(argv) && argv[i+1] == "--" {
 			leadingDoubleDash = true
 			break
 		}

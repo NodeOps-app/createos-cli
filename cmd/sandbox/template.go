@@ -79,7 +79,13 @@ func runTemplateSubmit(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pterm.Success.Printfln("Submitted template %s (status: %s)", view.Name, view.Status)
+	renderResult(c, "template_submitted", map[string]any{
+		"id":     view.ID,
+		"name":   view.Name,
+		"status": view.Status,
+	}, func() {
+		pterm.Success.Printfln("Submitted template %s (status: %s)", view.Name, view.Status)
+	})
 	if !follow {
 		pterm.Println(pterm.Gray(fmt.Sprintf("  Watch progress with:  createos sandbox template logs %s --follow", view.Name)))
 		return nil
@@ -378,14 +384,25 @@ func runTemplateRm(c *cli.Context) error {
 		}
 	}
 	failed := 0
+	results := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		if err := client.DeleteTemplate(c.Context, ref); err != nil {
-			pterm.Error.Printfln("%s: %s", ref, api.UserMessageVerbose(err))
+			// Sanitized in the JSON result too — a raw Go error leaks
+			// syscall detail and local paths whichever stream it lands on.
+			msg := api.UserMessageVerbose(err)
+			pterm.Error.Printfln("%s: %s", ref, msg)
+			results = append(results, map[string]any{"ref": ref, "deleted": false, "error": msg})
 			failed++
 			continue
 		}
+		results = append(results, map[string]any{"ref": ref, "deleted": true})
 		pterm.Success.Printfln("Deleted template %s", ref)
 	}
+	renderResult(c, "template_deleted", map[string]any{
+		"results": results,
+		"deleted": len(results) - failed,
+		"failed":  failed,
+	}, func() {})
 	if failed > 0 {
 		return fmt.Errorf("%d of %d deletes failed", failed, len(refs))
 	}

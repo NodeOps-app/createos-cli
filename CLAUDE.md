@@ -8,44 +8,43 @@ mirrors these commands. On any command / flag change, run the protocol below —
 the concrete website-regen steps live in "Keeping the Website Docs in Sync" near
 the end of this file. This repo is one of five in the product mesh.
 
-### Repo map
+| repo | role | public? |
+|---|---|---|
+| **fc** | control-plane — source of truth | 🔒 private |
+| **fc-sdk** | TypeScript SDK + `examples/` | 🌐 public |
+| **createos-cli** | Go CLI | 🌐 public |
+| **website-04** (`content/docs/Sandbox`) | public docs | 🌐 public |
+| **createos-plugin** | Claude Code plugin over the `createos` CLI | 🌐 public |
 
-| repo | path | role | public? | changes that ripple across the mesh |
-|---|---|---|---|---|
-| **fc** | `../fc` | control-plane — **source of truth** | 🔒 private | HTTP API, wire/JSON fields, error shapes, lifecycle/state, limits/quotas, behavior |
-| **fc-sdk** | `../fc-sdk` | TypeScript SDK **+ `examples/`** | 🌐 public | public SDK methods, wire types, example apps |
-| **createos-cli** | `../createos-cli` | Go CLI | 🌐 public | commands, flags, help/UX text |
-| **website-04** | `../website-04` (`content/docs/Sandbox`) | public docs | 🌐 public | REST / SDK / CLI reference + concept pages |
-| **createos-plugin** | `../createos-plugin` | Claude Code plugin over the `createos` CLI | 🌐 public | skills, slash commands, hooks |
+**Shared surface** = HTTP endpoint or method · wire or JSON field · error shape ·
+sandbox lifecycle/state · limit or quota · CLI command or flag · public SDK
+method · documented behavior. Internals — refactor, private helper, test-only —
+are not, so skip the mesh for them.
 
-### What counts as a shared surface
+On a shared-surface change: search every sibling for the touched symbol
+(`semble search` first, then `rg`), report a per-sibling matrix
+(`already-present` / `missing-needs-update` / `n/a`) before finalizing, and never
+silently duplicate what is already there. Origin matters — `fc` is upstream; a
+downstream change implying new server behavior goes to the user, never invented
+inside a client. **`fc` → any public repo is a leak-guard boundary:** strip
+private implementation, security internals, infra, threat-model notes, and
+internal-only tooling (`fcctl`, host filesystem paths, mTLS/CA internals),
+respect each public repo's own wording rules (e.g. `fc-sdk/AGENTS.md` forbids
+the word "VM"), and get approval before landing any public edit. The `sync-docs`
+skill executes SDK / CLI / website reconciliation against upstream `fc`.
 
-HTTP endpoint or method · wire or JSON field · error shape · sandbox
-lifecycle/state · limit or quota · CLI command or flag · public SDK method ·
-documented behavior. A change confined to internals — refactor, comment,
-private helper, test-only — is **not** a shared surface, so skip the mesh for it.
+### Downstream reference implementations (not mesh-protocol members)
 
-### Protocol — run before finalizing a shared-surface change
+Two public repos shell out to this CLI and are worth checking before a
+command/flag/help-text change ships, even though neither owns shared
+surface and both sit outside the formal 5-repo protocol above:
 
-1. **Classify origin.** `fc` is the source of truth; SDK / CLI / docs / plugin
-   are downstream consumers. A downstream change that implies a backend change
-   (new field, new endpoint) → surface it to the user; never invent server
-   behavior inside a client.
-2. **Search every sibling** for the touched symbol / endpoint / flag —
-   `semble search` first, then `rg`.
-3. **Build a status matrix** per sibling: `already-present` ·
-   `missing-needs-update` · `n/a`. **Flag the already-present ones to the user**
-   ("already exists in fc-sdk + docs"). Never silently duplicate a change that is
-   already there — that is the whole point of this check.
-4. **`fc` → any public repo is a leak-guard boundary (security).** Strip private
-   implementation, security internals, infra, threat-model notes, and
-   internal-only tooling (`fcctl`, host filesystem paths, mTLS/CA internals)
-   before anything lands in a public repo. Respect each public repo's own wording
-   rules (e.g. `fc-sdk/AGENTS.md` forbids the word "VM"). Report the proposed diff
-   and **ask for approval before landing any public edit** — never auto-write
-   across the boundary.
-5. **Use the `sync-docs` skill** to execute SDK / CLI / website reconciliation
-   against upstream `fc` where it applies.
+- **createos-plugin** (`../createos-plugin/createos-sandbox`) — the primary
+  CLI wrapper; most exposed, since it parses `createos` stdout.
+- **createos-sandbox-ghar** (`../createos-sandbox-ghar`) — its
+  `.github/workflows/bump-runner.yml` daily job shells out to this CLI to
+  rebuild the `ghar-runner` rootfs template; a flag/output change here can
+  break that job silently.
 
 ## Project Structure
 
@@ -90,6 +89,68 @@ The API has two response shapes — use the right one:
 1. Define the model struct in `internal/api/methods.go` (or `types.go` for shared types)
 2. Match field names exactly to the JSON response — use nullable pointers (`*string`) for fields that can be `null`
 3. For errors, return `ParseAPIError(resp.StatusCode(), resp.Body())` — never `fmt.Errorf("API error %d: %s", ...)`
+
+## Machine-readable Output
+
+Decisions and rejected alternatives: `docs/decisions.md`.
+
+### Every mutation must emit JSON
+
+A `sandbox` command that creates, changes, or deletes something calls
+`renderResult` (`cmd/sandbox/jsonout.go`), never a bare `pterm.Success`:
+
+```go
+renderResult(c, "created", map[string]any{
+    "id":   resp.ID,
+    "name": str(resp.Name),
+}, func() {
+    pterm.Success.Printfln("Created %s", resp.ID)
+})
+```
+
+The human renderer goes in the closure; it runs only in table mode. Rules:
+
+- `action` names what happened (past tense: `created`, `paused`, `disk_attached`).
+- Field names match the read commands — a caller diffs `create` against `get`.
+- Nullable API pointers go through `str()` so a key is always present.
+- Wrap the fields in `withResponse(resp, …)` when the API returns a struct, so
+  callers also get everything the server sent. Curated keys win on collision.
+- Never branch the API call on output format. One call path serves both; the
+  spinner already writes to stderr. Two paths drift — that is how a JSON-mode
+  `fork` once skipped its status check and reported a failed fork as success.
+- Error strings in results go through `api.UserMessageVerbose(err)`, never
+  `err.Error()` — raw Go errors leak syscall detail and local paths into JSON
+  just as readily as into the terminal.
+- Batch commands return a `results` array with one entry per ref, plus
+  `deleted` / `failed` counts. An exit code cannot express a partial batch.
+- Interactive streams (`shell`, `sync`, `editor`, `exec --stream`,
+  `template logs`) stay text-only. Blocking commands that have a result
+  (`tunnel`, `vpn up`) emit it *before* they block.
+
+### Two JSON checks — pick the right one
+
+| Helper | Use for |
+|---|---|
+| `output.IsJSON` / `output.Render` | Normal commands. True when `--output json` **or** stdout is not a TTY. |
+| `output.IsJSONExplicit` | Commands whose stdout **is** the payload (`exec`). Only true when the user typed `--output json`, so `exec … > file` still writes raw bytes. |
+
+### Streams
+
+- **stdout** — data only. In JSON mode it holds exactly one document; the
+  root `Before` hook redirects all pterm output to stderr to guarantee it.
+- **stderr** — errors, progress, hints, spinners.
+- Errors are formatted in `main.go`: a JSON envelope on stdout in JSON mode,
+  otherwise plain text on stderr. Add new status codes to
+  `api.APIError.Code()`, which produces the envelope's `code` slug.
+- Colour is disabled automatically for non-TTY stdout and for `NO_COLOR`.
+
+### Global flags
+
+`internal/cliargs.Hoist` rewrites argv before `app.Run` so global flags work
+after the subcommand. **When adding or renaming a global flag in
+`root.go`, add it to `globalStringFlags` / `globalBoolFlags` too** — a
+missing entry silently reintroduces the "flag provided but not defined"
+error. Tokens after a bare `--` are never hoisted.
 
 ## Error Handling
 

@@ -74,6 +74,30 @@ func (e *APIError) Hint() string {
 	}
 }
 
+// Code returns a stable, machine-readable slug for the status code. It is
+// the "code" field of the JSON error envelope, so callers (CI, agents) can
+// branch on the failure class without string-matching Message.
+func (e *APIError) Code() string {
+	switch e.StatusCode {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	}
+	if e.StatusCode >= 500 {
+		return "server_error"
+	}
+	return "api_error"
+}
+
 // ParseAPIError extracts a human-readable message from an API error response body.
 //
 // JSend "fail" bodies can shape `data` three different ways:

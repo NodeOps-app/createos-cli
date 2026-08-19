@@ -66,5 +66,13 @@ func runResumeByID(c *cli.Context, client *api.SandboxClient, ref, id string) er
 		return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", refLabel(ref, id), sb.Status, id)
 	}
 	spinner.Success(fmt.Sprintf("Resumed %s", refLabel(ref, id)))
+	renderResult(c, "resumed", map[string]any{
+		"id":            sb.ID,
+		"name":          str(sb.Name),
+		"status":        sb.Status,
+		"ip":            str(sb.IP),
+		"ingress_url":   sb.IngressURLTemplate,
+		"shell_command": fmt.Sprintf("createos sandbox shell %s", sb.ID),
+	}, func() {})
 	return nil
 }

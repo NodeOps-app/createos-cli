@@ -10,7 +10,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
-	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newCreateCommand() *cli.Command {
@@ -196,15 +195,8 @@ func runCreate(c *cli.Context) error {
 		req.AutoPauseAfterSeconds = autoPauseSecs
 	}
 
-	if output.IsJSON(c) {
-		jsonResp, jsonErr := client.CreateSandbox(c.Context, req)
-		if jsonErr != nil {
-			return jsonErr
-		}
-		output.Render(c, jsonResp, func() {})
-		return nil
-	}
-
+	// One call path for both formats: the spinner writes to stderr, so it
+	// cannot corrupt a JSON document on stdout.
 	spinner, _ := pterm.DefaultSpinner.Start("Creating sandbox…") //nolint:errcheck
 	resp, err := client.CreateSandbox(c.Context, req)
 	if err != nil {
@@ -213,7 +205,15 @@ func runCreate(c *cli.Context) error {
 	}
 	spinner.Success("Sandbox is ready")
 
-	printCreateResult(resp)
+	renderResult(c, "created", withResponse(resp, map[string]any{
+		"id":            resp.ID,
+		"name":          str(resp.Name),
+		"shape":         resp.Shape,
+		"rootfs":        str(resp.Rootfs),
+		"ip":            resp.IP,
+		"ingress_url":   resp.IngressURLTemplate,
+		"shell_command": fmt.Sprintf("createos sandbox shell %s", resp.ID),
+	}), func() { printCreateResult(resp) })
 	return nil
 }
 
