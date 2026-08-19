@@ -22,7 +22,6 @@ import (
 	"github.com/NodeOps-app/createos-cli/cmd/projects"
 	"github.com/NodeOps-app/createos-cli/cmd/sandbox"
 	"github.com/NodeOps-app/createos-cli/cmd/scale"
-	"github.com/NodeOps-app/createos-cli/cmd/skills"
 	"github.com/NodeOps-app/createos-cli/cmd/status"
 	"github.com/NodeOps-app/createos-cli/cmd/templates"
 	"github.com/NodeOps-app/createos-cli/cmd/upgrade"
@@ -62,7 +61,7 @@ func NewApp() *cli.App {
 			},
 			&cli.StringFlag{
 				Name:    "sandbox-api-url",
-				Usage:   "Override the sandbox (fc-spawn) base URL",
+				Usage:   "Override the sandbox API base URL",
 				EnvVars: []string{"CREATEOS_SANDBOX_URL"},
 				Value:   api.DefaultSandboxBaseURL,
 			},
@@ -182,7 +181,6 @@ func NewApp() *cli.App {
 				fmt.Println("  projects       Manage projects")
 				fmt.Println("  sandbox        Manage sandboxes")
 				fmt.Println("  scale          Adjust replicas and resources")
-				fmt.Println("  skills         Manage skills")
 				fmt.Println("  status         Show project health and deployment status")
 				fmt.Println("  templates      Browse and scaffold from project templates")
 				fmt.Println("  vms            Manage VM terminal instances")
@@ -219,7 +217,6 @@ func NewApp() *cli.App {
 			projects.NewProjectsCommand(),
 			sandbox.NewSandboxCommand(),
 			scale.NewScaleCommand(),
-			skills.NewSkillsCommand(),
 			status.NewStatusCommand(),
 			templates.NewTemplatesCommand(),
 			upgrade.NewUpgradeCommand(),
@@ -230,8 +227,36 @@ func NewApp() *cli.App {
 			versioncmd.NewVersionCommand(),
 		},
 	}
+	installTrailingHelpGuards(app.Commands)
 
 	return app
+}
+
+func installTrailingHelpGuards(commands []*cli.Command) {
+	for _, cmd := range commands {
+		if cmd == nil {
+			continue
+		}
+		if cmd.Action != nil {
+			original := cmd.Action
+			cmd.Action = func(c *cli.Context) error {
+				if argsRequestHelp(c) {
+					return cli.ShowSubcommandHelp(c)
+				}
+				return original(c)
+			}
+		}
+		installTrailingHelpGuards(cmd.Subcommands)
+	}
+}
+
+func argsRequestHelp(c *cli.Context) bool {
+	for _, arg := range c.Args().Slice() {
+		if arg == "-h" || arg == "--help" || arg == "help" {
+			return true
+		}
+	}
+	return false
 }
 
 // refreshOAuthSession exchanges the session's refresh token for a new

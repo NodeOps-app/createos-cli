@@ -125,7 +125,7 @@ func newProcessAttachCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "attach",
 		Aliases:   []string{"connect"},
-		Usage:     "Reconnect to a process, or pick a running shell session",
+		Usage:     "Reconnect to a process, or pick a running managed process",
 		ArgsUsage: "<sandbox> [<process-id>]",
 		Description: `Reconnect to a managed process or shell session.
 
@@ -134,9 +134,11 @@ Use this for process IDs created by 'process run', 'process start', or
 processes, attach follows retained stdout/stderr output.
 
 If you omit the process ID in an interactive terminal, attach shows a picker
-of running shell sessions. Inside a shell session, the default shortcuts are
-Ctrl-] to detach, Ctrl-N to create a new shell, and Ctrl-P to pick another
-running shell session.`,
+of running managed processes. Pick a PTY shell for interactive terminal
+attach, or pick a pipe process to follow stdout/stderr output.
+
+Inside a PTY shell session, Ctrl-] detaches, Ctrl-N creates a new shell,
+and Ctrl-P opens the process picker.`,
 		Flags: []cli.Flag{
 			&cli.Int64Flag{Name: "after", Usage: "Replay output after this sequence number"},
 			&cli.BoolFlag{Name: "no-follow", Usage: "Replay retained output and exit"},
@@ -264,6 +266,10 @@ func processStartFlags() []cli.Flag {
 }
 
 func runProcessCreate(c *cli.Context, waitForExit bool, shellMode bool) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
+	subcommand := c.Command.Name
 	client, id, ref, err := processClientAndSandbox(c, true)
 	if err != nil {
 		return err
@@ -278,14 +284,14 @@ func runProcessCreate(c *cli.Context, waitForExit bool, shellMode bool) error {
 	}
 	follow := waitForExit
 	if !waitForExit {
-		follow = c.Bool("follow")
+		follow = processBoolFlag(c, subcommand, "follow")
 	}
-	if c.Bool("no-follow") {
+	if processBoolFlag(c, subcommand, "no-follow") {
 		follow = false
 	}
 	if output.IsJSON(c) {
 		if waitForExit && follow {
-			final, waitErr := waitForManagedProcess(c.Context, client, id, proc.ProcessID, c.Bool("all"), c.Duration("timeout"))
+			final, waitErr := waitForManagedProcess(c.Context, client, id, proc.ProcessID, processBoolFlag(c, subcommand, "all"), processDurationFlag(c, subcommand, "timeout"))
 			if waitErr != nil {
 				return waitErr
 			}
@@ -302,7 +308,7 @@ func runProcessCreate(c *cli.Context, waitForExit bool, shellMode bool) error {
 	if !waitForExit {
 		printProcessCreated(proc)
 	}
-	exitCode, signal, err := attachProcess(c, client, id, ref, proc, c.Int64("after"), false, false)
+	exitCode, signal, err := attachProcess(c, client, id, ref, proc, processInt64Flag(c, subcommand, "after"), false, false)
 	if err != nil {
 		return err
 	}
@@ -313,6 +319,10 @@ func runProcessCreate(c *cli.Context, waitForExit bool, shellMode bool) error {
 }
 
 func runProcessShell(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
+	subcommand := c.Command.Name
 	client, id, ref, err := processClientAndSandbox(c, false)
 	if err != nil {
 		return err
@@ -325,13 +335,13 @@ func runProcessShell(c *cli.Context) error {
 		Cmd: c.String("cmd"),
 		Cwd: strings.TrimSpace(c.String("cwd")),
 		Env: envs,
-		PTY: ptyOptionsFromFlags(c, !output.IsJSON(c) && !c.Bool("no-attach")),
+		PTY: ptyOptionsFromFlags(c, !output.IsJSON(c) && !processBoolFlag(c, subcommand, "no-attach")),
 	}
 	proc, err := client.CreateProcess(c.Context, id, req)
 	if err != nil {
 		return err
 	}
-	if output.IsJSON(c) || c.Bool("no-attach") {
+	if output.IsJSON(c) || processBoolFlag(c, subcommand, "no-attach") {
 		output.Render(c, proc, func() { printProcessCreated(proc) })
 		return nil
 	}
@@ -344,6 +354,10 @@ func runProcessShell(c *cli.Context) error {
 }
 
 func runProcessAttach(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
+	subcommand := c.Command.Name
 	var (
 		client    *api.SandboxClient
 		id        string
@@ -363,9 +377,9 @@ func runProcessAttach(c *cli.Context) error {
 		}
 	}
 	if processID == "" {
-		processID, err = pickRunningPTY(c, client, id, "Attach to which shell session?")
+		processID, err = pickAttachableProcess(c, client, id, "Attach to which process?")
 		if err != nil {
-			if errors.Is(err, errNoRunningPTY) && !c.Bool("no-follow") {
+			if errors.Is(err, errNoRunningProcess) && !processBoolFlag(c, subcommand, "no-follow") {
 				proc, createErr := promptCreatePTYAndAttach(c, client, id)
 				if createErr != nil {
 					return createErr
@@ -375,7 +389,7 @@ func runProcessAttach(c *cli.Context) error {
 					return nil
 				}
 				printProcessCreated(proc)
-				_, _, attachErr := attachProcess(c, client, id, ref, proc, processInitialAttachAfter(c, proc, false), false, c.Bool("stdin"))
+				_, _, attachErr := attachProcess(c, client, id, ref, proc, processInitialAttachAfter(c, subcommand, proc, false), false, processBoolFlag(c, subcommand, "stdin"))
 				return attachErr
 			}
 			return err
@@ -389,12 +403,31 @@ func runProcessAttach(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	noFollow := c.Bool("no-follow")
-	_, _, err = attachProcess(c, client, id, ref, proc, processInitialAttachAfter(c, proc, noFollow), noFollow, c.Bool("stdin"))
-	return err
+	noFollow := processBoolFlag(c, subcommand, "no-follow")
+	exitCode, signal, err := attachProcess(c, client, id, ref, proc, processInitialAttachAfter(c, subcommand, proc, noFollow), noFollow, processBoolFlag(c, subcommand, "stdin"))
+	if err != nil {
+		return err
+	}
+	if !noFollow && proc.Kind != "pty" {
+		printProcessAttachExit(exitCode, signal)
+		return exitFromProcess(exitCode, signal)
+	}
+	return nil
+}
+
+func processArgsRequestHelp(c *cli.Context) bool {
+	for _, arg := range c.Args().Slice() {
+		if arg == "-h" || arg == "--help" || arg == "help" {
+			return true
+		}
+	}
+	return false
 }
 
 func runProcessList(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, _, err := processClientAndSandbox(c, false)
 	if err != nil {
 		return err
@@ -427,6 +460,9 @@ func runProcessList(c *cli.Context) error {
 }
 
 func runProcessGet(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -440,6 +476,9 @@ func runProcessGet(c *cli.Context) error {
 }
 
 func runProcessInput(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -459,6 +498,9 @@ func runProcessInput(c *cli.Context) error {
 }
 
 func runProcessCloseStdin(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -471,6 +513,9 @@ func runProcessCloseStdin(c *cli.Context) error {
 }
 
 func runProcessResize(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -487,6 +532,9 @@ func runProcessResize(c *cli.Context) error {
 }
 
 func runProcessSignal(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -506,6 +554,9 @@ func runProcessSignal(c *cli.Context) error {
 }
 
 func runProcessWait(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -519,6 +570,9 @@ func runProcessWait(c *cli.Context) error {
 }
 
 func runProcessStop(c *cli.Context) error {
+	if processArgsRequestHelp(c) {
+		return cli.ShowSubcommandHelp(c)
+	}
 	client, id, processID, err := processClientSandboxAndProcess(c)
 	if err != nil {
 		return err
@@ -616,13 +670,14 @@ func processClientSandboxAndOptionalProcess(c *cli.Context) (*api.SandboxClient,
 }
 
 func processCreateRequestFromCLI(c *cli.Context, shellMode bool) (api.ProcessCreateRequest, error) {
+	subcommand := c.Command.Name
 	envs, err := parseEnvFlags(c.StringSlice("env"))
 	if err != nil {
 		return api.ProcessCreateRequest{}, err
 	}
 	ref, cmd, args := parseProcessCommandArgs(c)
 	_ = ref
-	if !shellMode && cmd == "" && !c.Bool("pty") {
+	if !shellMode && cmd == "" && !processBoolFlag(c, subcommand, "pty") {
 		return api.ProcessCreateRequest{}, fmt.Errorf("please pass the command after '--'\n\n  Example:\n    createos sandbox process run my-box -- npm test")
 	}
 	req := api.ProcessCreateRequest{
@@ -631,7 +686,7 @@ func processCreateRequestFromCLI(c *cli.Context, shellMode bool) (api.ProcessCre
 		Cwd:  strings.TrimSpace(c.String("cwd")),
 		Env:  envs,
 	}
-	if c.Bool("pty") {
+	if processBoolFlag(c, subcommand, "pty") {
 		req.PTY = ptyOptionsFromFlags(c, false)
 	}
 	return req, nil
@@ -744,7 +799,7 @@ func processRowsCols(c *cli.Context) (int, int, error) {
 	return rows, cols, nil
 }
 
-func pickRunningPTY(c *cli.Context, client *api.SandboxClient, sandboxID, title string) (string, error) {
+func pickAttachableProcess(c *cli.Context, client *api.SandboxClient, sandboxID, title string) (string, error) {
 	if !terminal.IsInteractive() {
 		return "", fmt.Errorf("please provide a process ID\n\n  Example:\n    createos sandbox process attach %s <process-id>", sandboxID)
 	}
@@ -754,10 +809,10 @@ func pickRunningPTY(c *cli.Context, client *api.SandboxClient, sandboxID, title 
 	}
 	items := make([]ui.PickerItem, 0, len(processes))
 	for _, proc := range processes {
-		if proc.Kind != "pty" || proc.LeaderExited || proc.TreeExited || proc.State != "running" {
+		if !processCanBePickedForAttach(proc) {
 			continue
 		}
-		subtitle := fmt.Sprintf("pid: %d, command: %s, created: %s, output: %d bytes", proc.PID, processCommandLabel(proc, 32), processLocalClock(proc.CreatedAt), proc.Output.Bytes)
+		subtitle := fmt.Sprintf("kind: %s, state: %s, pid: %d, command: %s, created: %s, output: %d bytes", processKindLabel(proc), processStateLabel(proc), proc.PID, processCommandLabel(proc, 32), processLocalClock(proc.CreatedAt), proc.Output.Bytes)
 		items = append(items, ui.PickerItem{
 			Title:    proc.ProcessID,
 			Subtitle: subtitle,
@@ -765,18 +820,22 @@ func pickRunningPTY(c *cli.Context, client *api.SandboxClient, sandboxID, title 
 		})
 	}
 	if len(items) == 0 {
-		return "", errNoRunningPTY
+		return "", errNoRunningProcess
 	}
 	return ui.Pick(title, items)
 }
 
-var errNoRunningPTY = errors.New("there are no running shell sessions in this sandbox")
+func processCanBePickedForAttach(proc api.ProcessDetails) bool {
+	return proc.State == "running" && !proc.LeaderExited && !proc.TreeExited
+}
+
+var errNoRunningProcess = errors.New("there are no running managed processes in this sandbox")
 
 func promptCreatePTYAndAttach(c *cli.Context, client *api.SandboxClient, sandboxID string) (*api.ProcessDetails, error) {
 	if !terminal.IsInteractive() {
-		return nil, fmt.Errorf("%w\n\n  Start one:\n    createos sandbox process shell %s", errNoRunningPTY, sandboxID)
+		return nil, fmt.Errorf("%w\n\n  Start one:\n    createos sandbox process shell %s", errNoRunningProcess, sandboxID)
 	}
-	pterm.Warning.Println("There are no running shell sessions in this sandbox.")
+	pterm.Warning.Println("There are no running managed processes in this sandbox.")
 	ok, err := pterm.DefaultInteractiveConfirm.
 		WithDefaultText("Create a new shell session and attach?").
 		WithDefaultValue(true).
@@ -800,7 +859,7 @@ func attachProcess(c *cli.Context, client *api.SandboxClient, sandboxID, ref str
 		if retryAfter, ok := processAttachRetryAfter(nextID); ok {
 			offsetRetries++
 			if offsetRetries > 1 {
-				return nil, "", fmt.Errorf("some previous output is no longer available; try attaching again without --after, or run 'createos sandbox process get %s %s' to see the retained output range", refLabel(ref, sandboxID), proc.ProcessID)
+				return nil, "", fmt.Errorf("some previous output is no longer available; try attaching again without --after, or run 'createos sandbox process get %s %s' to inspect this process", refLabel(ref, sandboxID), proc.ProcessID)
 			}
 			nextProc, getErr := client.GetProcess(c.Context, sandboxID, proc.ProcessID)
 			if getErr != nil {
@@ -819,7 +878,7 @@ func attachProcess(c *cli.Context, client *api.SandboxClient, sandboxID, ref str
 		}
 		if nextID == processAttachPickSentinel {
 			prepareTerminalForProcessPicker()
-			pickedID, pickErr := pickRunningPTY(c, client, sandboxID, "Attach to which shell session?")
+			pickedID, pickErr := pickAttachableProcess(c, client, sandboxID, "Attach to which process?")
 			if pickErr != nil {
 				return nil, "", pickErr
 			}
@@ -839,9 +898,9 @@ func attachProcess(c *cli.Context, client *api.SandboxClient, sandboxID, ref str
 	}
 }
 
-func processInitialAttachAfter(c *cli.Context, proc *api.ProcessDetails, noFollow bool) int64 {
-	after := c.Int64("after")
-	if noFollow || c.IsSet("after") || proc == nil {
+func processInitialAttachAfter(c *cli.Context, subcommand string, proc *api.ProcessDetails, noFollow bool) int64 {
+	after := processInt64Flag(c, subcommand, "after")
+	if noFollow || processFlagIsSet(c, subcommand, "after") || proc == nil {
 		return after
 	}
 	return proc.Output.NewestSeq
@@ -1026,6 +1085,9 @@ func copyProcessInput(ctx context.Context, detach context.CancelFunc, nextCh cha
 			_, _ = client.WriteProcessInput(ctx, sandboxID, processID, api.ProcessInputRequest{DataBase64: encoded}) //nolint:errcheck
 		}
 		if err != nil {
+			if !pty && errors.Is(err, io.EOF) {
+				_ = client.CloseProcessStdin(ctx, sandboxID, processID) //nolint:errcheck
+			}
 			return
 		}
 	}
@@ -1333,6 +1395,16 @@ func printProcessCreated(proc *api.ProcessDetails) {
 	pterm.Success.Printf("Started %s (%s).\n", proc.ProcessID, proc.Kind)
 }
 
+func printProcessAttachExit(exitCode *int, signal string) {
+	if exitCode != nil {
+		pterm.Fprintln(os.Stderr, pterm.Gray(fmt.Sprintf("Process exited with code %d.", *exitCode)))
+		return
+	}
+	if signal != "" {
+		pterm.Fprintln(os.Stderr, pterm.Gray(fmt.Sprintf("Process exited from signal %s.", signal)))
+	}
+}
+
 func printProcessDetails(proc *api.ProcessDetails) {
 	if proc == nil {
 		return
@@ -1377,6 +1449,13 @@ func processLocalClock(t time.Time) string {
 
 func processLocalRFC3339(t time.Time) string {
 	return t.In(time.Local).Format(time.RFC3339)
+}
+
+func processKindLabel(proc api.ProcessDetails) string {
+	if proc.Kind == "pty" {
+		return "shell"
+	}
+	return "process"
 }
 
 func processCommandLabel(proc api.ProcessDetails, maxLen int) string {
@@ -1481,6 +1560,21 @@ func processIntFlag(c *cli.Context, subcommand, name string) int {
 	return v
 }
 
+func processInt64Flag(c *cli.Context, subcommand, name string) int64 {
+	if v := c.Int64(name); v != 0 {
+		return v
+	}
+	raw := rawProcessFlagValue(subcommand, name)
+	if raw == "" {
+		return 0
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
 func processDurationFlag(c *cli.Context, subcommand, name string) time.Duration {
 	if v := c.Duration(name); v != 0 {
 		return v
@@ -1494,6 +1588,10 @@ func processDurationFlag(c *cli.Context, subcommand, name string) time.Duration 
 		return 0
 	}
 	return v
+}
+
+func processFlagIsSet(c *cli.Context, subcommand, name string) bool {
+	return c.IsSet(name) || rawProcessFlagPresent(subcommand, name)
 }
 
 func rawProcessFlagPresent(subcommand, name string) bool {

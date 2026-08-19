@@ -10,7 +10,7 @@
   Your intelligent infrastructure CLI
 ```
 
-The official command-line interface for [CreateOS](https://createos.nodeops.network?utm_source=createos-cli) — manage your projects and skills from the terminal.
+The official command-line interface for [CreateOS](https://createos.nodeops.network?utm_source=createos-cli) — manage your projects from the terminal.
 
 ## Installation
 
@@ -338,7 +338,7 @@ Use `sandbox exec` for quick non-interactive one-shot commands. Use `sandbox she
 | `createos sandbox process start <sb> -- <cmd>` | Start a managed command and print its process ID           |
 | `createos sandbox process shell <sb>`        | Start a persistent shell session that can be reattached      |
 | `createos sandbox process attach <sb> <proc>` | Reconnect to process output or a shell session              |
-| `createos sandbox process attach <sb>`       | Pick a running shell session and attach/switch to it         |
+| `createos sandbox process attach <sb>`       | Pick a running process or shell session and attach to it     |
 | `createos sandbox process list <sb>`         | List managed processes and shell sessions                    |
 | `createos sandbox process get <sb> <proc>`   | Show details for one managed process                         |
 | `createos sandbox process input <sb> <proc>` | Write input to a process or shell session                    |
@@ -348,7 +348,7 @@ Use `sandbox exec` for quick non-interactive one-shot commands. Use `sandbox she
 | `createos sandbox process wait <sb> <proc>`  | Wait for a managed process to exit                           |
 | `createos sandbox process stop <sb> <proc>`  | Stop a process and anything it started                       |
 
-Managed shell attach shortcuts are fixed: `Ctrl-]` detaches, `Ctrl-N` creates a new shell and switches to it, and `Ctrl-P` picks another running shell session.
+Interactive attach without a process ID shows running managed processes. Pick a PTY shell for an interactive terminal, or pick a pipe process to follow its stdout/stderr output. Managed shell shortcuts are fixed: `Ctrl-]` detaches, `Ctrl-N` creates a new shell and switches to it, and `Ctrl-P` opens the process picker.
 
 **Sandbox sub-resource commands:**
 
@@ -385,13 +385,6 @@ Managed shell attach shortcuts are fixed: `Ctrl-]` detaches, `Ctrl-N` creates a 
 | `createos webhooks delete`    | Delete a webhook endpoint          |
 | `createos webhooks suspend`   | Suspend a webhook endpoint         |
 | `createos webhooks resume`    | Resume a suspended webhook endpoint|
-
-### Skills
-
-| Command                     | Description                |
-| --------------------------- | -------------------------- |
-| `createos skills catalog`   | Browse the skills catalog  |
-| `createos skills purchased` | List your purchased skills |
 
 ### Quick Actions
 
@@ -520,7 +513,7 @@ createos sandbox process run my-box -- npm test
 createos sandbox process start my-box -- python -m http.server 8000
 createos sandbox process shell my-box
 createos sandbox process attach my-box proc_abc123
-createos sandbox process attach my-box        # pick a running shell session
+createos sandbox process attach my-box        # pick a running process or shell session
 createos sandbox process ps my-box
 createos sandbox process input my-box proc_abc123 --text "hello\n"
 createos sandbox process signal my-box proc_abc123 SIGINT
@@ -528,7 +521,7 @@ createos sandbox process wait my-box proc_abc123 --all
 createos sandbox process stop my-box proc_abc123 --grace 1s
 # Inside a managed shell session, the fixed bottom bar shows active shortcuts.
 # detach closes the local attach; new creates a shell and switches;
-# switch picks another shell; `exit` closes the current shell.
+# switch opens the process picker; `exit` closes the current shell.
 createos sandbox push my-box ./script.py /root/script.py
 createos sandbox pull my-box /root/output.csv ./output.csv
 createos sandbox tunnel my-box --local 8080 --remote 8000
@@ -638,7 +631,7 @@ createos environments list --project <id> -o json
 | `--output, -o <fmt>`     | Output format: `json` or `table` (default). Auto-json when piped.   |
 | `--debug, -d`            | Print HTTP request/response details (token is masked)                |
 | `--api-url`              | Override the API base URL                                            |
-| `--sandbox-api-url`      | Override the sandbox (fc-spawn) base URL                             |
+| `--sandbox-api-url`      | Override the sandbox API base URL                                    |
 | `--sandbox-gateway`      | SSH gateway address (`host:port`) used by `sandbox shell --ssh`      |
 
 ## Security
