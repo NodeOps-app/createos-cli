@@ -474,6 +474,13 @@ func hostLine(alias, name string) string {
 }
 
 // renderSSHBlock builds the ~/.ssh/config stanza for the sandbox.
+//
+// HostKeyAlias pins each sandbox's known_hosts entry to its own id. Without it
+// every tunnel-mode box is keyed on the shared `127.0.0.1:22`, so the second
+// sandbox trips a CHANGED HOST KEY warning and clients that treat that as an
+// attack (Orca's SSH relay, for one) refuse to connect. VPN mode keys on the
+// overlay IP, which is also recycled between sandboxes, so it needs the same
+// pin.
 func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity, name string) (string, error) {
 	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
 	end := fmt.Sprintf(sshConfigBlockEnd, alias)
@@ -483,13 +490,14 @@ func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, use
 		return fmt.Sprintf(`%s
 Host %s
     HostName          %s
+    HostKeyAlias      %s
     Port              22
     User              %s
     IdentityFile      %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
 %s
-`, begin, host, sbIP, user, identity, end), nil
+`, begin, host, sbIP, sandboxID, user, identity, end), nil
 	case "tunnel":
 		// The inner `ssh -W` for the gateway needs its own
 		// StrictHostKeyChecking + UserKnownHostsFile — it doesn't inherit
@@ -498,6 +506,7 @@ Host %s
 		return fmt.Sprintf(`%s
 Host %s
     HostName          127.0.0.1
+    HostKeyAlias      %s
     Port              22
     User              %s
     IdentityFile      %s
@@ -505,7 +514,7 @@ Host %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
 %s
-`, begin, host, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
+`, begin, host, sandboxID, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
 	default:
 		return "", fmt.Errorf("unknown mode %q", mode)
 	}
