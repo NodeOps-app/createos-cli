@@ -52,7 +52,7 @@ func newWebhooksListCommand() *cli.Command {
 						ep.ID, ep.URL, events, status, fmt.Sprintf("%d", ep.FailureCount),
 					})
 				}
-				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
+				_ = output.RenderTable(tableData) //nolint:errcheck
 				fmt.Println()
 			})
 			return nil

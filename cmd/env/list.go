@@ -57,7 +57,7 @@ func newEnvListCommand() *cli.Command {
 				tableData = append(tableData, []string{k, val})
 			}
 
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+			if err := output.RenderTable(tableData); err != nil {
 				return err
 			}
 			fmt.Println()

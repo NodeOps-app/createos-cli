@@ -62,7 +62,7 @@ func newEnvironmentsListCommand() *cli.Command {
 						env.CreatedAt.Local().Format("2006-01-02 15:04:05"),
 					})
 				}
-				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+				if err := output.RenderTable(tableData); err != nil {
 					pterm.Error.Println("could not display table")
 				}
 				fmt.Println()

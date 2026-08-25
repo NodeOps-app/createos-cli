@@ -29,7 +29,10 @@ Examples:
   createos sandbox list --status paused
 
   # Pipe-friendly: IDs only
-  createos sandbox list --quiet`,
+  createos sandbox list --quiet
+
+  # Include lower-priority columns
+  createos sandbox list --wide`,
 		Flags: []cli.Flag{
 			&cli.IntFlag{
 				Name:  "limit",
@@ -54,6 +57,10 @@ Examples:
 				Name:    "quiet",
 				Aliases: []string{"q"},
 				Usage:   "Show only the IDs (great for scripting)",
+			},
+			&cli.BoolFlag{
+				Name:  "wide",
+				Usage: "Show extra columns",
 			},
 		},
 		Action: runList,
@@ -129,22 +136,41 @@ func runList(c *cli.Context) error {
 			pterm.Println(pterm.Gray("  Create one with: createos sandbox create"))
 			return
 		}
-		tableData := pterm.TableData{
-			{"ID", "Name", "Status", "Size", "IP", "Created"},
-		}
-		for _, r := range rows {
-			tableData = append(tableData, []string{
-				r.ID,
-				strOrDash(r.Name),
-				r.Status,
-				r.Shape,
-				ptrOrDash(r.IP),
-				r.CreatedAt.Local().Format("2006-01-02 15:04"),
-			})
-		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
+		tableData := sandboxListTable(rows, output.TerminalWidth(), c.Bool("wide"))
+		_ = output.RenderTable(tableData) //nolint:errcheck
 	})
 	return nil
+}
+
+func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableData {
+	columns := []string{"ID", "Name", "Status", "Size", "IP"}
+	if wide {
+		columns = append(columns, "Created")
+	}
+	switch {
+	case width < 70:
+		columns = []string{"Name", "Status", "Size"}
+	case width < 90:
+		columns = []string{"ID", "Name", "Status", "Size"}
+	}
+
+	tableData := pterm.TableData{columns}
+	for _, r := range rows {
+		values := map[string]string{
+			"ID":      r.ID,
+			"Name":    strOrDash(r.Name),
+			"Status":  r.Status,
+			"Size":    r.Shape,
+			"IP":      ptrOrDash(r.IP),
+			"Created": r.CreatedAt.Local().Format("2006-01-02 15:04"),
+		}
+		row := make([]string, 0, len(columns))
+		for _, col := range columns {
+			row = append(row, values[col])
+		}
+		tableData = append(tableData, row)
+	}
+	return tableData
 }
 
 // strOrDash collapses a nullable pointer to "-" when empty so the

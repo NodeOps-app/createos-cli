@@ -48,7 +48,7 @@ func newOAuthConsentsListCommand() *cli.Command {
 					}
 					tableData = append(tableData, []string{clientID, clientName, clientURI})
 				}
-				if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+				if err := output.RenderTable(tableData); err != nil {
 					pterm.Error.Println("could not display table")
 				}
 				fmt.Println()

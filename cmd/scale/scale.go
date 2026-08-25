@@ -178,7 +178,7 @@ func updateScale(c *cli.Context, client *api.APIClient, projectID, envID string)
 		{"CPU", fmt.Sprintf("%dm", current.CPU), fmt.Sprintf("%dm", req.CPU)},
 		{"Memory", fmt.Sprintf("%dMB", current.Memory), fmt.Sprintf("%dMB", req.Memory)},
 	}
-	if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+	if err := output.RenderTable(tableData); err != nil {
 		return err
 	}
 	fmt.Println()

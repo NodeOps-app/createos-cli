@@ -454,7 +454,7 @@ func runProcessList(c *cli.Context) error {
 				processLocalDateTime(p.CreatedAt),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+		_ = output.RenderTable(table) //nolint:errcheck
 	})
 	return nil
 }
