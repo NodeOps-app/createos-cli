@@ -326,7 +326,7 @@ func orcaCreate(c *cli.Context) error {
 			orcaLog("WARNING destroy of %s failed: %v", id, rmErr)
 			orcaLog("WARNING %s may still exist. Remove it with: createos sandbox rm --force %s", id, id)
 		}
-		_, _ = removeSSHBlock(sshAlias(id))
+		_, _ = removeSSHBlock(sshAlias(id)) //nolint:errcheck // best-effort cleanup; the create error is what matters
 		removeDedicatedKey(sshAlias(id))
 		return err
 	}
@@ -358,7 +358,7 @@ func orcaProvision(c *cli.Context, client *api.SandboxClient, id, repoPath, root
 	if err := orcaSeedRepo(c, client, id, repoPath, root, branch); err != nil {
 		return err
 	}
-	return orcaInstallAgents(c, client, id, agents)
+	return orcaInstallAgents(c, id, agents)
 }
 
 // orcaAgentNames lists the installable agents for help text and errors.
@@ -436,7 +436,7 @@ func orcaLastLine(s string) string {
 // devbox:1 ships some of these already, and re-running a vendor installer over
 // a good install is a needless minute and a needless failure mode, so each is
 // skipped when its binary already resolves.
-func orcaInstallAgents(c *cli.Context, client *api.SandboxClient, id string, agents []string) error {
+func orcaInstallAgents(c *cli.Context, id string, agents []string) error {
 	alias := sshAlias(id)
 	if !editorAliasRE.MatchString(alias) {
 		return fmt.Errorf("refusing to run over shell-unsafe SSH alias %q", alias)
@@ -506,7 +506,7 @@ func orcaWireSSH(c *cli.Context, client *api.SandboxClient, id string, wait time
 		return err
 	}
 
-	if err := orcaWaitRunning(c.Context, client, id, wait); err != nil {
+	if err = orcaWaitRunning(c.Context, client, id, wait); err != nil {
 		return err
 	}
 	sb, err := client.GetSandbox(c.Context, id)
@@ -516,13 +516,13 @@ func orcaWireSSH(c *cli.Context, client *api.SandboxClient, id string, wait time
 
 	// The gateway authenticates against the sandbox row; the guest sshd reads
 	// authorized_keys. The tunnel path needs both hops.
-	if _, err := client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
+	if _, err = client.AddSSHPubkeys(c.Context, id, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
 		return fmt.Errorf("could not register key with gateway: %w", err)
 	}
-	if err := ensureAuthorizedKey(c, client, id, orcaSSHUser, id, pubBytes, true); err != nil {
+	if err = ensureAuthorizedKey(c, client, id, orcaSSHUser, id, pubBytes, true); err != nil {
 		return fmt.Errorf("could not install key in guest: %w", err)
 	}
-	if err := startGuestSshd(c, client, id, orcaSSHUser); err != nil {
+	if err = startGuestSshd(c, client, id, orcaSSHUser); err != nil {
 		return err
 	}
 
@@ -591,14 +591,15 @@ func orcaSeedRepo(c *cli.Context, client *api.SandboxClient, id, repoPath, root,
 	if err != nil {
 		return fmt.Errorf("pack local state: %w", err)
 	}
-	defer func() { _ = os.Remove(tarPath) }() // #nosec G703 -- path is from os.CreateTemp, not user input.
+	// #nosec G703 -- path is from os.CreateTemp, not user input.
+	defer func() { _ = os.Remove(tarPath) }() //nolint:errcheck // removal failure is benign
 	orcaLog("packed %d files, %s, in %s", fileCount, humanBytes(size), time.Since(packStart).Round(time.Second))
 
 	f, err := os.Open(tarPath) // #nosec G304,G703 -- path is from os.CreateTemp, not user input.
 	if err != nil {
 		return fmt.Errorf("open packed tar: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // read-only handle; close failure is benign
 
 	orcaLog("uploading %s to %s", humanBytes(size), id)
 	uploadStart := time.Now()
@@ -664,16 +665,16 @@ func orcaBuildSeedTar(ctx context.Context, repoPath string) (string, int64, int,
 	if err != nil {
 		return "", 0, 0, err
 	}
-	defer func() { _ = tmp.Close() }()
+	defer func() { _ = tmp.Close() }() //nolint:errcheck // explicit Close below owns the error
 
 	tw := tar.NewWriter(tmp)
 	for _, rel := range paths {
-		if err := orcaTarAppend(tw, repoPath, rel); err != nil {
-			_ = tw.Close()
+		if err = orcaTarAppend(tw, repoPath, rel); err != nil {
+			_ = tw.Close() //nolint:errcheck // already unwinding a write error
 			return "", 0, 0, err
 		}
 	}
-	if err := tw.Close(); err != nil {
+	if err = tw.Close(); err != nil {
 		return "", 0, 0, err
 	}
 	info, err := tmp.Stat()
@@ -702,7 +703,7 @@ func orcaTarAppend(tw *tar.Writer, repoPath, rel string) error {
 		return err
 	}
 	hdr.Name = rel
-	if err := tw.WriteHeader(hdr); err != nil {
+	if err = tw.WriteHeader(hdr); err != nil {
 		return err
 	}
 	if link != "" || info.Size() == 0 {
@@ -712,7 +713,7 @@ func orcaTarAppend(tw *tar.Writer, repoPath, rel string) error {
 	if err != nil {
 		return nil //nolint:nilerr
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // read-only handle; close failure is benign
 	_, err = io.Copy(tw, f)
 	return err
 }
@@ -737,7 +738,7 @@ func orcaDestroy(c *cli.Context) error {
 	if err := client.DestroySandbox(c.Context, id); err != nil {
 		return fmt.Errorf("destroy %s: %w", id, err)
 	}
-	_, _ = removeSSHBlock(sshAlias(id))
+	_, _ = removeSSHBlock(sshAlias(id)) //nolint:errcheck // best-effort cleanup
 	removeDedicatedKey(sshAlias(id))
 	orcaLog("destroyed %s", id)
 	return nil

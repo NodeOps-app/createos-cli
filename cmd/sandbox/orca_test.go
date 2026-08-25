@@ -13,7 +13,7 @@ func TestOrcaRejectsArgumentInjectionInHeadAndRef(t *testing.T) {
 	bad := []string{
 		"--upload-pack=touch /tmp/pwned",
 		"-oProxyCommand=touch /tmp/pwned",
-		strings.Repeat("a", 40)+" --upload-pack=x",
+		strings.Repeat("a", 40) + " --upload-pack=x",
 		"HEAD",
 		"refs/heads/main",
 		"",
