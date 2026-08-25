@@ -216,6 +216,7 @@ func NewApp() *cli.App {
 			open.NewOpenCommand(),
 			projects.NewProjectsCommand(),
 			sandbox.NewSandboxCommand(),
+			sandbox.NewSetupCommand(),
 			scale.NewScaleCommand(),
 			status.NewStatusCommand(),
 			templates.NewTemplatesCommand(),
