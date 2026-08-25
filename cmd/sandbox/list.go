@@ -154,7 +154,8 @@ func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableD
 		columns = []string{"ID", "Name", "Status", "Size"}
 	}
 
-	tableData := pterm.TableData{columns}
+	tableData := make(pterm.TableData, 0, 1+len(rows))
+	tableData = append(tableData, columns)
 	for _, r := range rows {
 		values := map[string]string{
 			"ID":      r.ID,
