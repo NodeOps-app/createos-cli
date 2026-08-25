@@ -29,7 +29,7 @@ func TestHerdrVersionLess(t *testing.T) {
 func TestHerdrWriteKeysIsIdempotentAndBacksUp(t *testing.T) {
 	root := t.TempDir()
 	pluginConfigDir := filepath.Join(root, "plugins", "config", herdrPluginID)
-	if err := os.MkdirAll(pluginConfigDir, 0o755); err != nil {
+	if err := os.MkdirAll(pluginConfigDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(root, "config.toml")

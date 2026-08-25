@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -148,7 +149,7 @@ func runHerdrSetup(c *cli.Context, doctorOnly bool) error {
 	if err != nil {
 		return fmt.Errorf("herdr is not on PATH — install it from https://herdr.dev")
 	}
-	version, err := herdrVersion(herdrBin)
+	version, err := herdrVersion(c.Context, herdrBin)
 	if err != nil {
 		return err
 	}
@@ -157,12 +158,12 @@ func runHerdrSetup(c *cli.Context, doctorOnly bool) error {
 	}
 	fmt.Printf("herdr %s found at %s\n", version, herdrBin)
 
-	if _, err := exec.LookPath("bun"); err != nil {
+	if _, lookErr := exec.LookPath("bun"); lookErr != nil {
 		return fmt.Errorf("bun is not on PATH — the plugin runs on it; install it from https://bun.sh")
 	}
 	fmt.Println("bun found on PATH")
 
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
 		return fmt.Errorf("git is not on PATH; the plugin uploads what git tracks")
 	}
 	fmt.Println("git found on PATH")
@@ -175,21 +176,21 @@ func runHerdrSetup(c *cli.Context, doctorOnly bool) error {
 	// ---- install -----------------------------------------------------------
 
 	if local := strings.TrimSpace(c.String("local")); local != "" {
-		if err := herdrLink(herdrBin, local); err != nil {
-			return err
+		if linkErr := herdrLink(c.Context, herdrBin, local); linkErr != nil {
+			return linkErr
 		}
 	} else {
 		source := herdrPluginRepo + "/" + herdrPluginPkgPath
 		fmt.Printf("installing %s from %s\n", herdrPluginID, source)
-		if out, err := herdrRun(herdrBin, "plugin", "install", source, "--yes"); err != nil {
-			return fmt.Errorf("herdr plugin install failed: %w\n%s", err, out)
+		if out, runErr := herdrRun(c.Context, herdrBin, "plugin", "install", source, "--yes"); runErr != nil {
+			return fmt.Errorf("herdr plugin install failed: %w\n%s", runErr, out)
 		}
 		fmt.Println("plugin installed")
 	}
 
 	// ---- plugin config -----------------------------------------------------
 
-	configDir, err := herdrRun(herdrBin, "plugin", "config-dir", herdrPluginID)
+	configDir, err := herdrRun(c.Context, herdrBin, "plugin", "config-dir", herdrPluginID)
 	if err != nil {
 		return fmt.Errorf("could not find the plugin config directory: %w", err)
 	}
@@ -216,17 +217,16 @@ func runHerdrSetup(c *cli.Context, doctorOnly bool) error {
 		if err != nil {
 			return err
 		}
-		switch {
-		case added == 0:
+		if added == 0 {
 			fmt.Printf("keybindings already present in %s\n", path)
-		default:
+		} else {
 			fmt.Printf("added %d keybindings to %s (undo with 'herdr config reset-keys')\n", added, path)
 		}
-		if out, err := herdrRun(herdrBin, "config", "check"); err != nil {
+		if out, err := herdrRun(c.Context, herdrBin, "config", "check"); err != nil {
 			return fmt.Errorf("herdr rejected the updated config: %w\n%s", err, out)
 		}
 		// Only a running server can reload; a failure here is not a setup failure.
-		if _, err := herdrRun(herdrBin, "server", "reload-config"); err != nil {
+		if _, err := herdrRun(c.Context, herdrBin, "server", "reload-config"); err != nil {
 			fmt.Println("no running Herdr server to reload — the keys apply next time you start one")
 		} else {
 			fmt.Println("reloaded the running Herdr server")
@@ -242,7 +242,7 @@ func runHerdrSetup(c *cli.Context, doctorOnly bool) error {
 	return nil
 }
 
-func herdrLink(herdrBin, local string) error {
+func herdrLink(ctx context.Context, herdrBin, local string) error {
 	dir, err := filepath.Abs(local)
 	if err != nil {
 		return fmt.Errorf("could not resolve %q: %w", local, err)
@@ -251,7 +251,7 @@ func herdrLink(herdrBin, local string) error {
 		return fmt.Errorf("%s does not look like the plugin: no herdr-plugin.toml", dir)
 	}
 	fmt.Printf("linking %s\n", dir)
-	if out, err := herdrRun(herdrBin, "plugin", "link", dir); err != nil {
+	if out, err := herdrRun(ctx, herdrBin, "plugin", "link", dir); err != nil {
 		return fmt.Errorf("herdr plugin link failed: %w\n%s", err, out)
 	}
 	// `plugin link` deliberately does not run build commands, so the generated
@@ -261,7 +261,9 @@ func herdrLink(herdrBin, local string) error {
 		return fmt.Errorf("%s is missing; the plugin cannot generate its launcher", build)
 	}
 	fmt.Println("running the plugin build step")
-	cmd := exec.Command("sh", build)
+	// #nosec G204 -- build is filepath.Join of an --local path the user chose
+	// and the literal "build.sh"; it is one argv element, never a shell string.
+	cmd := exec.CommandContext(ctx, "sh", build)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -292,7 +294,7 @@ func herdrWritePluginConfig(c *cli.Context, configDir, agent string) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf("could not build the plugin config: %w", err)
 	}
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
+	if err := os.MkdirAll(configDir, 0o750); err != nil {
 		return false, fmt.Errorf("could not create %s: %w", configDir, err)
 	}
 	if err := os.WriteFile(path, append(body, '\n'), 0o600); err != nil {
@@ -332,12 +334,13 @@ func herdrWriteKeys(pluginConfigDir string) (int, string, error) {
 
 	if len(existing) > 0 {
 		backup := path + ".before-createos"
+		// #nosec G703 -- path is derived from `herdr plugin config-dir`, not user input.
 		if err := os.WriteFile(backup, existing, 0o600); err != nil {
 			return 0, path, fmt.Errorf("could not back up %s: %w", path, err)
 		}
 		fmt.Printf("backed up your config to %s\n", backup)
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o750); err != nil {
 		return 0, path, fmt.Errorf("could not create %s: %w", root, err)
 	}
 	updated := current
@@ -345,19 +348,23 @@ func herdrWriteKeys(pluginConfigDir string) (int, string, error) {
 		updated += "\n"
 	}
 	updated += "\n# Added by 'createos sandbox setup herdr'.\n" + strings.TrimPrefix(block.String(), "\n")
+	// #nosec G703 -- path is derived from `herdr plugin config-dir`, not user input.
 	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
 		return 0, path, fmt.Errorf("could not write %s: %w", path, err)
 	}
 	return added, path, nil
 }
 
-func herdrRun(bin string, args ...string) (string, error) {
-	out, err := exec.Command(bin, args...).CombinedOutput()
+func herdrRun(ctx context.Context, bin string, args ...string) (string, error) {
+	// #nosec G204 -- bin is the exec.LookPath("herdr") result and every arg is
+	// a literal from this file; nothing here comes from a sandbox or the network.
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
 	return string(out), err
 }
 
-func herdrVersion(bin string) (string, error) {
-	out, err := exec.Command(bin, "--version").Output()
+func herdrVersion(ctx context.Context, bin string) (string, error) {
+	// #nosec G204 -- bin is the exec.LookPath("herdr") result; the arg is a literal.
+	out, err := exec.CommandContext(ctx, bin, "--version").Output()
 	if err != nil {
 		return "", fmt.Errorf("could not run 'herdr --version': %w", err)
 	}
@@ -377,12 +384,22 @@ func herdrVersionLess(have, want string) bool {
 	for i := 0; i < len(wantParts); i++ {
 		var h int
 		if i < len(haveParts) {
-			h, _ = strconv.Atoi(haveParts[i])
+			h = herdrVersionPart(haveParts[i])
 		}
-		w, _ := strconv.Atoi(wantParts[i])
+		w := herdrVersionPart(wantParts[i])
 		if h != w {
 			return h < w
 		}
 	}
 	return false
+}
+
+// herdrVersionPart reads one dotted version part. Anything that is not a
+// number counts as 0, so a suffix never reads as newer than a release.
+func herdrVersionPart(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
 }
