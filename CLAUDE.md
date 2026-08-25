@@ -71,6 +71,32 @@ When adding a new command:
 2. Register it in the group's `NewXxxCommand()` subcommands slice
 3. Add it to the manual list in `root.go` Action (the home screen) in alphabetical order
 
+## Harness integrations (`sandbox setup`)
+
+`createos sandbox setup <harness>` wires an editor so its workspaces run on a
+sandbox instead of the user's machine. `cmd/sandbox/orca.go` is the reference
+implementation.
+
+These commands have two halves in one binary, and both must keep working:
+
+- the **human** half (`--doctor`, plain invocation) checks prerequisites and
+  prints install steps;
+- the **machine** half (`--recipe`, hidden) is what the editor itself runs, once
+  per lifecycle phase, selected by an env var such as `ORCA_VM_MODE`.
+
+The machine half prints one JSON object on stdout and everything else on
+stderr. Anything written to stdout that is not that object breaks the editor's
+parse, so use the package's `orcaLog` style helper rather than `fmt.Println`.
+
+Two constraints worth knowing before changing one:
+
+- The command string is duplicated in the editor's plugin, in a separate repo
+  (`createos-plugins`). Renaming or moving the command breaks installed plugins
+  and both sides must change together.
+- Provisioning done through the exec API is **not** visible over SSH. The two do
+  not share a mount namespace outside `/workspace`, so anything an integration
+  installs for the editor to use must go over SSH.
+
 ## API Client
 
 ### Response shapes

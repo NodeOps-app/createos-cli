@@ -281,8 +281,8 @@ func runEditor(c *cli.Context) error {
 	sp, _ = pterm.DefaultSpinner.WithText("Waiting for sshd to accept connections…").Start() //nolint:errcheck // spinner init failure is benign UI-only
 	probeCtx, cancel := context.WithTimeout(c.Context, 15*time.Second)
 	defer cancel()
-	if probeErr := probeSSH(probeCtx, alias); probeErr != nil {
-		sp.Warning("sshd didn't answer in 15 s — connection may still work; try `ssh " + alias + "` yourself.")
+	if probeErr := probeSSH(probeCtx, alias, 30*time.Second); probeErr != nil {
+		sp.Warning("sshd didn't answer in 30 s — connection may still work; try `ssh " + alias + "` yourself.")
 	} else {
 		sp.Success("sshd is answering")
 	}
@@ -388,6 +388,29 @@ func keysDir() (string, error) {
 	return filepath.Join(home, ".config", "createos", "keys"), nil
 }
 
+// ensureMuxDir makes the directory ControlPath's %n-keyed sockets live in.
+//
+// Every tunnel-mode sandbox shares HostName 127.0.0.1 + User root, and VPN
+// mode reuses an overlay IP once its old owner is destroyed — so a
+// ControlPath built from %h/%r/%p (a common personal ~/.ssh/config default)
+// collides across sandboxes. `ssh <alias>` then reuses another sandbox's
+// stale multiplexed connection instead of opening one to the box actually
+// asked for, and hangs or times out against a box that no longer exists.
+// %n is the alias itself — the one token guaranteed unique per sandbox,
+// which is why renderSSHBlock pins ControlPath here instead of trusting
+// whatever the user's own ssh config already has for `Host *`.
+func ensureMuxDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve $HOME: %w", err)
+	}
+	dir := filepath.Join(home, ".config", "createos", "mux")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("mkdir mux dir: %w", err)
+	}
+	return dir, nil
+}
+
 func dedicatedKeyPath(alias string) (string, string, error) {
 	dir, err := keysDir()
 	if err != nil {
@@ -482,6 +505,11 @@ func hostLine(alias, name string) string {
 // overlay IP, which is also recycled between sandboxes, so it needs the same
 // pin.
 func renderSSHBlock(alias, mode, sandboxID, sbIP, gwHost string, gwPort int, user, identity, name string) (string, error) {
+	// The directory the %n-keyed ControlPath below lands sockets in — ssh
+	// creates the socket file itself but not its parent directory.
+	if _, err := ensureMuxDir(); err != nil {
+		return "", err
+	}
 	begin := fmt.Sprintf(sshConfigBlockBegin, alias)
 	end := fmt.Sprintf(sshConfigBlockEnd, alias)
 	host := hostLine(alias, name)
@@ -496,6 +524,7 @@ Host %s
     IdentityFile      %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
+    ControlPath       ~/.config/createos/mux/%%n
 %s
 `, begin, host, sbIP, sandboxID, user, identity, end), nil
 	case "tunnel":
@@ -503,6 +532,14 @@ Host %s
 		// StrictHostKeyChecking + UserKnownHostsFile — it doesn't inherit
 		// the outer Host block's options. Without these, the first
 		// connect fails on unknown gateway host key.
+		//
+		// ControlPath must be pinned the same way HostKeyAlias is: every
+		// tunnel-mode sandbox shares HostName 127.0.0.1 + User root, so a
+		// ControlPath built from %h/%r/%p — including a common personal
+		// `Host *` default — collides across every sandbox. ssh then reuses
+		// another sandbox's stale multiplexed connection instead of opening
+		// one to the box actually asked for. %n (the alias) is the one
+		// token guaranteed unique per sandbox.
 		return fmt.Sprintf(`%s
 Host %s
     HostName          127.0.0.1
@@ -513,6 +550,7 @@ Host %s
     ProxyCommand      ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts_createos -W %%h:%%p %s@%s -p %d -i %s
     StrictHostKeyChecking accept-new
     UserKnownHostsFile ~/.ssh/known_hosts_createos
+    ControlPath       ~/.config/createos/mux/%%n
 %s
 `, begin, host, sandboxID, user, identity, sandboxID, gwHost, gwPort, identity, end), nil
 	default:
@@ -748,8 +786,8 @@ fi
 // verify the config is parseable, then attempts a 1-second TCP probe by
 // running `ssh -o BatchMode=yes -o ConnectTimeout=3 <alias> true`. Any
 // non-nil error signals the caller to warn but not fail.
-func probeSSH(ctx context.Context, alias string) error {
-	deadline, cancel := context.WithTimeout(ctx, 15*time.Second)
+func probeSSH(ctx context.Context, alias string, wait time.Duration) error {
+	deadline, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	last := fmt.Errorf("no attempt")
 	for deadline.Err() == nil {
