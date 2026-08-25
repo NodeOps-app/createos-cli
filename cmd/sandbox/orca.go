@@ -25,8 +25,8 @@ import (
 // lifecycle phases and selecting the phase with ORCA_VM_MODE. The command
 // prints one JSON object on stdout; everything else must go to stderr.
 //
-// `createos setup orca` is the human half: it checks the environment and hands
-// the plugin install over to Orca. `createos setup orca --recipe` is the
+// `createos sandbox setup orca` is the human half: it checks the environment
+// and hands the plugin install over to Orca. `... setup orca --recipe` is the
 // machine half, and is the string the plugin manifest carries.
 
 const (
@@ -121,11 +121,12 @@ type orcaLifecyclePayload struct {
 	} `json:"recipeResult"`
 }
 
-// NewSetupCommand returns `createos setup`, the harness integration group.
-func NewSetupCommand() *cli.Command {
+// newSetupCommand returns `createos sandbox setup`, the harness integration
+// group.
+func newSetupCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "setup",
-		Usage: "Connect CreateOS Sandbox to a coding harness",
+		Usage: "Connect a coding harness to CreateOS Sandbox",
 		Description: "Each subcommand wires one harness to CreateOS Sandbox, so a\n" +
 			"workspace runs on a disposable microVM instead of your laptop.",
 		Subcommands: []*cli.Command{newSetupOrcaCommand()},

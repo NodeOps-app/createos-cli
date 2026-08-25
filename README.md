@@ -323,6 +323,7 @@ asks for a few more characters rather than guessing.
 | `createos sandbox tunnel`          | Forward a local port to a port inside a sandbox               |
 | `createos sandbox shapes`          | List available sandbox sizes (vCPU / RAM / disk)              |
 | `createos sandbox rootfs`          | List built-in OS images you can boot a sandbox from           |
+| `createos sandbox setup`           | Connect a coding harness so its workspaces run on a sandbox   |
 
 **`sandbox create` flags:**
 
@@ -339,6 +340,26 @@ asks for a few more characters rather than guessing.
 | `--disk`        | S3 disk to mount at creation (repeatable): `<name\|id>:/mount/path`             |
 | `--ingress`     | Give the sandbox a public HTTPS URL                                               |
 | `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
+
+**`sandbox setup` — run an editor's workspaces on sandboxes:**
+
+`createos sandbox setup orca` connects [Orca](https://orca.dev) so that each of
+its workspaces runs on its own disposable sandbox instead of your laptop.
+
+```bash
+createos sandbox setup orca --doctor   # check prerequisites, change nothing
+createos sandbox setup orca            # print the plugin install steps
+```
+
+The workspace checkout is pushed into the sandbox rather than cloned, so no git
+token ever reaches the box and private repositories work with no extra setup.
+Set `CREATEOS_AGENTS` to install coding agents at create time, for example
+`CREATEOS_AGENTS=claude,codex`.
+
+Orca calls this command itself for each lifecycle phase once its plugin is
+installed. The plugin lives in
+[NodeOps-app/createos-plugins](https://github.com/NodeOps-app/createos-plugins)
+under `packages/orca-plugin`.
 
 **When to use `exec`, `shell`, `process`, and PTY:**
 
