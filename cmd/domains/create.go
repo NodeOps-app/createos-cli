@@ -8,6 +8,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 func newDomainsCreateCommand() *cli.Command {
@@ -82,6 +83,6 @@ func printDNSRecords(d api.Domain) {
 		tableData = append(tableData, []string{"TXT", txt.Name + "." + d.Name, txt.Value})
 	}
 
-	_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
+	_ = output.RenderTable(tableData) //nolint:errcheck
 	fmt.Println()
 }

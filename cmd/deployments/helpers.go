@@ -8,6 +8,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/cmdutil"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -82,7 +83,7 @@ func pickDeployment(client *api.APIClient, projectID string, statusFilter []stri
 		})
 	}
 	fmt.Println()
-	if err = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+	if err = output.RenderTable(tableData); err != nil {
 		pterm.Error.Println("could not display table")
 	}
 	fmt.Println()

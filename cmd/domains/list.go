@@ -70,7 +70,7 @@ func newDomainsListCommand() *cli.Command {
 					}
 					tableData = append(tableData, []string{d.ID, d.Name, env, icon + " " + d.Status, msg})
 				}
-				_ = pterm.DefaultTable.WithHasHeader().WithData(tableData).Render() //nolint:errcheck
+				_ = output.RenderTable(tableData) //nolint:errcheck
 				fmt.Println()
 			})
 			return nil

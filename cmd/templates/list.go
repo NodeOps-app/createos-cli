@@ -59,7 +59,7 @@ func newTemplatesListCommand() *cli.Command {
 				})
 			}
 
-			if err := pterm.DefaultTable.WithHasHeader().WithData(tableData).Render(); err != nil {
+			if err := output.RenderTable(tableData); err != nil {
 				return err
 			}
 			fmt.Println()

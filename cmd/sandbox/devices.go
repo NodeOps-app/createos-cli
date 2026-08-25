@@ -276,7 +276,7 @@ func runDeviceList(c *cli.Context) error {
 		}
 		rows = append(rows, []string{d.Name, d.ClientIP, d.OS, d.ID, mark})
 	}
-	return pterm.DefaultTable.WithHasHeader().WithData(rows).Render()
+	return output.RenderTable(rows)
 }
 
 func newDevicesRemoveCommand() *cli.Command {

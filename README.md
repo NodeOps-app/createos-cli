@@ -536,6 +536,7 @@ createos sandbox create --shape s-1vcpu-1gb --name my-box --ssh-key ~/.ssh/id_ed
 createos sandbox create --shape s-1vcpu-512mb --ingress --auto-pause 1h
 createos sandbox list
 createos sandbox list --all
+createos sandbox list --wide
 createos sandbox list --status paused --quiet | xargs createos sandbox rm --force
 createos sandbox get <id>
 createos sandbox exec my-box -- uname -a

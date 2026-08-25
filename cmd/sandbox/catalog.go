@@ -42,7 +42,7 @@ func runShapes(c *cli.Context) error {
 				fmt.Sprintf("%d MB", s.DefaultDiskMib),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+		_ = output.RenderTable(table) //nolint:errcheck
 		pterm.Println()
 		pterm.Println(pterm.Gray("  Pick one when creating: createos sandbox create --shape <id>"))
 	})
@@ -93,7 +93,7 @@ func runRootfs(c *cli.Context) error {
 				}
 				table = append(table, []string{e.Name, e.Description, status})
 			}
-			_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+			_ = output.RenderTable(table) //nolint:errcheck
 		} else {
 			table := pterm.TableData{{"Name", "Default"}}
 			for _, name := range cat.Rootfs {
@@ -103,7 +103,7 @@ func runRootfs(c *cli.Context) error {
 				}
 				table = append(table, []string{name, def})
 			}
-			_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+			_ = output.RenderTable(table) //nolint:errcheck
 		}
 		pterm.Println()
 		pterm.Println(pterm.Gray("  Pick one when creating: createos sandbox create --rootfs <name>"))

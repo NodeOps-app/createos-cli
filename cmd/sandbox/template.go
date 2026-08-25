@@ -155,7 +155,7 @@ func runTemplateList(c *cli.Context) error {
 				t.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+		_ = output.RenderTable(table) //nolint:errcheck
 		pterm.Println()
 		pterm.Println(pterm.Gray("  Spawn from a ready template: createos sandbox create --rootfs <name>"))
 	})

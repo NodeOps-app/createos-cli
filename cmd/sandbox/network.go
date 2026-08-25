@@ -110,7 +110,7 @@ func runNetworkList(c *cli.Context) error {
 				n.CreatedAt.Local().Format("2006-01-02 15:04"),
 			})
 		}
-		_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+		_ = output.RenderTable(table) //nolint:errcheck
 	})
 	return nil
 }
@@ -177,7 +177,7 @@ func runNetworkShow(c *cli.Context) error {
 				}
 				table = append(table, []string{m.SandboxID, m.Name, m.Status, m.IP, reachable})
 			}
-			_ = pterm.DefaultTable.WithHasHeader().WithData(table).Render() //nolint:errcheck
+			_ = output.RenderTable(table) //nolint:errcheck
 			pterm.Println(pterm.Gray("  Tip: inside any of these sandboxes you can `ping <name>` or curl by name."))
 		}
 	})
