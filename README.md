@@ -358,8 +358,12 @@ Set `CREATEOS_AGENTS` to install coding agents at create time, for example
 
 Orca calls this command itself for each lifecycle phase once its plugin is
 installed. The plugin lives in
-[NodeOps-app/createos-plugins](https://github.com/NodeOps-app/createos-plugins)
-under `packages/orca-plugin`.
+[NodeOps-app/createos-orca-plugin](https://github.com/NodeOps-app/createos-orca-plugin).
+Install it in Orca under Settings > Plugins > Install from git URL:
+
+```
+https://github.com/NodeOps-app/createos-orca-plugin.git#v0.1.0
+```
 
 **When to use `exec`, `shell`, `process`, and PTY:**
 
