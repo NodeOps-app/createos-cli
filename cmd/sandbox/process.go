@@ -327,13 +327,13 @@ func runProcessShell(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	envs, err := parseEnvFlags(c.StringSlice("env"))
+	envs, err := parseEnvFlags(processStringSliceFlag(c, subcommand, "env"))
 	if err != nil {
 		return err
 	}
 	req := api.ProcessCreateRequest{
-		Cmd: c.String("cmd"),
-		Cwd: strings.TrimSpace(c.String("cwd")),
+		Cmd: processStringFlag(c, subcommand, "cmd"),
+		Cwd: strings.TrimSpace(processStringFlag(c, subcommand, "cwd")),
 		Env: envs,
 		PTY: ptyOptionsFromFlags(c, !output.IsJSON(c) && !processBoolFlag(c, subcommand, "no-attach")),
 	}
@@ -671,7 +671,7 @@ func processClientSandboxAndOptionalProcess(c *cli.Context) (*api.SandboxClient,
 
 func processCreateRequestFromCLI(c *cli.Context, shellMode bool) (api.ProcessCreateRequest, error) {
 	subcommand := c.Command.Name
-	envs, err := parseEnvFlags(c.StringSlice("env"))
+	envs, err := parseEnvFlags(processStringSliceFlag(c, subcommand, "env"))
 	if err != nil {
 		return api.ProcessCreateRequest{}, err
 	}
@@ -683,7 +683,7 @@ func processCreateRequestFromCLI(c *cli.Context, shellMode bool) (api.ProcessCre
 	req := api.ProcessCreateRequest{
 		Cmd:  cmd,
 		Args: args,
-		Cwd:  strings.TrimSpace(c.String("cwd")),
+		Cwd:  strings.TrimSpace(processStringFlag(c, subcommand, "cwd")),
 		Env:  envs,
 	}
 	if processBoolFlag(c, subcommand, "pty") {
@@ -1575,6 +1575,14 @@ func processInt64Flag(c *cli.Context, subcommand, name string) int64 {
 	return v
 }
 
+// Repeatable flags need every occurrence, not just the first.
+func processStringSliceFlag(c *cli.Context, subcommand, name string) []string {
+	if v := c.StringSlice(name); len(v) > 0 {
+		return v
+	}
+	return rawProcessFlagValues(subcommand, name)
+}
+
 func processDurationFlag(c *cli.Context, subcommand, name string) time.Duration {
 	if v := c.Duration(name); v != 0 {
 		return v
@@ -1606,6 +1614,34 @@ func rawProcessFlagPresent(subcommand, name string) bool {
 		}
 	}
 	return false
+}
+
+func rawProcessFlagValues(subcommand, name string) []string {
+	start := processSubcommandArgIndex(subcommand)
+	if start < 0 {
+		return nil
+	}
+	target := "--" + name
+	prefix := target + "="
+	var out []string
+	for i := start + 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, prefix) {
+			out = append(out, strings.TrimPrefix(arg, prefix))
+			continue
+		}
+		if arg == target && i+1 < len(os.Args) {
+			next := os.Args[i+1]
+			if !strings.HasPrefix(next, "-") {
+				out = append(out, next)
+				i++
+			}
+		}
+	}
+	return out
 }
 
 func rawProcessFlagValue(subcommand, name string) string {
