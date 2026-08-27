@@ -321,9 +321,9 @@ func newNetworkAttachCommand() *cli.Command {
 }
 
 // isDeviceRef reports whether ref looks like a device id (dev-…) — used
-// so `network attach dev-… <net>` routes to the device-attach API
-// instead of the sandbox one. Plain prefix sniff: device ids are minted
-// with this prefix and nothing else legitimately starts with it.
+// so `network attach <net> dev-…` routes to the device-attach API instead
+// of the sandbox one. Plain prefix sniff: device ids are minted with this
+// prefix and nothing else legitimately starts with it.
 func isDeviceRef(ref string) bool {
 	return strings.HasPrefix(ref, "dev-") || strings.HasPrefix(ref, "dev_")
 }
@@ -370,6 +370,9 @@ func runNetworkAttach(c *cli.Context) error {
 		}
 		ref = picked
 	}
+	if looksLikeSandboxRef(netRef) && !looksLikeSandboxRef(ref) && !isDeviceRef(ref) {
+		return fmt.Errorf("network attach expects <network> <sandbox|device>\n\n  Did you mean?\n    createos sandbox network attach %s %s", ref, netRef)
+	}
 	if isDeviceRef(ref) {
 		if err := client.AttachDeviceToNetwork(c.Context, ref, netRef); err != nil {
 			return err
@@ -388,6 +391,10 @@ func runNetworkAttach(c *cli.Context) error {
 	pterm.Success.Printfln("Attached %s → network %s", refLabel(ref, sandboxID), netRef)
 	pterm.Println(pterm.Gray("  Other sandboxes on this network can now reach this one by name."))
 	return nil
+}
+
+func looksLikeSandboxRef(ref string) bool {
+	return strings.HasPrefix(ref, "sb-") || strings.HasPrefix(ref, "sb_")
 }
 
 // ── detach ───────────────────────────────────────────────────────
