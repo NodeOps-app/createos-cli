@@ -443,7 +443,7 @@ func runNetworkDetach(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("usage: createos sandbox network detach <network> <sandbox|device>")
 		}
-		picked, err := pickEndpoint(c, client, "Detach what?")
+		picked, err := pickNetworkMemberEndpoint(c, client, netRef, "Detach what?")
 		if err != nil {
 			return err
 		}
@@ -499,8 +499,8 @@ func runNetworkDetach(c *cli.Context) error {
 
 // pickEndpoint shows a single-select picker that lists BOTH the caller's
 // running sandboxes and registered devices, returning whichever ref the
-// user picks (sb-… or dev-…). Used by `network attach` / `network detach`
-// to support attaching devices alongside sandboxes in interactive mode.
+// user picks (sb-… or dev-…). Used by `network attach` to support attaching
+// devices alongside sandboxes in interactive mode.
 func pickEndpoint(c *cli.Context, client *api.SandboxClient, title string) (string, error) {
 	// Sandboxes (running only — same filter as the old picker).
 	sbs, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{Limit: 200, Status: "running"})
@@ -543,6 +543,81 @@ func pickEndpoint(c *cli.Context, client *api.SandboxClient, title string) (stri
 		return "", fmt.Errorf("could not read your selection: %w", err)
 	}
 	return refByOpt[picked], nil
+}
+
+// pickNetworkMemberEndpoint is the detach-specific picker. Unlike attach,
+// detach should only offer endpoints already attached to the selected network.
+func pickNetworkMemberEndpoint(c *cli.Context, client *api.SandboxClient, netRef, title string) (string, error) {
+	n, err := client.GetNetwork(c.Context, netRef)
+	if err != nil {
+		return "", err
+	}
+
+	devs, err := client.ListDevices(c.Context)
+	if err != nil {
+		devs = nil
+	}
+	deviceNetworkRefs := make(map[string][]api.DeviceNetworkAttachmentView, len(devs))
+	for _, d := range devs {
+		nets, nerr := client.ListDeviceNetworks(c.Context, d.ID)
+		if nerr != nil {
+			continue
+		}
+		deviceNetworkRefs[d.ID] = nets
+	}
+
+	options, refByOpt := networkMemberEndpointOptions(n, devs, deviceNetworkRefs)
+	if len(options) == 0 {
+		fmt.Printf("Network %s has no attached sandboxes or devices.\n", n.Name)
+		return "", nil
+	}
+	picked, err := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultText(title).
+		Show()
+	if err != nil {
+		return "", fmt.Errorf("could not read your selection: %w", err)
+	}
+	return refByOpt[picked], nil
+}
+
+func networkMemberEndpointOptions(n *api.SandboxNetwork, devs []api.DeviceView, deviceNetworks map[string][]api.DeviceNetworkAttachmentView) ([]string, map[string]string) {
+	options := make([]string, 0, len(n.Members)+len(devs))
+	refByOpt := make(map[string]string, len(n.Members)+len(devs))
+	for _, m := range n.Members {
+		label := m.SandboxID
+		if m.Name != "" {
+			label = m.Name
+		}
+		details := fmt.Sprintf("id: %s", m.SandboxID)
+		if m.Status != "" {
+			details += ", status: " + m.Status
+		}
+		if m.IP != "" {
+			details += ", ip: " + m.IP
+		}
+		opt := fmt.Sprintf("sandbox: %s   (%s)", label, details)
+		options = append(options, opt)
+		refByOpt[opt] = m.SandboxID
+	}
+	for _, d := range devs {
+		if !deviceAttachedToNetwork(n, deviceNetworks[d.ID]) {
+			continue
+		}
+		opt := fmt.Sprintf("device:  %s   (%s, id: %s)", d.Name, d.ClientIP, d.ID)
+		options = append(options, opt)
+		refByOpt[opt] = d.ID
+	}
+	return options, refByOpt
+}
+
+func deviceAttachedToNetwork(n *api.SandboxNetwork, attached []api.DeviceNetworkAttachmentView) bool {
+	for _, a := range attached {
+		if a.NetworkID == n.ID || a.NetworkName == n.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // pickNetwork renders a single-select picker over the caller's networks
