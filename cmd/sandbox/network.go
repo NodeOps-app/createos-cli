@@ -633,10 +633,11 @@ func pickNetwork(c *cli.Context, client *api.SandboxClient, title string) (strin
 		pterm.Println(pterm.Gray("  Create one with: createos sandbox network create <name>"))
 		return "", nil
 	}
+	deviceCounts := countDevicesByNetwork(c, client)
 	options := make([]string, 0, len(nets))
 	byOpt := make(map[string]string, len(nets))
 	for _, n := range nets {
-		opt := fmt.Sprintf("%s   (sandboxes: %d, id: %s)", n.Name, n.MemberCount, n.ID)
+		opt := networkPickerOption(n, deviceCounts)
 		options = append(options, opt)
 		byOpt[opt] = n.Name
 	}
@@ -648,4 +649,36 @@ func pickNetwork(c *cli.Context, client *api.SandboxClient, title string) (strin
 		return "", fmt.Errorf("could not read your selection: %w", err)
 	}
 	return byOpt[picked], nil
+}
+
+func countDevicesByNetwork(c *cli.Context, client *api.SandboxClient) map[string]int {
+	counts := make(map[string]int)
+	devs, err := client.ListDevices(c.Context)
+	if err != nil {
+		return counts
+	}
+	for _, d := range devs {
+		nets, nerr := client.ListDeviceNetworks(c.Context, d.ID)
+		if nerr != nil {
+			continue
+		}
+		for _, n := range nets {
+			if n.NetworkID != "" {
+				counts[n.NetworkID]++
+				continue
+			}
+			if n.NetworkName != "" {
+				counts[n.NetworkName]++
+			}
+		}
+	}
+	return counts
+}
+
+func networkPickerOption(n api.SandboxNetwork, deviceCounts map[string]int) string {
+	deviceCount := deviceCounts[n.ID]
+	if deviceCount == 0 {
+		deviceCount = deviceCounts[n.Name]
+	}
+	return fmt.Sprintf("%s   (sandboxes: %d, devices: %d, id: %s)", n.Name, n.MemberCount, deviceCount, n.ID)
 }
