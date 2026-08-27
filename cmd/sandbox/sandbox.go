@@ -14,6 +14,7 @@ func NewSandboxCommand() *cli.Command {
 		Aliases: []string{"sb"},
 		Usage:   "Manage sandboxes",
 		Subcommands: []*cli.Command{
+			newRunCommand(),
 			newCreateCommand(),
 			newListCommand(),
 			newGetCommand(),
