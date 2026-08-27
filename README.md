@@ -363,10 +363,11 @@ under `packages/orca-plugin`.
 
 **When to use `exec`, `shell`, `process`, and PTY:**
 
-Use `sandbox exec` for quick non-interactive one-shot commands. Use `sandbox shell` when you want an immediate interactive terminal and do not need to reconnect later. Use `sandbox process` when the command should be manageable after it starts — list it, reconnect to output, send input, wait for it, signal it, or stop it. Add `--pty`/`--tty`/`-t` to `process run` or `process start` when the managed command needs terminal behavior.
+Use `sandbox exec` for quick non-interactive one-shot commands. Use `sandbox run` when you want a fresh devbox sandbox that runs a Docker image for you. Use `sandbox shell` when you want an immediate interactive terminal and do not need to reconnect later. Use `sandbox process` when the command should be manageable after it starts — list it, reconnect to output, send input, wait for it, signal it, or stop it. Add `--pty`/`--tty`/`-t` to `process run` or `process start` when the managed command needs terminal behavior.
 
 | Command                                      | Description                                                  |
 | -------------------------------------------- | ------------------------------------------------------------ |
+| `createos sandbox run <image> [args…]`       | Create a devbox sandbox and run a Docker image inside it     |
 | `createos sandbox process run <sb> -- <cmd>` | Run a managed command, stream output, and return its exit code |
 | `createos sandbox process start <sb> -- <cmd>` | Start a managed command and print its process ID           |
 | `createos sandbox process shell <sb>`        | Start a persistent shell session that can be reattached      |
@@ -395,9 +396,9 @@ Interactive attach without a process ID shows running managed processes. Pick a 
 | `createos sandbox disk rm <name\|id>`          | Delete a disk (auto-detaches first)                      |
 | `createos sandbox network create <name>`       | Create a private network                                 |
 | `createos sandbox network ls`                  | List your networks                                       |
-| `createos sandbox network show <name\|id>`     | Show a network and its attached sandboxes                |
-| `createos sandbox network attach <net> <sb>`   | Add a sandbox to a network                               |
-| `createos sandbox network detach <net> <sb>`   | Remove a sandbox from a network                          |
+| `createos sandbox network show <name\|id>`     | Show a network and its attached sandbox members          |
+| `createos sandbox network attach <net> <sb\|device>` | Add a sandbox or device to a network               |
+| `createos sandbox network detach <net> <sb\|device>` | Remove a sandbox or device from a network          |
 | `createos sandbox network rm <name\|id>`       | Delete a network (auto-detaches first)                   |
 | `createos sandbox firewall show <sandbox>`     | Show what the sandbox is allowed to reach                |
 | `createos sandbox firewall set <sb> <host…>`   | Replace the outbound allowlist                           |
@@ -568,6 +569,24 @@ createos sandbox rm my-box --force
 createos sandbox shapes
 createos sandbox rootfs
 
+# Sandbox run
+createos sandbox run nginx --local 8080 --remote 80 --rm
+createos sandbox run postgres \
+  --disk pg-data,/data:/var/lib/postgresql/data \
+  --local 5432 --remote 5432 \
+  --env POSTGRES_PASSWORD=secret \
+  --rm
+createos sandbox run my-app:local --push-local --env NODE_ENV=development --rm
+createos sandbox run nginx \
+  --sync ./site,/workspace:/usr/share/nginx/html \
+  --local 8080 --remote 80 \
+  --rm
+
+# `--disk <disk>,<sandbox-path>:<container-path>` attaches the disk at
+# <sandbox-path> in the sandbox, then mounts that path into the Docker container.
+# `--sync <local-dir>,<sandbox-path>:<container-path>` syncs a local directory to
+# the sandbox first, then mounts that sandbox path into the Docker container.
+
 # Sandbox sync
 createos sandbox sync my-box --local ~/work/project --remote /root/work
 createos sandbox sync my-box --exclude '*.log' --exclude node_modules  # skip files (repeatable)
@@ -587,7 +606,9 @@ createos sandbox disk rm my-data --yes
 createos sandbox network create my-net
 createos sandbox network ls
 createos sandbox network attach my-net my-box
+createos sandbox network attach my-net <device-id>
 createos sandbox network detach my-net my-box --yes
+createos sandbox network detach my-net <device-id> --yes
 createos sandbox network rm my-net --yes
 
 # Sandbox firewall
