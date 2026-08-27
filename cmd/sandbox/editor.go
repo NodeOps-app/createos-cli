@@ -684,7 +684,7 @@ func preflightVPN(c *cli.Context, client *api.SandboxClient, sandboxID string) e
 		pterm.Warning.Println("this sandbox and your device aren't in the same network yet.")
 		pterm.Println()
 		pterm.Println("  Add the sandbox to a network your device is in:")
-		pterm.Println("    createos sandbox network attach " + sandboxID + " <network>")
+		pterm.Println("    createos sandbox network attach <network> " + sandboxID)
 		pterm.Println()
 		pterm.Println("  Or add the device to a network the sandbox is in:")
 		pterm.Println("    createos sandbox devices attach <network>")

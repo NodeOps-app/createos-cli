@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -149,17 +150,6 @@ func runTunnel(c *cli.Context) error {
 		bind = "127.0.0.1"
 	}
 
-	// 3. Open a TCP listener on (bind:local). Every accepted connection
-	//    opens its own HTTP-Upgrade tunnel through control to the
-	//    sandbox's `remote` port.
-	listenAddr := net.JoinHostPort(bind, strconv.Itoa(local))
-	var lc net.ListenConfig
-	listener, err := lc.Listen(c.Context, "tcp", listenAddr)
-	if err != nil {
-		return fmt.Errorf("could not bind %s: %w", listenAddr, err)
-	}
-	defer func() { _ = listener.Close() }() //nolint:errcheck
-
 	ctrlURL := strings.TrimSpace(c.String("sandbox-api-url"))
 	if ctrlURL == "" {
 		ctrlURL = api.DefaultSandboxBaseURL
@@ -169,28 +159,68 @@ func runTunnel(c *cli.Context) error {
 		return err
 	}
 
-	pterm.Success.Printfln("Forwarding %s → %s:%d", listenAddr, refLabel(ref, id), remote)
-	pterm.Println(pterm.Gray("  Press Ctrl+C to stop."))
-
 	// Trap Ctrl+C so we can close cleanly and not leave half-open conns.
+	ctx, cancel := context.WithCancel(c.Context)
+	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 	go func() {
 		<-sigCh
+		cancel()
+	}()
+
+	return serveSandboxTunnel(ctx, tunnelSpec{
+		CtrlURL:    ctrlURL,
+		AuthHeader: authHeader,
+		Token:      token,
+		SandboxID:  id,
+		Ref:        ref,
+		Local:      local,
+		Remote:     remote,
+		Bind:       bind,
+		Announce:   true,
+	})
+}
+
+type tunnelSpec struct {
+	CtrlURL    string
+	AuthHeader string
+	Token      string
+	SandboxID  string
+	Ref        string
+	Local      int
+	Remote     int
+	Bind       string
+	Announce   bool
+}
+
+func serveSandboxTunnel(ctx context.Context, spec tunnelSpec) error {
+	listenAddr := net.JoinHostPort(spec.Bind, strconv.Itoa(spec.Local))
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("could not bind %s: %w", listenAddr, err)
+	}
+	defer func() { _ = listener.Close() }() //nolint:errcheck
+
+	go func() {
+		<-ctx.Done()
 		_ = listener.Close() //nolint:errcheck
 	}()
 
-	// 4. Accept loop. Each connection runs in its own goroutine via
-	//    bridgeOne (defined in shell.go) which speaks the same
-	//    HTTP-Upgrade tunnel protocol.
+	if spec.Announce {
+		pterm.Success.Printfln("Forwarding %s → %s:%d", listenAddr, refLabel(spec.Ref, spec.SandboxID), spec.Remote)
+		pterm.Println(pterm.Gray("  Press Ctrl+C to stop."))
+	}
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// Closed by signal handler or local error → done.
+			// Closed by context cancellation or local error → done.
 			return nil
 		}
-		go bridgeOne(c.Context, ctrlURL, authHeader, token, id, remote, conn)
+		go bridgeOne(ctx, spec.CtrlURL, spec.AuthHeader, spec.Token, spec.SandboxID, spec.Remote, conn)
 	}
 }
 
