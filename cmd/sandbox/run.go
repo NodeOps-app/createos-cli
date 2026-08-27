@@ -148,30 +148,30 @@ func runDockerImage(c *cli.Context) error {
 		defer cleanupRunSandbox(sb.ID, client)
 	}
 	if len(opts.syncs) > 0 {
-		cleanup, err := startRunSyncs(c, client, sb.ID, runSandboxName(sb), opts)
-		if err != nil {
-			return err
+		cleanupSyncs, syncErr := startRunSyncs(c, client, sb.ID, runSandboxName(sb), opts)
+		if syncErr != nil {
+			return syncErr
 		}
-		defer cleanup()
+		defer cleanupSyncs()
 	}
 
 	if len(opts.disks) > 0 {
 		spinner, _ = pterm.DefaultSpinner.Start("Waiting for disk mounts...") //nolint:errcheck
-		if err := waitForRunDisks(c.Context, client, sb.ID, opts.disks); err != nil {
+		if diskErr := waitForRunDisks(c.Context, client, sb.ID, opts.disks); diskErr != nil {
 			spinner.Fail("Disk mount failed")
-			return err
+			return diskErr
 		}
 		spinner.Success("Disks are mounted")
 	}
 
 	if opts.pull {
-		if err := runDockerPull(c, client, sb.ID, opts.image); err != nil {
-			return err
+		if pullErr := runDockerPull(c, client, sb.ID, opts.image); pullErr != nil {
+			return pullErr
 		}
 	}
 	if opts.pushLocal {
-		if err := pushLocalDockerImage(c, client, sb.ID, opts.image); err != nil {
-			return err
+		if pushErr := pushLocalDockerImage(c, client, sb.ID, opts.image); pushErr != nil {
+			return pushErr
 		}
 	}
 
@@ -230,16 +230,16 @@ func runDockerImage(c *cli.Context) error {
 				Announce:   false,
 			})
 		}()
-		if err := waitForPort(ctx, opts.bind, opts.local, 2*time.Second); err != nil {
+		if portErr := waitForPort(ctx, opts.bind, opts.local, 2*time.Second); portErr != nil {
 			cancel()
-			return err
+			return portErr
 		}
 		pterm.Success.Printfln("Forwarding %s → %s:%d", net.JoinHostPort(opts.bind, strconv.Itoa(opts.local)), refLabel(runSandboxName(sb), sb.ID), opts.remote)
 		pterm.Println(pterm.Gray(fmt.Sprintf("  Open the local address after the container is listening on :%d.", opts.remote)))
 		select {
-		case err := <-tunnelErr:
-			if err != nil {
-				return err
+		case tunnelRunErr := <-tunnelErr:
+			if tunnelRunErr != nil {
+				return tunnelRunErr
 			}
 		default:
 		}
@@ -615,14 +615,14 @@ func pushLocalDockerImage(c *cli.Context, client *api.SandboxClient, sandboxID, 
 	save := exec.CommandContext(c.Context, "docker", "save", image) // #nosec G204 -- image is passed as one docker CLI argument
 	save.Stdout = tmp
 	save.Stderr = &stderr
-	if err := save.Run(); err != nil {
+	if saveErr := save.Run(); saveErr != nil {
 		_ = tmp.Close() //nolint:errcheck
 		spinner.Fail("Could not save local image")
-		return fmt.Errorf("docker save %s: %w%s", image, err, commandDetail(stderr.String()))
+		return fmt.Errorf("docker save %s: %w%s", image, saveErr, commandDetail(stderr.String()))
 	}
-	if err := tmp.Close(); err != nil {
+	if closeErr := tmp.Close(); closeErr != nil {
 		spinner.Fail("Could not save local image")
-		return fmt.Errorf("close image archive: %w", err)
+		return fmt.Errorf("close image archive: %w", closeErr)
 	}
 	info, err := os.Stat(tmpPath)
 	if err != nil {
@@ -639,9 +639,9 @@ func pushLocalDockerImage(c *cli.Context, client *api.SandboxClient, sandboxID, 
 
 	remote := "/tmp/createos-images/" + localImageArchiveName(image)
 	spinner, _ = pterm.DefaultSpinner.Start("Uploading image to sandbox...") //nolint:errcheck
-	if err := client.UploadFile(c.Context, sandboxID, remote, f, info.Size()); err != nil {
+	if uploadErr := client.UploadFile(c.Context, sandboxID, remote, f, info.Size()); uploadErr != nil {
 		spinner.Fail("Could not upload image")
-		return err
+		return uploadErr
 	}
 	spinner.Success("Uploaded image to sandbox")
 
@@ -696,13 +696,13 @@ func startRunSyncs(c *cli.Context, client *api.SandboxClient, sandboxID, ref str
 	if user == "" {
 		user = "root"
 	}
-	if _, err := client.AddSSHPubkeys(c.Context, sandboxID, []string{strings.TrimSpace(string(pubBytes))}); err != nil {
+	if _, keyErr := client.AddSSHPubkeys(c.Context, sandboxID, []string{strings.TrimSpace(string(pubBytes))}); keyErr != nil {
 		cleanup()
-		return nil, fmt.Errorf("could not register sync key with gateway: %w", err)
+		return nil, fmt.Errorf("could not register sync key with gateway: %w", keyErr)
 	}
-	if err := ensureAuthorizedKey(c, client, sandboxID, user, ref, pubBytes, true); err != nil {
+	if authErr := ensureAuthorizedKey(c, client, sandboxID, user, ref, pubBytes, true); authErr != nil {
 		cleanup()
-		return nil, err
+		return nil, authErr
 	}
 
 	remoteDirs := make([]string, 0, len(opts.syncs))
@@ -764,9 +764,9 @@ fi
 		cleanupUnlockedKey()
 		cleanupIdentity()
 	}
-	if err := waitForTCP(ctx, bridge.localAddr, 5*time.Second); err != nil {
+	if waitErr := waitForTCP(ctx, bridge.localAddr, 5*time.Second); waitErr != nil {
 		cleanup()
-		return nil, fmt.Errorf("sshd did not start in time: %w", err)
+		return nil, fmt.Errorf("sshd did not start in time: %w", waitErr)
 	}
 	_, port, _ := net.SplitHostPort(bridge.localAddr) //nolint:errcheck
 
@@ -838,15 +838,15 @@ func inspectLocalDockerImage(ctx context.Context, image string) error {
 func resolveRunSyncIdentity(sandboxID, explicit string) (privPath string, pubBytes []byte, cleanup func(), err error) {
 	cleanup = func() {}
 	if strings.TrimSpace(explicit) != "" {
-		priv, pub, err := resolveIdentity(explicit)
-		if err != nil {
-			return "", nil, cleanup, err
+		priv, pub, resolveErr := resolveIdentity(explicit)
+		if resolveErr != nil {
+			return "", nil, cleanup, resolveErr
 		}
-		pubBytes, err := os.ReadFile(pub) // #nosec G304 -- pub is paired with the user-provided private key
-		if err != nil {
-			return "", nil, cleanup, fmt.Errorf("could not read public key %s: %w", pub, err)
+		explicitPubBytes, readErr := os.ReadFile(pub) // #nosec G304 -- pub is paired with the user-provided private key
+		if readErr != nil {
+			return "", nil, cleanup, fmt.Errorf("could not read public key %s: %w", pub, readErr)
 		}
-		return priv, pubBytes, cleanup, nil
+		return priv, explicitPubBytes, cleanup, nil
 	}
 
 	alias := sshAlias(sandboxID)
