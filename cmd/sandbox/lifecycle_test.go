@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -362,5 +363,44 @@ func TestOffloadFailsWhenTeardownFails(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error must contain %q, got: %v", want, err)
 		}
+	}
+}
+
+// TestForkCountSurvivesTheNaturalArgumentOrder is the regression for a bug
+// found live: `fork <sandbox> --count 2` — id first, the order every user
+// and cos itself actually writes — silently forked once, not twice, with
+// no error at all. Go's stdlib flag package stops parsing at the first
+// non-flag argument, so `--count` written after the id is never parsed;
+// c.Int("count") quietly returns the flag's default (1). The existing
+// bad-count test only ever wrote --count before the id, so it never
+// exercised this path.
+func TestForkCountSurvivesTheNaturalArgumentOrder(t *testing.T) {
+	var forkCalls int32
+	f := newFakeAPI(t).
+		json("GET /v1/sandboxes/sb-golden", `{"data":{"id":"sb-golden","status":"paused"}}`).
+		on("POST /v1/sandboxes/sb-golden/fork", func(w http.ResponseWriter, _ *http.Request) {
+			n := atomic.AddInt32(&forkCalls, 1)
+			fmt.Fprintf(w, `{"data":{"id":"sb-clone-%d","status":"running"}}`, n)
+		}).
+		json("GET /v1/sandboxes/sb-clone-1", `{"data":{"id":"sb-clone-1","status":"running"}}`).
+		json("GET /v1/sandboxes/sb-clone-2", `{"data":{"id":"sb-clone-2","status":"running"}}`)
+
+	app := &cli.App{
+		Commands: []*cli.Command{newForkCommand()},
+		Metadata: map[string]any{api.SandboxClientKey: f.client()},
+	}
+
+	// The natural order: sandbox id first, --count after — exactly how cos
+	// and the fork.md example both write it. rawProcessFlagValue reads the
+	// real os.Args (that is the whole point — it recovers what urfave
+	// dropped), so the test has to set it, not just pass args to RunContext.
+	args := []string{"createos", "fork", "sb-golden", "--count", "2"}
+	withArgs(t, args)
+	if err := app.RunContext(shortPoll(t), args); err != nil {
+		t.Fatalf("fork: %v", err)
+	}
+
+	if got := atomic.LoadInt32(&forkCalls); got != 2 {
+		t.Errorf("POST /fork called %d time(s), want 2 — --count 2 was silently dropped to 1", got)
 	}
 }

@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pterm/pterm"
@@ -66,7 +67,7 @@ func runFork(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
-	if count := c.Int("count"); count < 1 {
+	if count := forkCountFlag(c); count < 1 {
 		return fmt.Errorf("--count must be at least 1 (got %d)", count)
 	}
 
@@ -93,7 +94,7 @@ func runFork(c *cli.Context) error {
 }
 
 func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) error {
-	count := c.Int("count")
+	count := forkCountFlag(c)
 
 	req := api.SandboxForkReq{
 		StartPaused: c.Bool("paused"),
@@ -300,3 +301,28 @@ type forkLeak struct {
 
 func (e *forkLeak) Error() string { return e.err.Error() }
 func (e *forkLeak) Unwrap() error { return e.err }
+
+// forkCountFlag reads --count the normal way, and falls back to a raw scan
+// of os.Args when that comes back unset.
+//
+// Go's stdlib flag package, which urfave/cli sits on, stops parsing at the
+// first non-flag argument. `fork <sandbox> --count 2` writes the sandbox
+// first — the natural order — so `--count` is never parsed as a flag at
+// all: it lands unread in c.Args(), and c.Int("count") silently returns
+// the flag's default (1). No error, just the wrong count. This is the same
+// shape of bug fixed for `process run <box> --cwd` (commit 8c1f7ac); the
+// fallback below reuses that fix's own raw-argv scanner.
+func forkCountFlag(c *cli.Context) int {
+	if c.IsSet("count") {
+		return c.Int("count")
+	}
+	raw := rawProcessFlagValue("fork", "count")
+	if raw == "" {
+		return c.Int("count")
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return c.Int("count")
+	}
+	return n
+}
