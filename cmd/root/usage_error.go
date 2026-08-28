@@ -1,6 +1,7 @@
 package root
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -102,29 +103,72 @@ func correctedCommandLine(flagName string) string {
 }
 
 // installCommandSuggestions replaces urfave's bare "No help topic for
-// 'ssh'" with the nearest real command. Agents and people both guess verb
-// names, and a guess that lands one edit away from a real command should
-// not cost a round trip to the help output.
+// 'ssh'" with the nearest real command, and makes an unknown command name
+// fail the run. Agents and people both guess verb names, and a guess that
+// lands one edit away from a real command should not cost a round trip to
+// the help output — and a guess that is simply wrong must not exit zero.
+//
+// This cannot be done with urfave's own CommandNotFoundFunc: ShowCommandHelp
+// calls that callback and then unconditionally returns nil (see the
+// package's help.go), so nothing set there can ever make app.Run return an
+// error. Catching the unresolved name has to happen earlier, in the
+// command's own Action, before urfave's help fallback runs.
+//
+// That is safe to do because an Action only ever runs with a positional
+// argument still present when dispatch already failed to match that
+// argument against a real subcommand — a match would have called that
+// subcommand's Run instead. So "argument present here" and "unknown
+// command" are the same condition.
 func installCommandSuggestions(app *cli.App) {
-	app.CommandNotFound = func(c *cli.Context, name string) {
-		// The hook fires for a subcommand too ("createos sandbox ssh"), and
-		// there the useful candidates are that group's subcommands, not the
-		// top-level verbs. Searching the wrong list is worse than staying
-		// quiet: it points at something unrelated.
-		candidates, prefix := app.Commands, ""
-		if cmd := c.Command; cmd != nil && len(cmd.Subcommands) > 0 {
-			candidates, prefix = cmd.Subcommands, cmd.Name+" "
+	fallback := app.Action
+	app.Action = func(c *cli.Context) error {
+		if name := c.Args().First(); name != "" {
+			return unknownCommandError(app.Commands, "", name)
 		}
-		noun := "command"
-		if prefix != "" {
-			noun = "subcommand"
+		if fallback != nil {
+			return fallback(c)
 		}
-		fmt.Fprintf(os.Stderr, "createos %s: %q is not a %s.\n", strings.TrimSpace(prefix), name, noun)
-		if best := nearestCommand(candidates, name); best != "" {
-			fmt.Fprintf(os.Stderr, "\n  Did you mean:\n    createos %s%s\n", prefix, best)
-		}
-		fmt.Fprintf(os.Stderr, "\n  See everything with:\n    createos %s--help\n", prefix)
+		return cli.ShowSubcommandHelp(c)
 	}
+	for _, cmd := range app.Commands {
+		installGroupSuggestions(cmd)
+	}
+}
+
+func installGroupSuggestions(cmd *cli.Command) {
+	if cmd == nil || len(cmd.Subcommands) == 0 {
+		return
+	}
+	prefix := cmd.Name + " "
+	fallback := cmd.Action
+	cmd.Action = func(c *cli.Context) error {
+		if name := c.Args().First(); name != "" {
+			return unknownCommandError(cmd.Subcommands, prefix, name)
+		}
+		if fallback != nil {
+			return fallback(c)
+		}
+		return cli.ShowSubcommandHelp(c)
+	}
+	for _, sub := range cmd.Subcommands {
+		installGroupSuggestions(sub)
+	}
+}
+
+// unknownCommandError builds the same message the old CommandNotFound
+// callback printed, but returns it instead of writing to stderr directly —
+// main.go's error renderer prints whatever app.Run returns.
+func unknownCommandError(candidates []*cli.Command, prefix, name string) error {
+	noun := "command"
+	if prefix != "" {
+		noun = "subcommand"
+	}
+	msg := fmt.Sprintf("createos %s: %q is not a %s.", strings.TrimSpace(prefix), name, noun)
+	if best := nearestCommand(candidates, name); best != "" {
+		msg += fmt.Sprintf("\n\n  Did you mean:\n    createos %s%s", prefix, best)
+	}
+	msg += fmt.Sprintf("\n\n  See everything with:\n    createos %s--help", prefix)
+	return errors.New(msg)
 }
 
 // nearestCommand returns the closest command name within a small edit

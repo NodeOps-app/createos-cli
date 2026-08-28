@@ -66,6 +66,10 @@ func runFork(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
+	if count := c.Int("count"); count < 1 {
+		return fmt.Errorf("--count must be at least 1 (got %d)", count)
+	}
+
 	ref := strings.TrimSpace(c.Args().First())
 	if ref == "" {
 		if !terminal.IsInteractive() {
@@ -90,9 +94,6 @@ func runFork(c *cli.Context) error {
 
 func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) error {
 	count := c.Int("count")
-	if count < 1 {
-		return fmt.Errorf("--count must be at least 1 (got %d)", count)
-	}
 
 	req := api.SandboxForkReq{
 		StartPaused: c.Bool("paused"),

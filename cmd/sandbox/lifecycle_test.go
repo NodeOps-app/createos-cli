@@ -303,6 +303,30 @@ func TestPauseForForkPausesASandboxTheCallerOwns(t *testing.T) {
 	}
 }
 
+// TestForkRejectsBadCountBeforeAnyAPICall covers the bug where --count was
+// only checked after resolving the source ref, so `fork --count 0 missing`
+// spent an API round trip on "missing" before ever complaining about the
+// count. The count is knowable from the flags alone, so it must fail before
+// any request goes out.
+func TestForkRejectsBadCountBeforeAnyAPICall(t *testing.T) {
+	f := newFakeAPI(t)
+	app := &cli.App{
+		Commands: []*cli.Command{newForkCommand()},
+		Metadata: map[string]any{api.SandboxClientKey: f.client()},
+	}
+
+	err := app.RunContext(shortPoll(t), []string{"createos", "fork", "--count", "0", "missing"})
+	if err == nil {
+		t.Fatal("want an error for --count 0")
+	}
+	if !strings.Contains(err.Error(), "--count must be at least 1 (got 0)") {
+		t.Errorf("error = %q, want it to name the bad count", err)
+	}
+	if len(f.seen) != 0 {
+		t.Errorf("count was invalid but the CLI still called the API: %v", f.seen)
+	}
+}
+
 // TestOffloadFailsWhenTeardownFails covers the leak that looks like a
 // clean run: the workload passes, DestroySandbox fails, and a CI job
 // reading only the exit status would never learn that a billable sandbox
