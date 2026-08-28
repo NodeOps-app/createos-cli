@@ -393,13 +393,24 @@ func (c *SandboxClient) ForkSandbox(ctx context.Context, srcID string, req Sandb
 	return &envelope.Data, nil
 }
 
-// lifecyclePOST is the shared shape of pause/resume — body-less POST
-// to /v1/sandboxes/{id}/<action>, returning the updated view.
+// lifecyclePOST is the shared shape of pause/resume — POST to
+// /v1/sandboxes/{id}/<action>, returning the updated view.
+//
+// The empty JSON body is load-bearing, not decoration. These actions carry
+// no fields, but a resty request with no body at all makes Go omit
+// Content-Length entirely, and control's forwarder drops any inbound
+// content-length header before calling the owning host (see
+// internal/control/handlers/forward.go in fc). The host then rejects the
+// request with "Content-Length is required". ForkSandbox never hit this
+// because it always had a body to send. Marshalling a struct also lets
+// resty set Content-Type: application/json, which the RequireJSON
+// middleware wants from any request that does carry a body.
 func (c *SandboxClient) lifecyclePOST(ctx context.Context, id, path string) (*SandboxView, error) {
 	var envelope Response[SandboxView]
 	resp, err := c.Client.R().
 		SetContext(ctx).
 		SetPathParam("id", id).
+		SetBody(struct{}{}).
 		SetResult(&envelope).
 		Post(path)
 	if err != nil {

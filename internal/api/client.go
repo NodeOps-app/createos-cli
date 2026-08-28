@@ -2,11 +2,14 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -31,7 +34,9 @@ func installAuthRefresh(client *resty.Client, authHeader string, refresher Token
 	if refresher == nil {
 		return
 	}
-	client.SetRetryCount(1)
+	// The retry budget itself belongs to installTransientRetry, which every
+	// constructor installs. This condition only adds one more reason to
+	// spend an attempt, and Attempt==1 below keeps it to a single refresh.
 	client.AddRetryCondition(func(resp *resty.Response, _ error) bool {
 		if resp == nil || resp.StatusCode() != http.StatusUnauthorized {
 			return false
@@ -55,13 +60,72 @@ func installAuthRefresh(client *resty.Client, authHeader string, refresher Token
 	})
 }
 
+// Retry budget shared by installTransientRetry and installAuthRefresh.
+// Three attempts covers a single flaky hop without turning a real outage
+// into a long stall.
+const (
+	transientRetryCount   = 3
+	transientRetryWait    = 300 * time.Millisecond
+	transientRetryMaxWait = 3 * time.Second
+)
+
+// installTransientRetry retries the failures a retry can actually fix.
+// One dropped connection used to kill a whole command; a fan-out over N
+// sandboxes multiplies that exposure by N, so this is the difference
+// between a flaky run and a failed one.
+//
+// What retries, and why the split by method:
+//
+//   - A connection that was never established (DNS failure, dial timeout,
+//     connection refused). The request provably never reached the server,
+//     so replaying it cannot duplicate anything. Safe for every method,
+//     POST included.
+//   - A 429 or 5xx answer, but only for methods with no side effect. A
+//     POST that got a 500 may well have created the sandbox before it
+//     failed, and a retry would leak a second one that nobody destroys.
+//     Leaking billable machines is worse than surfacing the error.
+func installTransientRetry(client *resty.Client) {
+	client.SetRetryCount(transientRetryCount)
+	client.SetRetryWaitTime(transientRetryWait)
+	client.SetRetryMaxWaitTime(transientRetryMaxWait)
+	client.AddRetryCondition(func(resp *resty.Response, err error) bool {
+		if err != nil {
+			return isConnectSetupError(err)
+		}
+		if resp == nil {
+			return false
+		}
+		switch resp.Request.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+		default:
+			return false
+		}
+		return resp.StatusCode() == http.StatusTooManyRequests || resp.StatusCode() >= http.StatusInternalServerError
+	})
+}
+
+// isConnectSetupError reports whether err failed before any bytes reached
+// the server. Only "dial" operations qualify: a read or write error means
+// the request was already on the wire and may have been acted on.
+func isConnectSetupError(err error) bool {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return opErr.Op == "dial"
+	}
+	return false
+}
+
 // Auth header names. HTTP header keys are case-insensitive (and Go
 // canonicalises them on the wire), so these double as the API-key and
 // OAuth-access-token headers for both the main API and the fc-spawn
 // sandbox API.
 const (
-	headerAPIKey      = "X-Api-Key"      // #nosec G101 -- HTTP header name, not a credential
-	headerAccessToken = "X-Access-Token" // #nosec G101 -- HTTP header name, not a credential
+	headerAPIKey      = "X-Api-Key"      // #nosec G101 -- HTTP header name, not a credential  // pragma: allowlist secret
+	headerAccessToken = "X-Access-Token" // #nosec G101 -- HTTP header name, not a credential  // pragma: allowlist secret
 )
 
 // DefaultBaseURL is the default CreateOS API base URL.
@@ -91,6 +155,8 @@ func NewClient(token, apiURL string, debug bool) APIClient {
 		})
 	}
 
+	installTransientRetry(client)
+
 	return APIClient{Client: client}
 }
 
@@ -115,6 +181,7 @@ func NewClientWithAccessToken(accessToken, apiURL string, debug bool, refresher 
 		})
 	}
 
+	installTransientRetry(client)
 	installAuthRefresh(client, headerAccessToken, refresher)
 
 	return APIClient{Client: client}

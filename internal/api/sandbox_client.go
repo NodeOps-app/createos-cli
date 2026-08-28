@@ -67,6 +67,7 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refreshe
 			masked: maskToken(token),
 		})
 	}
+	installTransientRetry(client)
 	installAuthRefresh(client, authHeader, refresher)
 	return SandboxClient{Client: client, authHeader: authHeader}
 }
