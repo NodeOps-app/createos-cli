@@ -66,3 +66,41 @@ func TestRawProcessFlagValuesEmptyWhenAbsent(t *testing.T) {
 		t.Fatalf("env = %v, want empty", got)
 	}
 }
+
+func TestSplitOnPTYControlInterrupt(t *testing.T) {
+	before, action, after, found := splitOnPTYControl([]byte("abc\x03def"))
+	if !found {
+		t.Fatal("expected Ctrl-C control byte")
+	}
+	if string(before) != "abc" || action != "interrupt" || string(after) != "def" {
+		t.Fatalf("before/action/after = %q/%q/%q, want abc/interrupt/def", before, action, after)
+	}
+}
+
+func TestSplitOnPTYControlUsesFirstControlByte(t *testing.T) {
+	before, action, after, found := splitOnPTYControl([]byte("abc\x03\x1d"))
+	if !found {
+		t.Fatal("expected control byte")
+	}
+	if string(before) != "abc" || action != "interrupt" || string(after) != "\x1d" {
+		t.Fatalf("before/action/after = %q/%q/%q, want abc/interrupt/Ctrl-]", before, action, after)
+	}
+
+	before, action, after, found = splitOnPTYControl([]byte("abc\x1d\x03"))
+	if !found {
+		t.Fatal("expected control byte")
+	}
+	if string(before) != "abc" || action != "detach" || after != nil {
+		t.Fatalf("before/action/after = %q/%q/%q, want abc/detach/nil", before, action, after)
+	}
+}
+
+func TestSplitOnPTYControlNoControlByte(t *testing.T) {
+	before, action, after, found := splitOnPTYControl([]byte("abc"))
+	if found {
+		t.Fatal("did not expect control byte")
+	}
+	if string(before) != "abc" || action != "" || after != nil {
+		t.Fatalf("before/action/after = %q/%q/%q, want abc/empty/nil", before, action, after)
+	}
+}

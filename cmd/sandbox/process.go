@@ -1071,18 +1071,29 @@ func copyProcessInput(ctx context.Context, detach context.CancelFunc, nextCh cha
 		if n > 0 {
 			chunk := buf[:n]
 			if pty {
-				if before, action, found := splitOnPTYShortcut(chunk); found {
-					if len(before) > 0 {
-						encoded := base64.StdEncoding.EncodeToString(before)
-						_, _ = client.WriteProcessInput(ctx, sandboxID, processID, api.ProcessInputRequest{DataBase64: encoded}) //nolint:errcheck
+				for len(chunk) > 0 {
+					before, action, after, found := splitOnPTYControl(chunk)
+					if !found {
+						writeProcessInputBytes(ctx, client, sandboxID, processID, chunk)
+						break
 					}
-					handlePTYShortcut(ctx, client, sandboxID, processID, action, nextCh)
-					detach()
-					return
+					if len(before) > 0 {
+						writeProcessInputBytes(ctx, client, sandboxID, processID, before)
+					}
+					if action == "interrupt" {
+						_ = client.SignalProcess(ctx, sandboxID, processID, api.ProcessSignalRequest{Signal: "SIGINT"}) //nolint:errcheck
+						chunk = after
+						continue
+					}
+					if action != "" {
+						handlePTYShortcut(ctx, client, sandboxID, processID, action, nextCh)
+						detach()
+						return
+					}
 				}
+				continue
 			}
-			encoded := base64.StdEncoding.EncodeToString(chunk)
-			_, _ = client.WriteProcessInput(ctx, sandboxID, processID, api.ProcessInputRequest{DataBase64: encoded}) //nolint:errcheck
+			writeProcessInputBytes(ctx, client, sandboxID, processID, chunk)
 		}
 		if err != nil {
 			if !pty && errors.Is(err, io.EOF) {
@@ -1093,18 +1104,28 @@ func copyProcessInput(ctx context.Context, detach context.CancelFunc, nextCh cha
 	}
 }
 
-func splitOnPTYShortcut(data []byte) (before []byte, action string, found bool) {
+func writeProcessInputBytes(ctx context.Context, client *api.SandboxClient, sandboxID, processID string, data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	encoded := base64.StdEncoding.EncodeToString(data)
+	_, _ = client.WriteProcessInput(ctx, sandboxID, processID, api.ProcessInputRequest{DataBase64: encoded}) //nolint:errcheck
+}
+
+func splitOnPTYControl(data []byte) (before []byte, action string, after []byte, found bool) {
 	for i, b := range data {
 		switch b {
+		case 0x03: // Ctrl-C
+			return data[:i], "interrupt", data[i+1:], true
 		case 0x1d: // Ctrl-]
-			return data[:i], "detach", true
+			return data[:i], "detach", nil, true
 		case 0x0e: // Ctrl-N
-			return data[:i], "new", true
+			return data[:i], "new", nil, true
 		case 0x10: // Ctrl-P
-			return data[:i], "pick", true
+			return data[:i], "pick", nil, true
 		}
 	}
-	return data, "", false
+	return data, "", nil, false
 }
 
 func handlePTYShortcut(ctx context.Context, client *api.SandboxClient, sandboxID, processID, action string, nextCh chan<- string) {
