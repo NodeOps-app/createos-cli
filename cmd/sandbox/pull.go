@@ -55,6 +55,14 @@ func runPull(c *cli.Context) error {
 		return err
 	}
 
+	mount, err := diskMountBlocksFileAPI(c.Context, client, id, remote)
+	if err != nil {
+		return err
+	}
+	if mount != "" {
+		return diskMountFileAPIError(remote, mount, "pull")
+	}
+
 	f, err := os.Create(local) // #nosec G304 -- local is a user-supplied destination path
 	if err != nil {
 		return fmt.Errorf("could not create %s: %w", local, err)
