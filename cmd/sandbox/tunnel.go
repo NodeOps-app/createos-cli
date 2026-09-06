@@ -88,7 +88,7 @@ func runTunnel(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox tunnel my-box --local 8080 --remote 8000")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Tunnel to which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Tunnel to which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -103,6 +103,9 @@ func runTunnel(c *cli.Context) error {
 			return err
 		}
 		id = resolved
+	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "tunnel"); err != nil {
+		return err
 	}
 
 	// 2. Ports. Prompt on TTY when missing.

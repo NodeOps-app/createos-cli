@@ -48,6 +48,9 @@ func runPull(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	if runErr := ensureSandboxRunningFor(c, client, ref, id, "pull"); runErr != nil {
+		return runErr
+	}
 
 	// "-" writes to stdout. Anything else is a real file we create.
 	if local == "-" {

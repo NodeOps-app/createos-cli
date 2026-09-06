@@ -147,7 +147,7 @@ func confirmText(ids []string) string {
 func pickSandboxesForDelete(c *cli.Context, client *api.SandboxClient) ([]string, error) {
 	// Pull both states; the API only takes one ?status= at a time so do two calls.
 	var rows []api.SandboxView
-	for _, st := range []string{"running", "paused"} {
+	for _, st := range []string{api.SandboxStatusRunning, api.SandboxStatusPaused} {
 		page, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
 			Limit: 200, Status: st,
 		})

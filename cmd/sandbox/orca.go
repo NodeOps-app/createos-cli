@@ -560,7 +560,7 @@ func orcaWaitRunning(ctx context.Context, client *api.SandboxClient, id string, 
 	defer cancel()
 	for {
 		sb, err := client.GetSandbox(deadline, id)
-		if err == nil && sb.Status == "running" {
+		if err == nil && sb.Status == api.SandboxStatusRunning {
 			return nil
 		}
 		select {

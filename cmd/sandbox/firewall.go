@@ -98,7 +98,7 @@ func runFirewallSet(c *cli.Context) error {
 		// Sandbox picker, then prompt for rules — pre-filled with the
 		// current allowlist so "edit" works (add, remove, or tweak)
 		// instead of forcing the user to retype everything.
-		pickedID, label, err := pickByStatus(c, client, "Set firewall on which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Set firewall on which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -217,7 +217,7 @@ func requireRunningSandbox(c *cli.Context, prompt string) (*api.SandboxClient, s
 		if !terminal.IsInteractive() {
 			return client, "", "", fmt.Errorf("please provide a sandbox ID or name")
 		}
-		pickedID, label, err := pickByStatus(c, client, prompt, "running")
+		pickedID, label, err := pickByStatus(c, client, prompt, api.SandboxStatusRunning)
 		if err != nil {
 			return client, "", "", err
 		}

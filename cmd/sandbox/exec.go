@@ -71,7 +71,7 @@ func runExec(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox exec my-box -- ls -la")
 		}
-		pickedID, label, perr := pickByStatus(c, client, "Run a command in which sandbox?", "running")
+		pickedID, label, perr := pickByStatus(c, client, "Run a command in which sandbox?", api.SandboxStatusRunning)
 		if perr != nil {
 			return perr
 		}
@@ -87,6 +87,9 @@ func runExec(c *cli.Context) error {
 			return err
 		}
 		id = resolved
+	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "exec"); err != nil {
+		return err
 	}
 
 	// Then ask for the command if we don't have one yet.

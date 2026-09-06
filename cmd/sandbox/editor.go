@@ -134,7 +134,7 @@ func runEditor(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox editor my-box")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Edit which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Edit which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func runEditor(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("could not fetch sandbox %s: %w", ref, err)
 	}
-	if sb.Status != "running" {
+	if sb.Status != api.SandboxStatusRunning {
 		return fmt.Errorf("sandbox %s is %s — resume or wait for it to be running", ref, sb.Status)
 	}
 	if sb.MemMib < editorMinMemMiB {
@@ -931,7 +931,7 @@ func isSandboxGone(ctx context.Context, client *api.SandboxClient, alias string)
 		return api.IsNotFound(err)
 	}
 	switch sb.Status {
-	case "destroyed", "failed":
+	case api.SandboxStatusDestroyed, api.SandboxStatusFailed:
 		return true
 	}
 	return false

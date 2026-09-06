@@ -58,6 +58,9 @@ func runPush(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "push"); err != nil {
+		return err
+	}
 
 	// Open the source: a real file (we know its size for Content-Length)
 	// or stdin ("-") for piped uploads.

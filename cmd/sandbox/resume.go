@@ -34,7 +34,7 @@ func runResume(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  To see your paused sandboxes, run:\n    createos sandbox list --status paused")
 		}
-		id, label, err := pickByStatus(c, client, "Pick a sandbox to resume", "paused")
+		id, label, err := pickByStatus(c, client, "Pick a sandbox to resume", api.SandboxStatusPaused)
 		if err != nil {
 			return err
 		}
@@ -56,12 +56,12 @@ func runResumeByID(c *cli.Context, client *api.SandboxClient, ref, id string) er
 		return err
 	}
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Resuming %s…", refLabel(ref, id))) //nolint:errcheck
-	sb, err := waitForStatus(c.Context, client, id, "running")
+	sb, err := waitForStatus(c.Context, client, id, api.SandboxStatusRunning)
 	if err != nil {
 		spinner.Fail("Resume did not complete")
 		return err
 	}
-	if sb.Status != "running" {
+	if sb.Status != api.SandboxStatusRunning {
 		spinner.Fail(fmt.Sprintf("Resume ended in %q", sb.Status))
 		return fmt.Errorf("sandbox %s is %s — see `createos sandbox get %s` for details", refLabel(ref, id), sb.Status, id)
 	}

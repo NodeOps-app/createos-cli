@@ -51,7 +51,7 @@ func runFork(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name to fork from\n\n  To see your paused sandboxes, run:\n    createos sandbox list --status paused")
 		}
-		id, label, err := pickByStatus(c, client, "Pick a sandbox to fork", "paused")
+		id, label, err := pickByStatus(c, client, "Pick a sandbox to fork", api.SandboxStatusPaused)
 		if err != nil {
 			return err
 		}
@@ -86,9 +86,9 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		if err != nil {
 			return err
 		}
-		target := "running"
+		target := api.SandboxStatusRunning
 		if req.StartPaused {
-			target = "paused"
+			target = api.SandboxStatusPaused
 		}
 		sb, err := waitForStatus(c.Context, client, view.ID, target)
 		if err != nil {
@@ -105,9 +105,9 @@ func runForkByID(c *cli.Context, client *api.SandboxClient, ref, srcID string) e
 		return err
 	}
 
-	target := "running"
+	target := api.SandboxStatusRunning
 	if req.StartPaused {
-		target = "paused"
+		target = api.SandboxStatusPaused
 	}
 	sb, err := waitForStatus(c.Context, client, view.ID, target)
 	if err != nil {

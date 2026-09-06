@@ -85,7 +85,7 @@ func runList(c *cli.Context) error {
 	if !showAll && status == "" {
 		// Fetch each active status individually so paused / resuming VMs
 		// aren't pushed out of the first page by destroyed rows.
-		activeStatuses := []string{"running", "paused", "pausing", "resuming", "forking"}
+		activeStatuses := []string{api.SandboxStatusRunning, api.SandboxStatusPaused, api.SandboxStatusPausing, api.SandboxStatusResuming, api.SandboxStatusForking}
 		for _, s := range activeStatuses {
 			page, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
 				Limit:  c.Int("limit"),

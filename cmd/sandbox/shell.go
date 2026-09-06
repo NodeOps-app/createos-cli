@@ -93,7 +93,7 @@ func runShell(c *cli.Context) error {
 		if !terminal.IsInteractive() {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox shell my-box")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Shell into which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Shell into which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -111,6 +111,10 @@ func runShell(c *cli.Context) error {
 		id = resolvedID
 	}
 
+	if err := ensureSandboxRunningFor(c, client, ref, id, "shell"); err != nil {
+		return err
+	}
+
 	// Default to the keyless PTY path — no SSH key, no sshd setup, just
 	// the user's API token. The SSH-based path is opt-in: explicitly via
 	// --ssh, or implicitly when the user names a key with -i.
@@ -119,6 +123,32 @@ func runShell(c *cli.Context) error {
 		return runShellPTY(c, id, ref)
 	}
 	return runShellSSH(c, client, id, ref)
+}
+
+func ensureSandboxRunningFor(c *cli.Context, client *api.SandboxClient, ref, id, command string) error {
+	sb, err := client.GetSandbox(c.Context, id)
+	if err != nil {
+		return err
+	}
+	if sb.Status == api.SandboxStatusRunning {
+		return nil
+	}
+	return sandboxRunningStatusError(ref, id, sb.Status, command)
+}
+
+func sandboxRunningStatusError(ref, id, status, command string) error {
+	commandRef := ref
+	if strings.TrimSpace(commandRef) == "" {
+		commandRef = id
+	}
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "command"
+	}
+	if status == api.SandboxStatusPaused {
+		return fmt.Errorf("sandbox %s is paused\n\n  Resume it first:\n    createos sandbox resume %s\n\n  Then retry your %s command", refLabel(ref, id), commandRef, command)
+	}
+	return fmt.Errorf("sandbox %s is %s; %s requires a running sandbox", refLabel(ref, id), status, command)
 }
 
 // runShellSSH installs an SSH key into the sandbox, starts sshd,

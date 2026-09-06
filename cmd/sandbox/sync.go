@@ -139,7 +139,7 @@ func runSync(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("please provide a sandbox ID or name\n\n  Example:\n    createos sandbox sync my-box --local ~/work --remote /root/work")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Sync with which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Sync with which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -154,6 +154,9 @@ func runSync(c *cli.Context) error {
 			return err
 		}
 		id = resolved
+	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "sync"); err != nil {
+		return err
 	}
 
 	// 2. Local + remote paths. Prompt on TTY when missing; default the

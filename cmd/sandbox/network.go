@@ -503,7 +503,7 @@ func runNetworkDetach(c *cli.Context) error {
 // devices alongside sandboxes in interactive mode.
 func pickEndpoint(c *cli.Context, client *api.SandboxClient, title string) (string, error) {
 	// Sandboxes (running only — same filter as the old picker).
-	sbs, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{Limit: 200, Status: "running"})
+	sbs, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{Limit: 200, Status: api.SandboxStatusRunning})
 	if err != nil {
 		return "", err
 	}

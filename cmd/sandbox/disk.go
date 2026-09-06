@@ -342,7 +342,7 @@ func deleteDiskCascade(c *cli.Context, client *api.SandboxClient, ref string) er
 		return err
 	}
 	var sandboxes []api.SandboxView
-	for _, st := range []string{"running", "paused"} {
+	for _, st := range []string{api.SandboxStatusRunning, api.SandboxStatusPaused} {
 		page, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
 			Limit: 200, Status: st,
 		})
@@ -437,7 +437,7 @@ func runDiskAttach(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("usage: createos sandbox disk attach <sandbox> <disk> <mount-path>")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Attach to which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Attach to which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
@@ -451,6 +451,9 @@ func runDiskAttach(c *cli.Context) error {
 	sandboxID, err := resolveSandboxRef(c.Context, client, sandboxRef)
 	if err != nil {
 		return err
+	}
+	if runErr := ensureSandboxRunningFor(c, client, sandboxRef, sandboxID, "disk attach"); runErr != nil {
+		return runErr
 	}
 
 	if diskRef == "" {
@@ -538,7 +541,7 @@ func runDiskDetach(c *cli.Context) error {
 		if !tty {
 			return fmt.Errorf("usage: createos sandbox disk detach <sandbox> <disk> <mount-path>")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Detach from which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Detach from which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return err
 		}
