@@ -622,17 +622,23 @@ func processClientAndSandbox(c *cli.Context, allowCommandAfterRef bool) (*api.Sa
 		if !terminal.IsInteractive() {
 			return nil, "", "", fmt.Errorf("please provide a sandbox ID or name")
 		}
-		pickedID, label, err := pickByStatus(c, client, "Use which sandbox?", "running")
+		pickedID, label, err := pickByStatus(c, client, "Use which sandbox?", api.SandboxStatusRunning)
 		if err != nil {
 			return nil, "", "", err
 		}
 		if pickedID == "" {
 			return nil, "", "", fmt.Errorf("cancelled")
 		}
+		if err := ensureSandboxRunningFor(c, client, label, pickedID, "process"); err != nil {
+			return nil, "", "", err
+		}
 		return client, pickedID, label, nil
 	}
 	id, err := resolveSandboxRef(c.Context, client, ref)
 	if err != nil {
+		return nil, "", "", err
+	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "process"); err != nil {
 		return nil, "", "", err
 	}
 	return client, id, ref, nil
@@ -663,6 +669,9 @@ func processClientSandboxAndOptionalProcess(c *cli.Context) (*api.SandboxClient,
 	}
 	id, err := resolveSandboxRef(c.Context, client, ref)
 	if err != nil {
+		return nil, "", "", "", err
+	}
+	if err := ensureSandboxRunningFor(c, client, ref, id, "process"); err != nil {
 		return nil, "", "", "", err
 	}
 	processID := strings.TrimSpace(c.Args().Get(1))

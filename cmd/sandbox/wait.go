@@ -28,7 +28,7 @@ func waitForStatus(ctx context.Context, client *api.SandboxClient, id string, ta
 	}
 	// Always treat "failed" as terminal — the operation is done, even
 	// if not the way the caller hoped.
-	wanted["failed"] = struct{}{}
+	wanted[api.SandboxStatusFailed] = struct{}{}
 
 	for {
 		if ctx.Err() != nil {

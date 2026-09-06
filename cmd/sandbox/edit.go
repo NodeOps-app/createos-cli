@@ -155,7 +155,7 @@ func resolveTarget(c *cli.Context, client *api.SandboxClient, ref string) (id, l
 	if !terminal.IsInteractive() {
 		return "", "", fmt.Errorf("please provide a sandbox ID or name\n\n  To see your sandboxes, run:\n    createos sandbox list")
 	}
-	return pickByStatus(c, client, "Pick a sandbox to edit", "running")
+	return pickByStatus(c, client, "Pick a sandbox to edit", api.SandboxStatusRunning)
 }
 
 // runEditMenu is the interactive flow once a sandbox is selected. Pulls

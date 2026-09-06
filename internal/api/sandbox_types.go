@@ -2,6 +2,21 @@ package api
 
 import "time"
 
+// Sandbox status constants mirror fc/models.Status values used on the
+// sandbox API wire.
+const (
+	SandboxStatusCreating   = "creating"
+	SandboxStatusRunning    = "running"
+	SandboxStatusDestroyed  = "destroyed"
+	SandboxStatusFailed     = "failed"
+	SandboxStatusPausing    = "pausing"
+	SandboxStatusPaused     = "paused"
+	SandboxStatusResuming   = "resuming"
+	SandboxStatusForking    = "forking"
+	SandboxStatusDestroying = "destroying"
+	SandboxStatusError      = "error"
+)
+
 // ── Sandbox wire types ────────────────────────────────────────────
 //
 // Mirrors fc-spawn's user-facing API. Field names match the JSON the

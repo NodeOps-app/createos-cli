@@ -63,7 +63,7 @@ func runGet(c *cli.Context) error {
 	// whole get just because the counter is unavailable (e.g. destroyed
 	// sandbox where the meter is gone).
 	var bw *api.BandwidthView
-	if sb.Status == "running" || sb.Status == "paused" {
+	if sb.Status == api.SandboxStatusRunning || sb.Status == api.SandboxStatusPaused {
 		if v, berr := client.GetBandwidth(c.Context, id); berr == nil {
 			bw = v
 		}
