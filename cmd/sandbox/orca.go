@@ -32,11 +32,10 @@ import (
 const (
 	orcaSchemaVersion = 2
 	// Orca's git-URL installer clones a whole repo and requires
-	// orca-plugin.json at its root, so this monorepo subdirectory cannot be
-	// installed that way. Until it ships as its own single-package repo, the
-	// only working route is a local checkout via Settings > Plugins > Dev Paths.
-	orcaPluginRepoURL  = "https://github.com/NodeOps-app/createos-plugins"
-	orcaPluginPkgPath  = "packages/orca-plugin"
+	// orca-plugin.json at its root, so the plugin ships as its own
+	// single-package repo. Pin the tag: an unpinned URL tracks the default
+	// branch and can change under an installed workspace.
+	orcaPluginGitURL   = "https://github.com/NodeOps-app/createos-orca-plugin.git#v0.1.0"
 	orcaDefaultShape   = "s-4vcpu-8gb" // remote editors need more than 2 GiB
 	orcaDefaultRootfs  = "devbox:1"    // ships sshd, git, Node 22, opencode, pi
 	orcaDefaultRoot    = "/workspace/repo"
@@ -214,16 +213,12 @@ func runOrcaSetup(c *cli.Context, doctorOnly bool) error {
 
 	fmt.Print("\nNext, install the Orca plugin. Orca performs the install itself,\n" +
 		"so it can show you what the plugin contributes before you approve it.\n\n" +
-		"  1. Clone " + orcaPluginRepoURL + "\n" +
-		"  2. Open Orca > Settings > Plugins > Dev Paths\n" +
-		"  3. Add the path to " + orcaPluginPkgPath + "\n" +
-		"  4. Approve the \"CreateOS Sandbox\" VM recipe when Orca asks\n" +
-		"  5. Turn on Settings > Cloud VM\n\n" +
+		"  1. Open Orca > Settings > Plugins > Install from git URL\n" +
+		"  2. Paste " + orcaPluginGitURL + "\n" +
+		"  3. Approve the \"CreateOS Sandbox\" VM recipe when Orca asks\n" +
+		"  4. Turn on Settings > Cloud VM\n\n" +
 		"Then pick \"CreateOS Sandbox\" when you create a workspace, under\n" +
-		"Run on > Per-Workspace Environment.\n\n" +
-		"Installing by git URL does not work yet: Orca's installer needs\n" +
-		"orca-plugin.json at a repository root, and the plugin lives in a\n" +
-		"subdirectory of that monorepo.\n")
+		"Run on > Per-Workspace Environment.\n")
 	return nil
 }
 
