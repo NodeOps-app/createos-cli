@@ -11,7 +11,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/crypto v0.56.0
-	golang.org/x/mod v0.40.0
+	golang.org/x/mod v0.41.0
 	golang.org/x/term v0.45.0
 )
 
