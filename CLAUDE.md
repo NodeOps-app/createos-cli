@@ -299,7 +299,7 @@ Integrations do not all follow the same path — a CLI change reaches the shelle
 1. **Classify origin.** `fc` is upstream; SDKs, CLI, docs and integrations are downstream consumers. A downstream change that implies new server behavior goes to the user — never invent server behavior inside a client.
 2. **Search every sibling** for the touched symbol, endpoint or flag with `rg`. If a sibling checkout is missing, say so rather than guessing.
 3. **Build a status matrix** per sibling: `already-present` · `missing-needs-update` · `n/a`. Flag the already-present ones — never silently duplicate a change that is already there.
-4. **`fc` → any public repo is a leak-guard boundary.** Strip private implementation, security internals, infra, threat-model notes, and internal-only tooling (`fcctl`, host filesystem paths, mTLS/CA internals). Respect each repo's own wording rules — `fc-sdk/AGENTS.md` forbids the word "VM". Get approval before landing any public edit.
+4. **The control plane is private.** If you do not have access to it, do not guess at server behavior and do not reconstruct its internals here — describe the change you need and hand it to someone who does. Respect each repo's own wording rules; `fc-sdk/AGENTS.md` forbids the word "VM".
 5. **Report, don't edit.** This is a read-and-report protocol: do not change a sibling repo unless the user asks you to.
 
 <!-- MESH:END -->
