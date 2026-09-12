@@ -289,6 +289,7 @@ Integrations do not all follow the same path — a CLI change reaches the shelle
 | `orca-plugin` | Orca | pointer only — code lives in its own repo | `Integrations/Orca` |
 | `dsh-createos` | DeepSeek Harness | imports the TypeScript SDK | `Integrations/DeepSeek-Harness` |
 | `langflow-sandbox-createos` | Langflow | calls the REST API directly | **none yet** |
+| `shared` | shared library | shells out to `createos` CLI | **none yet** |
 
 ### Frozen — do not update
 
