@@ -321,6 +321,8 @@ asks for a few more characters rather than guessing.
 | `createos sandbox push`            | Copy a local file into a sandbox                              |
 | `createos sandbox pull`            | Copy a file out of a sandbox                                  |
 | `createos sandbox tunnel`          | Forward a local port to a port inside a sandbox               |
+| `createos sandbox desktop`         | Open a graphical sandbox in your browser                      |
+| `createos sandbox computer`        | Control the desktop inside a sandbox                          |
 | `createos sandbox shapes`          | List available sandbox sizes (vCPU / RAM / disk)              |
 | `createos sandbox rootfs`          | List built-in OS images you can boot a sandbox from           |
 | `createos sandbox setup`           | Connect a coding harness so its workspaces run on a sandbox   |
