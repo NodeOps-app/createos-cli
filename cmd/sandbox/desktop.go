@@ -62,7 +62,8 @@ func runDesktop(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
-	ref := strings.TrimSpace(c.Args().First())
+	args := parseComputerArgs(c)
+	ref := args.ref
 	var id string
 	switch {
 	case ref != "":
@@ -93,14 +94,14 @@ func runDesktop(c *cli.Context) error {
 		return err
 	}
 
-	screen := c.String("screen")
+	screen := args.screen
 	if !sb.IngressEnabled {
 		if _, err := client.SetSandboxIngress(c.Context, id, true); err != nil {
 			return fmt.Errorf("couldn't turn on the public URL for %s: %w", refLabel(ref, id), err)
 		}
 	}
 
-	if err := waitForDesktop(c.Context, client, id, screen, c.Duration("wait")); err != nil {
+	if err := waitForDesktop(c.Context, client, id, screen, args.wait); err != nil {
 		return err
 	}
 

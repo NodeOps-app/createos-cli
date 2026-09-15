@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
@@ -85,6 +86,7 @@ type computerArgs struct {
 	ref    string
 	screen string
 	out    string
+	wait   time.Duration
 	rest   []string
 }
 
@@ -96,7 +98,7 @@ type computerArgs struct {
 // scanned by hand — the same workaround `sandbox edit` already makes for
 // --ingress.
 func parseComputerArgs(c *cli.Context) computerArgs {
-	parsed := computerArgs{screen: c.String("screen"), out: c.String("out")}
+	parsed := computerArgs{screen: c.String("screen"), out: c.String("out"), wait: c.Duration("wait")}
 	args := c.Args().Slice()
 
 	for i := 0; i < len(args); i++ {
@@ -123,6 +125,16 @@ func parseComputerArgs(c *cli.Context) computerArgs {
 			}
 		case strings.HasPrefix(a, "--out="):
 			parsed.out = strings.TrimPrefix(a, "--out=")
+		case a == "--wait":
+			if v := take(); v != "" {
+				if d, err := time.ParseDuration(v); err == nil {
+					parsed.wait = d
+				}
+			}
+		case strings.HasPrefix(a, "--wait="):
+			if d, err := time.ParseDuration(strings.TrimPrefix(a, "--wait=")); err == nil {
+				parsed.wait = d
+			}
 		default:
 			parsed.rest = append(parsed.rest, a)
 		}
