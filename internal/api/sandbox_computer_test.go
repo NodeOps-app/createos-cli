@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -25,8 +26,8 @@ func TestComputerErrorRetryable(t *testing.T) {
 		{http.StatusForbidden, false, "bad credentials do not fix themselves"},
 	}
 	for _, tc := range cases {
-		err, ok := ParseComputerError(tc.status, nil).(*ComputerError)
-		if !ok {
+		var err *ComputerError
+		if !errors.As(ParseComputerError(tc.status, nil), &err) {
 			t.Fatalf("status %d: expected a *ComputerError", tc.status)
 		}
 		if got := err.Retryable(); got != tc.want {

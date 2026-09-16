@@ -90,18 +90,18 @@ func runDesktop(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := ensureDesktopReady(c, client, sb); err != nil {
+	if err = ensureDesktopReady(c, client, sb); err != nil {
 		return err
 	}
 
 	screen := args.screen
 	if !sb.IngressEnabled {
-		if _, err := client.SetSandboxIngress(c.Context, id, true); err != nil {
+		if _, err = client.SetSandboxIngress(c.Context, id, true); err != nil {
 			return fmt.Errorf("couldn't turn on the public URL for %s: %w", refLabel(ref, id), err)
 		}
 	}
 
-	if err := waitForDesktop(c.Context, client, id, screen, args.wait); err != nil {
+	if err = waitForDesktop(c.Context, client, id, screen, args.wait); err != nil {
 		return err
 	}
 
