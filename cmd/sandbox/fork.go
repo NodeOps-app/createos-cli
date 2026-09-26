@@ -167,13 +167,13 @@ func ensureForkable(ctx context.Context, client *api.SandboxClient, srcID string
 		return err
 	}
 	switch sb.Status {
-	case "paused":
+	case api.SandboxStatusPaused:
 		return nil
-	case "pausing":
+	case api.SandboxStatusPausing:
 		// Already on its way down; waiting is not a decision we are making
 		// on the user's behalf.
 		return waitUntilPaused(ctx, client, srcID)
-	case "running":
+	case api.SandboxStatusRunning:
 		// Deliberately NOT pausing here. Pausing a running sandbox stops
 		// whatever it is serving, and `fork` must never do that as a side
 		// effect — the source could be a live dev server or a demo someone
@@ -195,10 +195,10 @@ func pauseForFork(ctx context.Context, client *api.SandboxClient, srcID string) 
 		return err
 	}
 	switch sb.Status {
-	case "paused":
+	case api.SandboxStatusPaused:
 		return nil
-	case "pausing":
-	case "running":
+	case api.SandboxStatusPausing:
+	case api.SandboxStatusRunning:
 		if _, pauseErr := client.PauseSandbox(ctx, srcID); pauseErr != nil {
 			return fmt.Errorf("pause %s before forking: %w", srcID, pauseErr)
 		}
@@ -212,11 +212,11 @@ func pauseForFork(ctx context.Context, client *api.SandboxClient, srcID string) 
 // answers while the sandbox is still `pausing`, and a fork issued in that
 // window is rejected with "sandbox is running, expected paused or error".
 func waitUntilPaused(ctx context.Context, client *api.SandboxClient, srcID string) error {
-	final, err := waitForStatus(ctx, client, srcID, "paused")
+	final, err := waitForStatus(ctx, client, srcID, api.SandboxStatusPaused)
 	if err != nil {
 		return err
 	}
-	if final.Status != "paused" {
+	if final.Status != api.SandboxStatusPaused {
 		return fmt.Errorf("sandbox %s ended in %q while pausing — see `createos sandbox get %s`", srcID, final.Status, srcID)
 	}
 	return nil

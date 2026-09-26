@@ -96,9 +96,6 @@ func correctedCommandLine(flagName string) string {
 		}
 		rest = append(rest, a)
 	}
-	if len(moved) == 0 {
-		return "createos " + strings.Join(args, " ")
-	}
 	return "createos " + strings.Join(append(moved, rest...), " ")
 }
 
@@ -120,16 +117,7 @@ func correctedCommandLine(flagName string) string {
 // subcommand's Run instead. So "argument present here" and "unknown
 // command" are the same condition.
 func installCommandSuggestions(app *cli.App) {
-	fallback := app.Action
-	app.Action = func(c *cli.Context) error {
-		if name := c.Args().First(); name != "" {
-			return unknownCommandError(app.Commands, "", name)
-		}
-		if fallback != nil {
-			return fallback(c)
-		}
-		return cli.ShowSubcommandHelp(c)
-	}
+	app.Action = suggestingAction(app.Action, app.Commands, "")
 	for _, cmd := range app.Commands {
 		installGroupSuggestions(cmd)
 	}
@@ -139,19 +127,21 @@ func installGroupSuggestions(cmd *cli.Command) {
 	if cmd == nil || len(cmd.Subcommands) == 0 {
 		return
 	}
-	prefix := cmd.Name + " "
-	fallback := cmd.Action
-	cmd.Action = func(c *cli.Context) error {
+	cmd.Action = suggestingAction(cmd.Action, cmd.Subcommands, cmd.Name+" ")
+	for _, sub := range cmd.Subcommands {
+		installGroupSuggestions(sub)
+	}
+}
+
+func suggestingAction(fallback cli.ActionFunc, cands []*cli.Command, prefix string) cli.ActionFunc {
+	return func(c *cli.Context) error {
 		if name := c.Args().First(); name != "" {
-			return unknownCommandError(cmd.Subcommands, prefix, name)
+			return unknownCommandError(cands, prefix, name)
 		}
 		if fallback != nil {
 			return fallback(c)
 		}
 		return cli.ShowSubcommandHelp(c)
-	}
-	for _, sub := range cmd.Subcommands {
-		installGroupSuggestions(sub)
 	}
 }
 
@@ -205,7 +195,7 @@ func editDistance(a, b string) int {
 			if a[i-1] == b[j-1] {
 				cost = 0
 			}
-			cur[j] = min(prev[j]+1, min(cur[j-1]+1, prev[j-1]+cost))
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
 		}
 		prev = cur
 	}

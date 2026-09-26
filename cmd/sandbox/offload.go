@@ -82,19 +82,8 @@ func runOffload(c *cli.Context) error {
 		return err
 	}
 
-	ctx := c.Context
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
-	}
-
-	quiet := output.IsJSON(c)
-	say := func(format string, a ...any) {
-		if !quiet {
-			pterm.Info.Printfln(format, a...)
-		}
-	}
+	ctx, cancel, quiet, say := composeRun(c, opts)
+	defer cancel()
 
 	tree, err := stageDir(ctx, dir, stageOptions{Exclude: opts.Exclude})
 	if err != nil {
@@ -141,14 +130,13 @@ func runOffload(c *cli.Context) error {
 	}
 
 	teardownFailure := ""
+	destroyed = true
 	if res.ExitCode != 0 && c.Bool("keep-on-fail") {
-		destroyed = true
 		pterm.Warning.Printfln("Command exited %d. Sandbox %s kept.", res.ExitCode, sb.ID)
 		fmt.Printf("    Look around:  createos sandbox shell %s\n", sb.ID)
 		fmt.Printf("    Destroy it:   createos sandbox rm --force %s\n", sb.ID)
 	} else {
 		destroyQuiet(ctx, client, sb.ID, func(msg string) { teardownFailure = msg })
-		destroyed = true
 	}
 
 	if quiet {
@@ -293,7 +281,7 @@ func untarInto(r io.Reader, root string) error {
 		}
 		name := path.Clean("/" + filepath.ToSlash(hdr.Name))
 		name = strings.TrimPrefix(name, "/")
-		if name == "" || name == "." {
+		if name == "" {
 			continue
 		}
 		switch hdr.Typeflag {
@@ -313,7 +301,6 @@ func untarInto(r io.Reader, root string) error {
 		default:
 			// Symlinks and devices out of a sandbox have no safe meaning
 			// on the caller's disk. Skip them rather than guess.
-			continue
 		}
 	}
 }

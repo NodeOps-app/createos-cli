@@ -136,19 +136,8 @@ func runMatrix(c *cli.Context) error {
 		return err
 	}
 
-	ctx := c.Context
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
-	}
-
-	quiet := output.IsJSON(c)
-	say := func(format string, a ...any) {
-		if !quiet {
-			pterm.Info.Printfln(format, a...)
-		}
-	}
+	ctx, cancel, quiet, say := composeRun(c, opts)
+	defer cancel()
 
 	logDir, err := matrixLogDir(c.String("logs"))
 	if err != nil {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/go-resty/resty/v2"
 )
 
 // Computer-use routes: GET/POST /v1/sandboxes/:id/computer/*.
@@ -51,38 +53,18 @@ type ComputerConnection struct {
 // readiness probe: it is the cheapest route that only answers 2xx once the
 // desktop stack (Xvfb → XFCE → x11vnc → websockify) is actually up.
 func (c *SandboxClient) ComputerScreen(ctx context.Context, id, screen string) (*ComputerScreenGeometry, error) {
-	var envelope Response[ComputerScreenGeometry]
-	resp, err := c.Client.R().
+	return computerGet[ComputerScreenGeometry](c.Client.R().
 		SetContext(ctx).
 		SetPathParam("id", id).
-		SetQueryParam("screen_id", computerScreen(screen)).
-		SetResult(&envelope).
-		Get("/v1/sandboxes/{id}/computer/screen")
-	if err != nil {
-		return nil, err
-	}
-	if resp.IsError() {
-		return nil, ParseComputerError(resp.StatusCode(), resp.Body())
-	}
-	return &envelope.Data, nil
+		SetQueryParam("screen_id", computerScreen(screen)), "/v1/sandboxes/{id}/computer/screen")
 }
 
 // ComputerCursor returns the pointer's current position.
 func (c *SandboxClient) ComputerCursor(ctx context.Context, id, screen string) (*ComputerCursorPos, error) {
-	var envelope Response[ComputerCursorPos]
-	resp, err := c.Client.R().
+	return computerGet[ComputerCursorPos](c.Client.R().
 		SetContext(ctx).
 		SetPathParam("id", id).
-		SetQueryParam("screen_id", computerScreen(screen)).
-		SetResult(&envelope).
-		Get("/v1/sandboxes/{id}/computer/cursor")
-	if err != nil {
-		return nil, err
-	}
-	if resp.IsError() {
-		return nil, ParseComputerError(resp.StatusCode(), resp.Body())
-	}
-	return &envelope.Data, nil
+		SetQueryParam("screen_id", computerScreen(screen)), "/v1/sandboxes/{id}/computer/cursor")
 }
 
 // ComputerWindows lists the windows on the screen. The window shape is fc's to
@@ -153,13 +135,17 @@ func (c *SandboxClient) ComputerOpen(ctx context.Context, id, screen, target str
 // ingress is enabled on the sandbox; a fresh call invalidates the previous
 // link for new connections.
 func (c *SandboxClient) ComputerConnect(ctx context.Context, id, screen string) (*ComputerConnection, error) {
-	var envelope Response[ComputerConnection]
-	resp, err := c.Client.R().
+	return computerGet[ComputerConnection](c.Client.R().
 		SetContext(ctx).
 		SetPathParam("id", id).
-		SetPathParam("screen", computerScreen(screen)).
-		SetResult(&envelope).
-		Get("/v1/sandboxes/{id}/computer/screens/{screen}/connect")
+		SetPathParam("screen", computerScreen(screen)), "/v1/sandboxes/{id}/computer/screens/{screen}/connect")
+}
+
+// computerGet sends req as a GET and unwraps the typed Response envelope.
+// Go has no generic methods, so this is a plain function.
+func computerGet[T any](req *resty.Request, url string) (*T, error) {
+	var envelope Response[T]
+	resp, err := req.SetResult(&envelope).Get(url)
 	if err != nil {
 		return nil, err
 	}

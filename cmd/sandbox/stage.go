@@ -245,7 +245,7 @@ func stageTarAppend(tw *tar.Writer, root, rel string) error {
 	if err = tw.WriteHeader(hdr); err != nil {
 		return err
 	}
-	if link != "" || !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() {
 		return nil
 	}
 	f, err := os.Open(abs) // #nosec G304,G703 -- see the Lstat note above

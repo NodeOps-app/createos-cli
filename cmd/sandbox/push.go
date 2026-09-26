@@ -61,12 +61,8 @@ func runPush(c *cli.Context) error {
 	if runErr := ensureSandboxRunningFor(c, client, ref, id, "push"); runErr != nil {
 		return runErr
 	}
-	mount, err := diskMountBlocksFileAPI(c.Context, client, id, remote)
-	if err != nil {
+	if err := refuseDiskMountTransfer(c.Context, client, id, remote, "push"); err != nil {
 		return err
-	}
-	if mount != "" {
-		return diskMountFileAPIError(remote, mount, "push")
 	}
 
 	// Open the source: a real file (we know its size for Content-Length)

@@ -12,7 +12,6 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/output"
-	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 // The desktop stack (Xvfb → XFCE → x11vnc → websockify) starts *after* the
@@ -63,27 +62,13 @@ func runDesktop(c *cli.Context) error {
 	}
 
 	args := parseComputerArgs(c)
-	ref := args.ref
-	var id string
-	switch {
-	case ref != "":
-		resolved, err := resolveSandboxRef(c.Context, client, ref)
-		if err != nil {
-			return err
-		}
-		id = resolved
-	case terminal.IsInteractive():
-		picked, label, err := pickByStatus(c, client, "Pick a sandbox to open", api.SandboxStatusRunning)
-		if err != nil {
-			return err
-		}
-		if picked == "" {
-			fmt.Println("Cancelled. Nothing changed.")
-			return nil
-		}
-		id, ref = picked, label
-	default:
-		return fmt.Errorf("please provide a sandbox ID or name\n\n  To see your sandboxes, run:\n    createos sandbox list")
+	id, ref, err := resolveTarget(c, client, args.ref, "Pick a sandbox to open")
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		fmt.Println("Cancelled. Nothing changed.")
+		return nil
 	}
 
 	sb, err := client.GetSandbox(c.Context, id)

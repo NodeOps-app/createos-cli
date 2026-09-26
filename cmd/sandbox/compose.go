@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 )
 
 // The composed verbs (offload, matrix) share one box recipe. Keeping the
@@ -122,6 +124,22 @@ func parseKeyValues(pairs []string) (map[string]string, error) {
 
 // createComposeBox boots one sandbox to the shared recipe and waits for it
 // to run.
+// composeRun applies --timeout to the command context and returns an info
+// printer that stays silent under JSON output.
+func composeRun(c *cli.Context, opts *composeOptions) (context.Context, context.CancelFunc, bool, func(string, ...any)) {
+	ctx, cancel := c.Context, context.CancelFunc(func() {})
+	if opts.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+	}
+	quiet := output.IsJSON(c)
+	say := func(format string, a ...any) {
+		if !quiet {
+			pterm.Info.Printfln(format, a...)
+		}
+	}
+	return ctx, cancel, quiet, say
+}
+
 func createComposeBox(ctx context.Context, client *api.SandboxClient, opts *composeOptions) (*api.SandboxView, error) {
 	// No name: these boxes are machinery with a lifetime of one command,
 	// and a generated name is easier to tell apart in `sandbox ls` than a
@@ -144,11 +162,11 @@ func createComposeBox(ctx context.Context, client *api.SandboxClient, opts *comp
 	// that is not "running" has to destroy it, or a readiness timeout
 	// leaves a machine nobody knows about — offload and matrix only see
 	// the error, never the id.
-	sb, err := waitForStatus(ctx, client, created.ID, "running")
+	sb, err := waitForStatus(ctx, client, created.ID, api.SandboxStatusRunning)
 	if err != nil {
 		return nil, cleanupAfterCreate(ctx, client, created.ID, err)
 	}
-	if sb.Status != "running" {
+	if sb.Status != api.SandboxStatusRunning {
 		return nil, cleanupAfterCreate(ctx, client, sb.ID,
 			fmt.Errorf("sandbox %s came up %s, not running", sb.ID, sb.Status))
 	}
@@ -159,9 +177,7 @@ func createComposeBox(ctx context.Context, client *api.SandboxClient, opts *comp
 // the outcome into the error the caller sees. The id is always named: if
 // the teardown itself fails, the user needs it to clean up by hand.
 func cleanupAfterCreate(ctx context.Context, client *api.SandboxClient, id string, cause error) error {
-	tearCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-	defer cancel()
-	if err := client.DestroySandbox(tearCtx, id); err != nil {
+	if err := destroyDetached(ctx, client, id); err != nil {
 		return fmt.Errorf("%w\n\n  Sandbox %s was created and could not be destroyed (%w).\n  It is still billable. Remove it with:\n    createos sandbox rm --force %s",
 			cause, id, err, id)
 	}
@@ -263,11 +279,15 @@ func runManaged(
 // this, and a teardown error must not mask the real one — but it must not
 // be swallowed either, because the sandbox is still billable.
 func destroyQuiet(ctx context.Context, client *api.SandboxClient, id string, warn func(string)) {
-	// The caller's context may already be cancelled (Ctrl-C, timeout).
-	// Teardown still has to happen, so give it a context of its own.
-	tearCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-	defer cancel()
-	if err := client.DestroySandbox(tearCtx, id); err != nil && warn != nil {
+	if err := destroyDetached(ctx, client, id); err != nil && warn != nil {
 		warn(fmt.Sprintf("could not destroy %s: %v — remove it with: createos sandbox rm --force %s", id, err, id))
 	}
+}
+
+// destroyDetached destroys id even when ctx is already cancelled (Ctrl-C,
+// timeout): teardown still has to happen, so it gets a context of its own.
+func destroyDetached(ctx context.Context, client *api.SandboxClient, id string) error {
+	tearCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	return client.DestroySandbox(tearCtx, id)
 }

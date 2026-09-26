@@ -49,6 +49,19 @@ func diskMountBlocksFileAPI(ctx context.Context, client *api.SandboxClient, sand
 	return "", nil
 }
 
+// refuseDiskMountTransfer fails when remote sits inside a disk mount, or
+// when the mount state cannot be read.
+func refuseDiskMountTransfer(ctx context.Context, client *api.SandboxClient, sandboxID, remote, verb string) error {
+	mount, err := diskMountBlocksFileAPI(ctx, client, sandboxID, remote)
+	if err != nil {
+		return err
+	}
+	if mount != "" {
+		return diskMountFileAPIError(remote, mount, verb)
+	}
+	return nil
+}
+
 // diskMountFileAPIError is the refusal. This is a hard stop rather than a
 // warning: the documented outcome is a crashed mount and a lost object, so
 // carrying on would destroy data the user believes they just saved.
