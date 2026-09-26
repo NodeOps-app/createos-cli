@@ -328,6 +328,7 @@ func applyIngressFlag(c *cli.Context, client *api.SandboxClient, label, id, valu
 			fmt.Printf("    %s\n", updated.IngressURLTemplate)
 			pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
 		}
+		warnIngressCaveats()
 	} else {
 		pterm.Success.Printfln("Public URL is off for %s", refLabel(label, id))
 	}

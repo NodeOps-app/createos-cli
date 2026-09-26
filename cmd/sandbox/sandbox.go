@@ -15,6 +15,8 @@ func NewSandboxCommand() *cli.Command {
 		Usage:   "Manage sandboxes",
 		Subcommands: []*cli.Command{
 			newRunCommand(),
+			newOffloadCommand(),
+			newMatrixCommand(),
 			newCreateCommand(),
 			newListCommand(),
 			newGetCommand(),
@@ -23,6 +25,7 @@ func NewSandboxCommand() *cli.Command {
 			newPauseCommand(),
 			newResumeCommand(),
 			newForkCommand(),
+			newSelfCommand(),
 			newExecCommand(),
 			newProcessCommand(),
 			newPushCommand(),
