@@ -236,6 +236,15 @@ func insertOpenCodePlugin(existing, entry, pkgDir string) (string, bool, error) 
 			// one already there.
 			sep = ","
 		}
+		// Follow the layout already in the file. An array written on one line
+		// stays on one line: opening a new line inside it would leave whatever
+		// was there trailing off the end of ours.
+		if head, _, _ := strings.Cut(existing[open:], "\n"); strings.Contains(head, "]") {
+			if sep != "" {
+				sep = ", "
+			}
+			return existing[:open] + entry + sep + existing[open:], true, nil
+		}
 		return existing[:open] + "\n    " + entry + sep + existing[open:], true, nil
 	}
 

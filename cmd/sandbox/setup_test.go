@@ -51,6 +51,28 @@ func TestInsertOpenCodePluginKeepsExistingEntriesAndComments(t *testing.T) {
 	}
 }
 
+func TestInsertOpenCodePluginKeepsASingleLineArrayOnOneLine(t *testing.T) {
+	existing := "{\n  \"plugins\": [\"./other\"],\n  \"model\": \"x\"\n}\n"
+	out, changed, err := insertOpenCodePlugin(existing, `"/p/opencode-plugin"`, "/p/opencode-plugin")
+	if err != nil || !changed {
+		t.Fatalf("insert = (%v, %v), want (true, nil)", changed, err)
+	}
+	if want := "  \"plugins\": [\"/p/opencode-plugin\", \"./other\"],"; !strings.Contains(out, want) {
+		t.Fatalf("a one-line array must stay on one line:\n%s", out)
+	}
+}
+
+func TestInsertOpenCodePluginIndentsIntoAMultiLineArray(t *testing.T) {
+	existing := "{\n  \"plugins\": [\n    \"./other\"\n  ]\n}\n"
+	out, changed, err := insertOpenCodePlugin(existing, `"/p/opencode-plugin"`, "/p/opencode-plugin")
+	if err != nil || !changed {
+		t.Fatalf("insert = (%v, %v), want (true, nil)", changed, err)
+	}
+	if want := "\n    \"/p/opencode-plugin\",\n    \"./other\"\n"; !strings.Contains(out, want) {
+		t.Fatalf("a multi-line array must keep one entry per line:\n%s", out)
+	}
+}
+
 func TestInsertOpenCodePluginAddsKeyWhenAbsent(t *testing.T) {
 	out, changed, err := insertOpenCodePlugin("{\n  \"model\": \"x\"\n}\n", `"/p/opencode-plugin"`, "/p/opencode-plugin")
 	if err != nil || !changed {
