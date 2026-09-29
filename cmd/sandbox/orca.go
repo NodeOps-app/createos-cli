@@ -121,18 +121,6 @@ type orcaLifecyclePayload struct {
 	} `json:"recipeResult"`
 }
 
-// newSetupCommand returns `createos sandbox setup`, the harness integration
-// group.
-func newSetupCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "setup",
-		Usage: "Connect a coding harness to CreateOS Sandbox",
-		Description: "Each subcommand wires one harness to CreateOS Sandbox, so a\n" +
-			"workspace runs on a disposable microVM instead of your laptop.",
-		Subcommands: []*cli.Command{newSetupHerdrCommand(), newSetupOrcaCommand()},
-	}
-}
-
 func newSetupOrcaCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "orca",

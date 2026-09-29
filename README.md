@@ -341,15 +341,44 @@ asks for a few more characters rather than guessing.
 | `--ingress`     | Give the sandbox a public HTTPS URL                                               |
 | `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
 
-**`sandbox setup` — run an editor's workspaces on sandboxes:**
+**`sandbox setup` — run a coding harness on sandboxes:**
 
-`createos sandbox setup orca` connects [Orca](https://orca.dev) so that each of
-its workspaces runs on its own disposable sandbox instead of your laptop.
+One subcommand per host on the
+[Integrations](https://createos.sh/docs/Sandbox/Integrations) page. Each one
+installs the CreateOS plugin for that host, so its work runs in a disposable
+sandbox instead of on your laptop.
+
+| Command                                      | Host             | Needs           |
+| -------------------------------------------- | ---------------- | --------------- |
+| `createos sandbox setup claude-code`         | Claude Code      | `claude`        |
+| `createos sandbox setup codex`               | Codex            | `codex`         |
+| `createos sandbox setup deepseek`            | DeepSeek Harness | `dsh`, `node`   |
+| `createos sandbox setup herdr`               | Herdr            | `herdr`, `bun`  |
+| `createos sandbox setup opencode`            | OpenCode         | `opencode`, `bun` |
+| `createos sandbox setup orca`                | Orca             | `git`, `ssh`    |
+| `createos sandbox setup pi`                  | Pi               | `pi`            |
+
+Every subcommand takes `--doctor`, which checks the prerequisites and reports
+without changing anything. Running one twice is safe — an install that is
+already in place is left alone.
 
 ```bash
-createos sandbox setup orca --doctor   # check prerequisites, change nothing
-createos sandbox setup orca            # print the plugin install steps
+createos sandbox setup claude-code --doctor   # check prerequisites, change nothing
+createos sandbox setup claude-code            # add the marketplace + install the plugin
 ```
+
+`opencode` and `deepseek` have no installer of their own, so setup
+clones the plugins into `~/.config/createos/plugins` and refreshes that clone
+on each run. Pass `--local <path>` to use your own checkout instead. The
+OpenCode setup also adds the plugin to your OpenCode config, backing the file
+up to `<config>.before-createos` first; `--mode remote` moves OpenCode's own
+shell and file tools into the sandbox as well.
+
+The DeepSeek Harness plugin reads its CreateOS credentials from
+`CREATEOS_SANDBOX_API_KEY` and `CREATEOS_SANDBOX_SHAPE`. Setup reports whether
+they are set but never reads or prints a key — export them yourself.
+
+**Orca**
 
 The workspace checkout is pushed into the sandbox rather than cloned, so no git
 token ever reaches the box and private repositories work with no extra setup.
@@ -357,9 +386,9 @@ Set `CREATEOS_AGENTS` to install coding agents at create time, for example
 `CREATEOS_AGENTS=claude,codex`.
 
 Orca calls this command itself for each lifecycle phase once its plugin is
-installed. The plugin lives in
-[NodeOps-app/createos-plugins](https://github.com/NodeOps-app/createos-plugins)
-under `packages/orca-plugin`.
+installed. The plugins live in
+[NodeOps-app/createos-plugin](https://github.com/NodeOps-app/createos-plugin)
+under `packages/`.
 
 **When to use `exec`, `shell`, `process`, and PTY:**
 
