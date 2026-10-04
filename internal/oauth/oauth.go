@@ -19,8 +19,9 @@ import (
 
 // ServerMetadata holds the OAuth authorization server metadata (RFC 8414)
 type ServerMetadata struct {
-	AuthorizationEndpoint string `json:"authorization_endpoint"`
-	TokenEndpoint         string `json:"token_endpoint"`
+	AuthorizationEndpoint       string `json:"authorization_endpoint"`
+	TokenEndpoint               string `json:"token_endpoint"`
+	DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
 }
 
 // TokenResponse holds the token endpoint response
@@ -39,12 +40,17 @@ type PKCEPair struct {
 
 // FetchServerMetadata fetches OAuth server metadata from {baseURL}/.well-known/openid-configuration
 func FetchServerMetadata(baseURL string) (*ServerMetadata, error) {
+	return FetchServerMetadataContext(context.Background(), baseURL)
+}
+
+// FetchServerMetadataContext fetches discovery metadata with cancellation and a timeout.
+func FetchServerMetadataContext(ctx context.Context, baseURL string) (*ServerMetadata, error) {
 	metaURL := strings.TrimRight(baseURL, "/") + "/.well-known/openid-configuration"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, metaURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach authorization server")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach authorization server — check your internet connection")
 	}

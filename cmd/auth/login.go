@@ -3,6 +3,8 @@ package auth
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/pterm/pterm"
@@ -24,6 +26,10 @@ func NewLoginCommand() *cli.Command {
 		Name:  "login",
 		Usage: "Sign in to your CreateOS account",
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "device",
+				Usage: "Sign in with a device code using a browser on any device",
+			},
 			&cli.StringFlag{
 				Name:    "token",
 				Aliases: []string{"t"},
@@ -31,6 +37,9 @@ func NewLoginCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if c.Bool("device") && c.String("token") != "" {
+				return fmt.Errorf("choose either --device or --token to sign in")
+			}
 			// --token flag: API key flow (works in both TTY and non-TTY)
 			if token := c.String("token"); token != "" {
 				if err := config.SaveToken(token); err != nil {
@@ -40,14 +49,19 @@ func NewLoginCommand() *cli.Command {
 				return nil
 			}
 
-			// Non-interactive (CI/script): require --token flag
+			if c.Bool("device") {
+				return loginWithDevice(c)
+			}
+
+			// Non-interactive (CI/script): require an explicit login method
 			if !terminal.IsInteractive() {
-				return fmt.Errorf("non-interactive mode: use --token flag to sign in\n\n  Example:\n    createos login --token <your-api-token>")
+				return fmt.Errorf("non-interactive mode: use --token for automation or --device to sign in using another browser\n\n  Example:\n    createos login --token <your-api-token>")
 			}
 
 			// Interactive: let user choose auth method
 			options := []string{
 				"Sign in with browser (recommended)",
+				"Sign in with a device code (remote terminal)",
 				"Sign in with API token",
 			}
 			selected, err := pterm.DefaultInteractiveSelect.
@@ -58,6 +72,9 @@ func NewLoginCommand() *cli.Command {
 			}
 
 			if selected == options[1] {
+				return loginWithDevice(c)
+			}
+			if selected == options[2] {
 				return loginWithAPIToken()
 			}
 			return loginWithBrowser()
@@ -139,6 +156,43 @@ func loginWithBrowser() error {
 		return fmt.Errorf("could not complete sign in: %w", err)
 	}
 
+	return saveLoginSession(tokenResp, meta.TokenEndpoint)
+}
+
+func loginWithDevice(c *cli.Context) error {
+	ctx, stop := signal.NotifyContext(c.Context, os.Interrupt)
+	defer stop()
+	pterm.Info.Println("Starting device login...")
+	meta, err := internaloauth.FetchServerMetadataContext(ctx, config.OAuthIssuerURL)
+	if err != nil {
+		return fmt.Errorf("could not reach authorization server: %w", err)
+	}
+	if meta.DeviceAuthorizationEndpoint == "" || meta.TokenEndpoint == "" {
+		return fmt.Errorf("device sign in is unavailable — use browser login or 'createos login --token'")
+	}
+	auth, err := internaloauth.StartDeviceAuthorization(ctx, meta.DeviceAuthorizationEndpoint, config.OAuthClientID)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	pterm.Println("  Open this URL in a browser on this or another device:")
+	pterm.Println("  " + auth.VerificationURI)
+	pterm.Printf("  Enter code: %s\n", auth.UserCode)
+	if auth.VerificationURIComplete != "" {
+		pterm.Println("  Or open this link and confirm the same code:")
+		pterm.Println("  " + auth.VerificationURIComplete)
+	}
+	pterm.Printf("  Code expires in %s. Press Ctrl+C to cancel.\n", (time.Duration(auth.ExpiresIn) * time.Second).Round(time.Second))
+	fmt.Println()
+	pterm.Info.Println("Waiting for you to approve sign in...")
+	tokenResp, err := internaloauth.PollDeviceToken(ctx, meta.TokenEndpoint, config.OAuthClientID, auth)
+	if err != nil {
+		return err
+	}
+	return saveLoginSession(tokenResp, meta.TokenEndpoint)
+}
+
+func saveLoginSession(tokenResp *internaloauth.TokenResponse, tokenEndpoint string) error {
 	expiresAt := time.Now().Unix() + int64(tokenResp.ExpiresIn)
 	if tokenResp.ExpiresIn <= 0 {
 		expiresAt = time.Now().Unix() + 3600
@@ -147,7 +201,7 @@ func loginWithBrowser() error {
 		AccessToken:   tokenResp.AccessToken,
 		RefreshToken:  tokenResp.RefreshToken,
 		ExpiresAt:     expiresAt,
-		TokenEndpoint: meta.TokenEndpoint,
+		TokenEndpoint: tokenEndpoint,
 	}
 	if err := config.SaveOAuthSession(session); err != nil {
 		return fmt.Errorf("could not save your session: %w", err)
