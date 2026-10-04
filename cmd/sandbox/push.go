@@ -58,7 +58,10 @@ func runPush(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := ensureSandboxRunningFor(c, client, ref, id, "push"); err != nil {
+	if runErr := ensureSandboxRunningFor(c, client, ref, id, "push"); runErr != nil {
+		return runErr
+	}
+	if err := refuseDiskMountTransfer(c.Context, client, id, remote, "push"); err != nil {
 		return err
 	}
 

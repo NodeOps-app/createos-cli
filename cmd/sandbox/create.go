@@ -312,6 +312,7 @@ func printCreateResult(resp *api.SandboxCreateResp) {
 		pterm.Success.Println("Reachable from anywhere over HTTPS:")
 		fmt.Printf("    %s\n", resp.IngressURLTemplate)
 		pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
+		warnIngressCaveats()
 	}
 
 	if resp.AutoPauseAfterSeconds != nil {
