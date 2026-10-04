@@ -99,29 +99,27 @@ detect-secrets audit .secrets.baseline
 
 Choose one of the following methods:
 
-**Option A — Browser login (OAuth, recommended)**
+**Option A — Device code (default)**
 
 ```bash
 createos login
 ```
 
-This opens your browser to complete sign in. Your session is saved automatically.
+Device-code login is selected by default in the interactive menu. Open the displayed
+link on any device, confirm the code, sign in, and approve access. The CLI waits for
+approval and saves your session automatically. Press Ctrl+C to cancel.
 
-**Option B — Device code (remote terminals)**
-
-```bash
-createos login --device
-```
-
-Open the displayed link on any device, confirm the code, sign in, and approve access.
-The CLI waits for approval and saves the same refreshable session as browser login.
-No local callback port is needed. Press Ctrl+C to cancel. You can also select
-"Sign in with a device code (remote terminal)" from the interactive login menu.
+Use `createos login --device` to skip the menu and start device login directly.
 
 Device login requires the identity server to advertise a device authorization
 endpoint and the CLI's registered public client to allow
 `urn:ietf:params:oauth:grant-type:device_code` with `openid offline_access` scopes
 and the `refresh_token` grant.
+
+**Option B — Browser login**
+
+Run `createos login` and select "Sign in with browser". This opens your local
+browser to complete sign in and saves the same refreshable session.
 
 **Option C — API token**
 

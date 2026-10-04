@@ -60,8 +60,8 @@ func NewLoginCommand() *cli.Command {
 
 			// Interactive: let user choose auth method
 			options := []string{
-				"Sign in with browser (recommended)",
-				"Sign in with a device code (remote terminal)",
+				"Sign in with device code",
+				"Sign in with browser",
 				"Sign in with API token",
 			}
 			selected, err := pterm.DefaultInteractiveSelect.
@@ -71,7 +71,7 @@ func NewLoginCommand() *cli.Command {
 				return fmt.Errorf("sign in cancelled")
 			}
 
-			if selected == options[1] {
+			if selected == options[0] {
 				return loginWithDevice(c)
 			}
 			if selected == options[2] {
