@@ -1,4 +1,4 @@
-// Package oauth implements the OAuth 2.0 authorization code flow with PKCE.
+// Package oauth implements the OAuth 2.0 authorization code (PKCE) and device authorization flows.
 package oauth
 
 import (

@@ -99,15 +99,20 @@ detect-secrets audit .secrets.baseline
 
 Choose one of the following methods:
 
-**Option A — Browser login (OAuth, recommended)**
+**Option A — Device code (default)**
 
 ```bash
 createos login
 ```
 
-This opens your browser to complete sign in. Your session is saved automatically.
+Open the displayed link and follow the instructions to sign in.
+Use `createos login --device` to skip the menu.
 
-**Option B — API token**
+**Option B — Browser login**
+
+Run `createos login` and select "Sign in with browser".
+
+**Option C — API token**
 
 Get your API token from your [CreateOS dashboard](https://createos.nodeops.network/profile), then run:
 
@@ -117,7 +122,7 @@ createos login --token <your-api-token>
 
 Or run `createos login` interactively and select "Sign in with API token" when prompted.
 
-> In CI or non-interactive environments, you must use the `--token` flag.
+> For unattended CI, use `--token`.
 
 **2. Confirm your account**
 
@@ -143,7 +148,7 @@ createos --help
 
 | Command           | Description                           |
 | ----------------- | ------------------------------------- |
-| `createos login`  | Sign in with browser or API token     |
+| `createos login`  | Sign in with browser, device code, or API token     |
 | `createos logout` | Sign out                              |
 | `createos whoami` | Show the currently authenticated user |
 
