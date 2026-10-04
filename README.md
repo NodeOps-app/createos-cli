@@ -105,21 +105,12 @@ Choose one of the following methods:
 createos login
 ```
 
-Device-code login is selected by default in the interactive menu. Open the displayed
-link on any device, confirm the code, sign in, and approve access. The CLI waits for
-approval and saves your session automatically. Press Ctrl+C to cancel.
-
-Use `createos login --device` to skip the menu and start device login directly.
-
-Device login requires the identity server to advertise a device authorization
-endpoint and the CLI's registered public client to allow
-`urn:ietf:params:oauth:grant-type:device_code` with `openid offline_access` scopes
-and the `refresh_token` grant.
+Open the displayed link and follow the instructions to sign in.
+Use `createos login --device` to skip the menu.
 
 **Option B — Browser login**
 
-Run `createos login` and select "Sign in with browser". This opens your local
-browser to complete sign in and saves the same refreshable session.
+Run `createos login` and select "Sign in with browser".
 
 **Option C — API token**
 
@@ -131,8 +122,7 @@ createos login --token <your-api-token>
 
 Or run `createos login` interactively and select "Sign in with API token" when prompted.
 
-> For unattended CI, use `--token`. Explicit `--device` also works without a TTY,
-> but a person must complete browser approval.
+> For unattended CI, use `--token`.
 
 **2. Confirm your account**
 
