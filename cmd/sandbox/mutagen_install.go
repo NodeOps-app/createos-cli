@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // Mutagen version pinned by createos. Bump this when we want a newer
@@ -163,6 +165,7 @@ func downloadAndExtractMutagen(url, ext, target string) error {
 	if err != nil {
 		return err
 	}
+	httpclient.SetUserAgent(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch %s: %w", url, err)

@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // InstallScope represents the scope of a skill install (local or global).
@@ -74,6 +76,7 @@ func InstallToScope(downloadURL, uniqueName string, scope InstallScope) ([]strin
 	if err != nil {
 		return nil, fmt.Errorf("download request failed: %w", err)
 	}
+	httpclient.SetUserAgent(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)

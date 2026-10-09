@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -112,6 +113,7 @@ func newTemplatesUseCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("could not create download request: %w", err)
 			}
+			httpclient.SetUserAgent(req)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("could not download template: %w", err)

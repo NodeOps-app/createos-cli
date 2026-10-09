@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -58,6 +59,7 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refreshe
 	}
 	client := resty.New().
 		SetBaseURL(sandboxURL).
+		SetHeader("User-Agent", httpclient.UserAgent).
 		SetHeader(authHeader, token).
 		SetHeader("Content-Type", "application/json")
 	if debug {

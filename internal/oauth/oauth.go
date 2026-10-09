@@ -15,6 +15,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // ServerMetadata holds the OAuth authorization server metadata (RFC 8414)
@@ -50,6 +52,7 @@ func FetchServerMetadataContext(ctx context.Context, baseURL string) (*ServerMet
 	if err != nil {
 		return nil, fmt.Errorf("could not reach authorization server")
 	}
+	httpclient.SetUserAgent(req)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not reach authorization server — check your internet connection")
@@ -112,6 +115,7 @@ func ExchangeCode(tokenEndpoint, clientID, code, redirectURI, verifier string) (
 	if err != nil {
 		return nil, fmt.Errorf("login failed — could not initiate token exchange")
 	}
+	httpclient.SetUserAgent(req)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -139,6 +143,7 @@ func RefreshTokens(tokenEndpoint, clientID, refreshToken string) (*TokenResponse
 	if err != nil {
 		return nil, fmt.Errorf("session refresh failed — could not initiate request")
 	}
+	httpclient.SetUserAgent(req)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

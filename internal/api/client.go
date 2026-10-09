@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -80,6 +81,7 @@ func NewClient(token, apiURL string, debug bool) APIClient {
 
 	client := resty.New().
 		SetBaseURL(apiURL).
+		SetHeader("User-Agent", httpclient.UserAgent).
 		SetHeader(headerAPIKey, token).
 		SetHeader("Content-Type", "application/json")
 
@@ -104,6 +106,7 @@ func NewClientWithAccessToken(accessToken, apiURL string, debug bool, refresher 
 
 	client := resty.New().
 		SetBaseURL(apiURL).
+		SetHeader("User-Agent", httpclient.UserAgent).
 		SetHeader(headerAccessToken, accessToken).
 		SetHeader("Content-Type", "application/json")
 

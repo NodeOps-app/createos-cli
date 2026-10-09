@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 )
 
@@ -112,6 +113,7 @@ func fetchLatest() string {
 	if err != nil {
 		return ""
 	}
+	httpclient.SetUserAgent(req)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := http.DefaultClient.Do(req)
