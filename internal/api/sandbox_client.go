@@ -1,8 +1,9 @@
 package api
 
 import (
-	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/go-resty/resty/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // DefaultSandboxBaseURL is the default fc-spawn API base URL. The

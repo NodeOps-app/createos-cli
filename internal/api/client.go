@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/go-resty/resty/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // TokenRefresher obtains a fresh access token after the server rejects
