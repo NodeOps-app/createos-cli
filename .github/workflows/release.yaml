@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})
-    runs-on: createos
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
