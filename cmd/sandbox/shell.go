@@ -22,6 +22,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
@@ -423,6 +424,7 @@ func dialControlUpgrade(ctx context.Context, ctrlURL, authHeader, token, path st
 	req := "POST " + path + " HTTP/1.1\r\n" +
 		"Host: " + u.Host + "\r\n" +
 		authHeader + ": " + token + "\r\n" +
+		"User-Agent: " + httpclient.UserAgent + "\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Upgrade: tcp-tunnel\r\n" +
 		"Content-Length: 0\r\n\r\n"
@@ -616,8 +618,9 @@ func dialControlTunnel(ctx context.Context, ctrlURL, authHeader, token, id strin
 
 	req := fmt.Sprintf("POST /v1/sandboxes/%s/tunnel/%d HTTP/1.1\r\n"+
 		"Host: %s\r\n%s: %s\r\n"+
+		"User-Agent: %s\r\n"+
 		"Connection: Upgrade\r\nUpgrade: tcp-tunnel\r\nContent-Length: 0\r\n\r\n",
-		id, port, u.Host, authHeader, token)
+		id, port, u.Host, authHeader, token, httpclient.UserAgent)
 	if _, err = conn.Write([]byte(req)); err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, err

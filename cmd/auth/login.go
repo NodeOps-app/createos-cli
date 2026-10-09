@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 
+	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
@@ -42,11 +44,7 @@ func NewLoginCommand() *cli.Command {
 			}
 			// --token flag: API key flow (works in both TTY and non-TTY)
 			if token := c.String("token"); token != "" {
-				if err := config.SaveToken(token); err != nil {
-					return fmt.Errorf("could not save your token: %w", err)
-				}
-				pterm.Success.Println("You're signed in.")
-				return nil
+				return loginWithAPIToken(c, token)
 			}
 
 			if c.Bool("device") {
@@ -75,17 +73,29 @@ func NewLoginCommand() *cli.Command {
 				return loginWithDevice(c)
 			}
 			if selected == options[2] {
-				return loginWithAPIToken()
+				return promptForAPIToken(c)
 			}
 			return loginWithBrowser()
 		},
 	}
 }
 
-func loginWithAPIToken() error {
+func promptForAPIToken(c *cli.Context) error {
 	token, err := pterm.DefaultInteractiveTextInput.WithMask("*").Show("Paste your API token")
 	if err != nil || token == "" {
 		return fmt.Errorf("sign in cancelled")
+	}
+	return loginWithAPIToken(c, token)
+}
+
+func loginWithAPIToken(c *cli.Context, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return fmt.Errorf("please provide an API token from your CreateOS dashboard")
+	}
+	client := api.NewClient(token, c.String("api-url"), c.Bool("debug"))
+	if _, err := client.GetUser(); err != nil {
+		return fmt.Errorf("could not verify your API token: %w", err)
 	}
 	if err := config.SaveToken(token); err != nil {
 		return fmt.Errorf("could not save your token: %w", err)

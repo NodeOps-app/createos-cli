@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 const deviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
@@ -118,6 +120,7 @@ func devicePost(ctx context.Context, endpoint string, form url.Values) (int, []b
 	if err != nil {
 		return 0, nil, fmt.Errorf("could not start sign in — run 'createos login' to try again")
 	}
+	httpclient.SetUserAgent(req)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)

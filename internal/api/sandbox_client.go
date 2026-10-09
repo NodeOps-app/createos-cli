@@ -2,6 +2,8 @@ package api
 
 import (
 	"github.com/go-resty/resty/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 )
 
 // DefaultSandboxBaseURL is the default fc-spawn API base URL. The
@@ -58,6 +60,7 @@ func newSandboxClient(authHeader, token, sandboxURL string, debug bool, refreshe
 	}
 	client := resty.New().
 		SetBaseURL(sandboxURL).
+		SetHeader("User-Agent", httpclient.UserAgent).
 		SetHeader(authHeader, token).
 		SetHeader("Content-Type", "application/json")
 	if debug {

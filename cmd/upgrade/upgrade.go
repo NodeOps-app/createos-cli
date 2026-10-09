@@ -19,6 +19,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/mod/semver"
 
+	"github.com/NodeOps-app/createos-cli/internal/httpclient"
 	"github.com/NodeOps-app/createos-cli/internal/pkg/version"
 )
 
@@ -163,6 +164,7 @@ func fetchLatestRelease() (*githubRelease, error) {
 	if err != nil {
 		return nil, err
 	}
+	httpclient.SetUserAgent(req)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := httpClient.Do(req)
@@ -233,6 +235,7 @@ func downloadToTemp(rawURL, assetName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	httpclient.SetUserAgent(req)
 
 	client := &http.Client{Timeout: downloadTimeout}
 	resp, err := client.Do(req)
@@ -304,6 +307,7 @@ func fetchNightlyCommit(release *githubRelease) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	httpclient.SetUserAgent(req)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -338,6 +342,7 @@ func fetchChecksum(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	httpclient.SetUserAgent(req)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
