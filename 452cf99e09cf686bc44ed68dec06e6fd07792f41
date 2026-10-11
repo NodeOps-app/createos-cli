@@ -1,0 +1,1 @@
+Claude Code session 2026-10-12: nodeops-app hardening. User approved SHA pinning; scan found unpinned refs here; pinned via tag->SHA lookup (gh api repos/<a>/commits/<tag>).
