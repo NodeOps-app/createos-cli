@@ -61,7 +61,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: createos
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
