@@ -108,6 +108,15 @@ func NewApp() *cli.App {
 			if cmd == "" || cmd == "login" || cmd == "logout" || cmd == "version" || cmd == "ask" || cmd == "upgrade" {
 				return nil
 			}
+			// `sandbox self` talks to the guest agent on loopback inside the
+			// sandbox, which takes no credential by design. Demanding a
+			// login here would make the command unusable exactly where it is
+			// meant to run: inside a sandbox, which has no stored token.
+			if cmd == "sandbox" || cmd == "sb" {
+				if sub := c.Args().Get(1); sub == "self" {
+					return nil
+				}
+			}
 
 			// CREATEOS_API_KEY env var (or --api-key flag) — injected by Stripe Projects
 			if apiKey := c.String("api-key"); apiKey != "" {
@@ -228,6 +237,8 @@ func NewApp() *cli.App {
 		},
 	}
 	installTrailingHelpGuards(app.Commands)
+	installUsageErrorHelp(app)
+	installCommandSuggestions(app)
 
 	return app
 }
