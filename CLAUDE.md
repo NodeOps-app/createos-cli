@@ -86,7 +86,7 @@ These commands have two halves in one binary, and both must keep working:
 
 `cmd/sandbox/amp.go` is the same shape with Amp's names: `--dispatch` is the
 machine half, selected by `ORB_OPERATION`. Amp takes a program path rather than
-a command line, so the human half writes a wrapper to `~/.createos/amp-dispatch`
+a command line, so the human half writes a wrapper to `~/.createos/amp-dispatch-<shape>-<template>`
 and runs `amp orb provider` on it. Amp only logs the job's output (spawn output
 also shows in the thread's setup log), so nothing parses stdout there. Jobs for
 one orb run one at a time under a per-orb `flock`; without it, a spawn's setup

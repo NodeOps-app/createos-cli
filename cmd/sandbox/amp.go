@@ -212,8 +212,13 @@ func runAmpSetup(c *cli.Context, doctorOnly bool) error {
 	cmd := exec.CommandContext(ctx, ampBin, "orb", "provider", wrapper)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = 10 * time.Second
-	return cmd.Run()
+	// amp drains running jobs on SIGTERM; give the longest one its whole deadline.
+	cmd.WaitDelay = ampJobDeadline + 30*time.Second
+	err = cmd.Run()
+	if ctx.Err() != nil && cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		return nil // stopped on request and amp exited by itself after draining
+	}
+	return err
 }
 
 // writeAmpWrapper writes the program Amp runs per job and returns its path.
@@ -250,7 +255,9 @@ func writeAmpWrapper(shape, template string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, ampWrapperName)
+	// One wrapper per setting, so two providers with different flags under one
+	// account never run each other's. Both values match ampFlagValueRE.
+	path := filepath.Join(dir, ampWrapperName+"-"+shape+"-"+template)
 	return path, os.Rename(tmp.Name(), path)
 }
 

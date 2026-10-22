@@ -63,7 +63,7 @@ Save it to a file only you can read. Paste the token when asked; it is not shown
 
 ```sh
 mkdir -p ~/.config/amp
-read -rs t && umask 077 && printf %s "$t" > ~/.config/amp/orb-provider-token && echo saved
+read -rs t && install -m 600 /dev/null ~/.config/amp/orb-provider-token && printf %s "$t" > ~/.config/amp/orb-provider-token && echo saved
 ```
 
 ## 5. Start the provider
@@ -85,7 +85,7 @@ AMP_ORB_PROVIDER_TOKEN is set
 Then the provider waits for work:
 
 ```text
-   script  ~/.createos/amp-dispatch
+   script  ~/.createos/amp-dispatch-s-4vcpu-8gb-amp-orb
    amp     https://ampcode.com
    ctrl+c drains running jobs
 17:52:58        READY    listening for jobs
@@ -146,7 +146,8 @@ A paused sandbox costs no compute.
 
 ## Stop it
 
-Press `Ctrl+C` in the provider window. It finishes running jobs, then exits.
+Press `Ctrl+C` in the provider window. It lets running jobs finish (up to about
+5 minutes), then exits.
 To remove it for good, delete the provider in **Workspace Settings → Orbs**, and
 check for leftover sandboxes with `createos sandbox list`.
 

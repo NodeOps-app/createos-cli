@@ -122,3 +122,32 @@ func TestAmpLockSerializesJobsForOneOrb(t *testing.T) {
 	}
 	again()
 }
+
+// Two providers with different flags must not share one wrapper: the second
+// setup would otherwise switch the first provider's jobs to its own settings.
+func TestAmpWrapperIsPerSetting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	a, err := writeAmpWrapper("s-1vcpu-1gb", "amp-orb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := writeAmpWrapper("s-4vcpu-8gb", "amp-orb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Fatalf("different settings share wrapper %s", a)
+	}
+	for path, shape := range map[string]string{a: "s-1vcpu-1gb", b: "s-4vcpu-8gb"} {
+		body, err := os.ReadFile(path) // #nosec G304 -- test-owned path
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), "--shape '"+shape+"'") {
+			t.Errorf("%s does not carry --shape %s:\n%s", path, shape, body)
+		}
+		if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o700 {
+			t.Errorf("%s mode = %v, want 0700", path, info.Mode().Perm())
+		}
+	}
+}
