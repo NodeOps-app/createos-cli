@@ -106,7 +106,13 @@ func TestAmpE2E(t *testing.T) {
 	e.checkBox("amp at /usr/local/bin/amp", "/usr/local/bin/amp --version >/dev/null")
 	e.checkBox("user has passwordless sudo", "sudo -u user sudo -n true")
 	e.checkBox("user home is writable", "sudo -u user test -w /home/user")
-	e.checkBox("gh, git, node, tmux, rg, curl present", "command -v gh git node tmux rg curl >/dev/null")
+	// As user, the account the agent runs as: root can reach tools that user cannot.
+	e.checkBox("gh, git, node, tmux, rg, curl usable by user",
+		`sudo -u user -H bash -lc 'for b in gh git node tmux rg curl; do command -v $b >/dev/null || exit 1; done'`)
+	e.checkBox("apt does not use the slow default Ubuntu mirror",
+		`! grep -rqE 'archive\.ubuntu\.com|security\.ubuntu\.com' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null`)
+	e.checkBox("node is 18 or newer for user",
+		`[ "$(sudo -u user -H bash -lc 'node -p "process.versions.node.split(\".\")[0]"')" -ge 18 ]`)
 	e.checkBox("hostname resolves", `getent hosts "$(hostname)" >/dev/null`)
 	e.checkBox("root shell profile untouched", `! grep -q "Amp CLI" /root/.bashrc`)
 	e.check("bootstrap got ORB_TOKEN and reached Amp", strings.Contains(e.bootstrapOutput(out), "ORB_TOKEN was rejected"))

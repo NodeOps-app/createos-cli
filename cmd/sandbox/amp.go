@@ -83,16 +83,27 @@ func ampSettling(status string) bool {
 // amp-orb.Dockerfile.
 const ampProvision = `set -e
 grep -q "$(hostname)" /etc/hosts || echo "127.0.1.1 $(hostname)" >>/etc/hosts
+id user >/dev/null 2>&1 || useradd -m -s /bin/bash user
+# Judge each tool as the orb's user, not as root: on devbox:1 /usr/local/bin/node
+# is a link into /root, which user cannot enter, so root sees Node and user does not.
 missing=""
 for pair in git:git node:nodejs tmux:tmux sudo:sudo rg:ripgrep gh:gh curl:curl \
 	ssh:openssh-client pkill:procps; do
-	command -v "${pair%%:*}" >/dev/null || missing="$missing ${pair#*:}"
+	runuser -u user -- bash -lc "command -v ${pair%%:*}" >/dev/null 2>&1 || missing="$missing ${pair#*:}"
 done
 if [ -n "$missing" ]; then
-	DEBIAN_FRONTEND=noninteractive apt-get update -qq
-	DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates $missing >/dev/null
+	# archive.ubuntu.com hands out servers that take 15-30 s to answer one small
+	# file (measured from a sandbox: 2 of 9 addresses), which turned a 4 s install
+	# into 3 minutes. The kernel.org mirror answered in 0.09 s every time.
+	if grep -q '^ID=ubuntu' /etc/os-release; then
+		sed -i -E 's#https?://(archive|security)\.ubuntu\.com/ubuntu#http://mirrors.edge.kernel.org/ubuntu#g' \
+			/etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+	fi
+	# A stalled connection is dropped after 10 s and retried, not held for apt's default 120 s.
+	APT="-o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=3"
+	DEBIAN_FRONTEND=noninteractive apt-get $APT update -qq
+	DEBIAN_FRONTEND=noninteractive apt-get $APT install -y -qq --no-install-recommends ca-certificates $missing >/dev/null
 fi
-id user >/dev/null 2>&1 || useradd -m -s /bin/bash user
 echo "user ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/user
 if [ ! -x /usr/local/bin/amp ]; then
 	tmp=$(mktemp -d)
