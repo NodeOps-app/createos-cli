@@ -364,7 +364,8 @@ Each orb boots from the `amp-orb` template, which the first orb builds when it i
 missing. If the template is not ready within two minutes, the orb boots
 `devbox:1` and is set up in place. `--shape` (`CREATEOS_ORB_SHAPE`) and
 `--template` (`CREATEOS_ORB_TEMPLATE`) change the defaults. Amp's provider runs
-the hidden `--dispatch` mode once per job.
+the hidden `--dispatch` mode once per job. Run it on one machine only: jobs for an orb are
+serialized with a local lock, so two hosts serving one provider would race.
 
 `createos sandbox setup orca` connects [Orca](https://orca.dev) so that each of
 its workspaces runs on its own disposable sandbox instead of your laptop.

@@ -92,6 +92,11 @@ also shows in the thread's setup log), so nothing parses stdout there. Jobs for
 one orb run one at a time under a per-orb `flock`; without it, a spawn's setup
 wakes a sandbox that a concurrent pause just stopped.
 
+**Assumption: one provider host.** The whole Amp setup runs on a single user
+machine, and the `flock` only serializes jobs on that machine. Running
+`setup amp` on two hosts for one Amp provider would let their jobs race. Lifting
+this needs a lock shared across hosts, which the sandbox API does not offer.
+
 `amp_e2e_test.go` is a live test behind the `e2e` build tag, so `go test ./...`
 never creates sandboxes. It builds the binary and drives it as Amp does:
 
