@@ -348,6 +348,24 @@ asks for a few more characters rather than guessing.
 
 **`sandbox setup` — run an editor's workspaces on sandboxes:**
 
+`createos sandbox setup amp` runs [Amp](https://ampcode.com)'s
+[self-hosted orb](https://ampcode.com/docs/orbs/self-hosted) provider, so each
+Amp thread runs in its own sandbox. Pausing keeps the sandbox's disk and memory.
+
+```bash
+# In Amp: Settings > Orbs > Add Orb Provider, then copy the token.
+export AMP_ORB_PROVIDER_TOKEN=<the token>
+createos sandbox setup amp --doctor   # check prerequisites, start nothing
+createos sandbox setup amp            # run the provider; leave it running
+amp -ox "your message" --orb-provider <provider name>
+```
+
+Each orb boots from the `amp-orb` template, which the first orb builds when it is
+missing. If the template is not ready within two minutes, the orb boots
+`devbox:1` and is set up in place. `--shape` (`CREATEOS_ORB_SHAPE`) and
+`--template` (`CREATEOS_ORB_TEMPLATE`) change the defaults. Amp's provider runs
+the hidden `--dispatch` mode once per job.
+
 `createos sandbox setup orca` connects [Orca](https://orca.dev) so that each of
 its workspaces runs on its own disposable sandbox instead of your laptop.
 

@@ -84,7 +84,22 @@ These commands have two halves in one binary, and both must keep working:
 - the **machine** half (`--recipe`, hidden) is what the editor itself runs, once
   per lifecycle phase, selected by an env var such as `ORCA_VM_MODE`.
 
-The machine half prints one JSON object on stdout and everything else on
+`cmd/sandbox/amp.go` is the same shape with Amp's names: `--dispatch` is the
+machine half, selected by `ORB_OPERATION`. Amp takes a program path rather than
+a command line, so the human half writes a wrapper to `~/.createos/amp-dispatch`
+and runs `amp orb provider` on it. Amp only logs the job's output (spawn output
+also shows in the thread's setup log), so nothing parses stdout there. Jobs for
+one orb run one at a time under a per-orb `flock`; without it, a spawn's setup
+wakes a sandbox that a concurrent pause just stopped.
+
+`amp_e2e_test.go` is a live test behind the `e2e` build tag, so `go test ./...`
+never creates sandboxes. It builds the binary and drives it as Amp does:
+
+```bash
+CREATEOS_API_KEY=<key> go test -tags e2e -run TestAmpE2E -v -timeout 20m ./cmd/sandbox
+```
+
+The Orca machine half prints one JSON object on stdout and everything else on
 stderr. Anything written to stdout that is not that object breaks the editor's
 parse, so use the package's `orcaLog` style helper rather than `fmt.Println`.
 
