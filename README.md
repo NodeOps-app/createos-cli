@@ -351,9 +351,10 @@ asks for a few more characters rather than guessing.
 `createos sandbox setup amp` runs [Amp](https://ampcode.com)'s
 [self-hosted orb](https://ampcode.com/docs/orbs/self-hosted) provider, so each
 Amp thread runs in its own sandbox. Pausing keeps the sandbox's disk and memory.
+Step-by-step setup: [docs/amp.md](docs/amp.md).
 
 ```bash
-# In Amp: Settings > Orbs > Add Orb Provider, then copy the token.
+# In Amp: Workspace Settings > Orbs > Add Provider, then copy the token.
 export AMP_ORB_PROVIDER_TOKEN=<the token>
 createos sandbox setup amp --doctor   # check prerequisites, start nothing
 createos sandbox setup amp            # run the provider; leave it running
