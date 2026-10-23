@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -291,6 +292,7 @@ type devinOutpost struct {
 type devinPage[T any] struct {
 	Items       []T    `json:"items"`
 	Cursor      string `json:"cursor"`
+	EndCursor   string `json:"end_cursor"` // the outpost list's name for it
 	HasNextPage bool   `json:"has_next_page"`
 }
 
@@ -337,10 +339,11 @@ func devinList[T any](ctx context.Context, d *devinAPI, path string, query url.V
 			return nil, err
 		}
 		all = append(all, page.Items...)
-		if !page.HasNextPage || page.Cursor == "" {
+		next := cmp.Or(page.Cursor, page.EndCursor)
+		if !page.HasNextPage || next == "" {
 			return all, nil
 		}
-		q.Set("cursor", page.Cursor)
+		q.Set("cursor", next)
 	}
 }
 
