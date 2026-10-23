@@ -412,6 +412,34 @@ missing. If the template is not ready within two minutes, the orb boots
 the hidden `--dispatch` mode once per job. Run it on one machine only: jobs for an orb are
 serialized with a local lock, so two hosts serving one provider would race.
 
+`createos sandbox setup devin` serves a [Devin Outposts](https://docs.devin.ai/cloud/outposts/overview)
+outpost, so each Devin session runs in its own sandbox. It claims waiting
+sessions, boots a sandbox, installs `devin-remote` and starts it with only the
+session's connect token. Your Devin API token stays on this machine.
+
+```bash
+# In Devin: Settings > Environment > Outposts > Create Outpost (Linux).
+# Make a v3 API token for a service user whose role has Outposts write.
+export DEVIN_API_TOKEN=<the token>
+createos sandbox setup devin --outpost <name> --doctor   # check prerequisites
+createos sandbox setup devin --outpost <name>            # serve; leave it running
+```
+
+When a session sleeps, its sandbox is paused, so a resumed session finds its
+`repos/` and files where it left them. When it ends, the sandbox is deleted.
+`--shape` (`CREATEOS_DEVIN_SHAPE`), `--rootfs` (`CREATEOS_DEVIN_ROOTFS`, any
+Debian or Ubuntu image or template) and `--max-sessions` (default 2; keep it
+within your sandbox quota) change the defaults. Stopping it leaves running
+sessions alone; the next start picks them up again. Run one per machine.
+
+> [!WARNING]
+> **A session's network policy is not enforced.** Devin sends each session's
+> allowed destinations and leaves enforcement to the outpost. CreateOS
+> enforces IP and CIDR egress rules but not hostnames, so for now every
+> session's sandbox has open egress, and the log says so for each session that
+> has a policy. Do not use an outpost served this way for sessions that rely on
+> a Devin security profile to restrict network access.
+
 `createos sandbox setup orca` connects [Orca](https://orca.dev) so that each of
 its workspaces runs on its own disposable sandbox instead of your laptop.
 
