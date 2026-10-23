@@ -129,7 +129,7 @@ func newSetupCommand() *cli.Command {
 		Usage: "Connect a coding harness to CreateOS Sandbox",
 		Description: "Each subcommand wires one harness to CreateOS Sandbox, so a\n" +
 			"workspace runs on a disposable microVM instead of your laptop.",
-		Subcommands: []*cli.Command{newSetupAmpCommand(), newSetupHerdrCommand(), newSetupOrcaCommand()},
+		Subcommands: []*cli.Command{newSetupAmpCommand(), newSetupDevinCommand(), newSetupHerdrCommand(), newSetupOrcaCommand()},
 	}
 }
 
