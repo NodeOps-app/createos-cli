@@ -314,7 +314,7 @@ asks for a few more characters rather than guessing.
 | `createos sandbox create`          | Create a new sandbox                                          |
 | `createos sandbox list`            | List your sandboxes                                           |
 | `createos sandbox get`             | Show details for one sandbox                                  |
-| `createos sandbox edit`            | Change a sandbox's settings (public URL, SSH keys, auto-pause)|
+| `createos sandbox edit`            | Change a sandbox's settings (labels, public URL, SSH keys, auto-pause)|
 | `createos sandbox pause`           | Snapshot a running sandbox so you can resume it later         |
 | `createos sandbox resume`          | Bring a paused sandbox back to life                           |
 | `createos sandbox fork`            | Clone a paused sandbox into a brand-new one                   |
@@ -339,12 +339,56 @@ asks for a few more characters rather than guessing.
 | `--rootfs`      | Base image or custom template to start from                                      |
 | `--disk-mib`    | Disk size in MiB (defaults to the shape's standard disk)                         |
 | `--ssh-key`     | Path to an SSH public key file (repeatable)                                      |
+| `--label`       | Sandbox metadata (repeatable): `KEY=VALUE`                                      |
 | `--env`         | Environment variable for every exec (repeatable): `KEY=VALUE`                    |
 | `--egress`      | Allowed outbound host/IP (repeatable). Empty = unrestricted.                     |
 | `--network`     | Private network to join at creation (repeatable): `<name\|id>`                  |
 | `--disk`        | S3 disk to mount at creation (repeatable): `<name\|id>:/mount/path`             |
 | `--ingress`     | Give the sandbox a public HTTPS URL                                               |
 | `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
+
+**Sandbox labels:**
+
+Use repeatable `--label KEY=VALUE` flags to organize sandboxes and filter lists.
+Choose a shape available on your plan and an image from `sandbox rootfs`.
+
+```bash
+# Create with multiple labels
+createos sandbox create --shape s-0.25vcpu-512mb --rootfs alpine:3.20 \
+  --name labeled-box --auto-pause 5m \
+  --label team=backend --label environment=production
+
+# Filter by one label, or require both labels to match
+createos sandbox list --label team=backend
+createos sandbox list --label team=backend --label environment=production
+
+# Combine labels with status, all states, or IDs-only output
+createos sandbox list --status running --label team=backend
+createos sandbox list --all --label team=backend
+createos sandbox list --quiet --label team=backend
+
+# Update one label and add another, preserving environment=production
+createos sandbox edit labeled-box --label team=platform --label owner=bhautik
+
+# Inspect labels
+createos sandbox get labeled-box
+createos sandbox list --wide --label team=platform
+createos --output json sandbox list --label team=platform
+```
+
+Filters use exact key/value matches with **AND semantics**: every supplied pair
+must match. Filtering happens server-side before pagination. Without `--all` or
+`--status`, the list still shows only active sandboxes.
+
+Editing merges labels, overwriting supplied keys while preserving other keys.
+Repeating a key uses its last value. `--label key=` stores an empty string;
+it does not delete the label. Label deletion is not currently supported.
+Values containing commas or `=` are preserved; quote values containing spaces,
+for example `--label 'description=backend worker'`.
+
+Labels appear in sandbox details, wide listings when the terminal has enough
+space, and JSON output. A sandbox supports up to 100 labels, with keys up to
+128 bytes, values up to 1024 bytes, and a total label size limit of 65536 bytes.
 
 **`sandbox setup` — run an editor's workspaces on sandboxes:**
 
@@ -538,11 +582,12 @@ createos cronjobs get --project <id> --cronjob <id>
 createos cronjobs delete --project <id> --cronjob <id> --force
 
 # Sandboxes
-createos sandbox create --shape s-1vcpu-1gb --name my-box --ssh-key ~/.ssh/id_ed25519.pub
-createos sandbox create --shape s-1vcpu-512mb --ingress --auto-pause 1h
+createos sandbox create --shape s-1vcpu-1gb --rootfs alpine:3.20 --name my-box --ssh-key ~/.ssh/id_ed25519.pub
+createos sandbox create --shape s-0.25vcpu-512mb --rootfs alpine:3.20 --ingress --auto-pause 1h --label team=backend
 createos sandbox list
 createos sandbox list --all
 createos sandbox list --wide
+createos sandbox list --label team=backend --label environment=production
 createos sandbox list --status paused --quiet | xargs createos sandbox rm --force
 createos sandbox get <id>
 createos sandbox exec my-box -- uname -a
@@ -570,6 +615,7 @@ createos sandbox resume my-box
 createos sandbox fork my-box
 createos sandbox edit my-box --ingress on
 createos sandbox edit my-box --auto-pause 30m
+createos sandbox edit my-box --label team=backend
 createos sandbox rm my-box --force
 createos sandbox shapes
 createos sandbox rootfs

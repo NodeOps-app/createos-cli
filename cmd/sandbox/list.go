@@ -34,6 +34,7 @@ Examples:
   # Include lower-priority columns
   createos sandbox list --wide`,
 		Flags: []cli.Flag{
+			labelFlag(),
 			&cli.IntFlag{
 				Name:  "limit",
 				Value: 50,
@@ -73,6 +74,11 @@ func runList(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
+	labels, err := parseLabelFlags(labelFlagsFromContext(c))
+	if err != nil {
+		return err
+	}
+
 	// Default: active statuses only. --all clears the filter. --status overrides both.
 	status := ""
 	showAll := c.Bool("all")
@@ -88,6 +94,7 @@ func runList(c *cli.Context) error {
 		activeStatuses := []string{api.SandboxStatusRunning, api.SandboxStatusPaused, api.SandboxStatusPausing, api.SandboxStatusResuming, api.SandboxStatusForking}
 		for _, s := range activeStatuses {
 			page, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{
+				Labels: labels,
 				Limit:  c.Int("limit"),
 				Offset: c.Int("offset"),
 				Status: s,
@@ -100,6 +107,7 @@ func runList(c *cli.Context) error {
 	} else {
 		var err error
 		rows, _, err = client.ListSandboxes(c.Context, api.ListSandboxesOpts{
+			Labels: labels,
 			Limit:  c.Int("limit"),
 			Offset: c.Int("offset"),
 			Status: status,
@@ -145,7 +153,7 @@ func runList(c *cli.Context) error {
 func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableData {
 	columns := []string{"ID", "Name", "Status", "Size", "IP"}
 	if wide {
-		columns = append(columns, "Created")
+		columns = append(columns, "Created", "Labels")
 	}
 	switch {
 	case width < 70:
@@ -158,6 +166,7 @@ func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableD
 	tableData = append(tableData, columns)
 	for _, r := range rows {
 		values := map[string]string{
+			"Labels":  formatLabels(r.Labels),
 			"ID":      r.ID,
 			"Name":    strOrDash(r.Name),
 			"Status":  r.Status,

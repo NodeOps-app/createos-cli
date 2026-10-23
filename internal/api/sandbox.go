@@ -12,6 +12,8 @@ import (
 
 // ListSandboxesOpts bounds the query for ListSandboxes.
 type ListSandboxesOpts struct {
+	// Labels filters by every supplied key/value pair before pagination.
+	Labels map[string]string
 	// Limit is the page size; 0 = server default (50).
 	Limit int
 	// Offset is the page offset; 0 = first page.
@@ -33,6 +35,13 @@ func (c *SandboxClient) ListSandboxes(ctx context.Context, opts ListSandboxesOpt
 	}
 	if opts.Status != "" {
 		r.SetQueryParam("status", opts.Status)
+	}
+	if len(opts.Labels) > 0 {
+		labels, err := json.Marshal(opts.Labels)
+		if err != nil {
+			return nil, Pagination{}, err
+		}
+		r.SetQueryParam("labels", string(labels))
 	}
 	var envelope Response[SandboxList]
 	resp, err := r.SetResult(&envelope).Get("/v1/sandboxes")
@@ -781,4 +790,9 @@ func (c *SandboxClient) StreamTemplateLogs(ctx context.Context, ref string, foll
 		return nil, ParseAPIError(resp.StatusCode(), nil)
 	}
 	return resp, nil
+}
+
+// SetSandboxLabels merges labels into the existing sandbox labels.
+func (c *SandboxClient) SetSandboxLabels(ctx context.Context, id string, labels map[string]string) (*SandboxView, error) {
+	return c.patchSandbox(ctx, id, SandboxPatchReq{Labels: labels})
 }

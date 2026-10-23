@@ -36,6 +36,7 @@ Examples:
   createos sandbox create --shape s-1vcpu-1gb \
     --disk my-bucket:/mnt/data --network my-net`,
 		Flags: []cli.Flag{
+			labelFlag(),
 			&cli.StringFlag{
 				Name:  "shape",
 				Usage: "Size of the sandbox (run 'createos sandbox shapes' to see options)",
@@ -90,6 +91,11 @@ func runCreate(c *cli.Context) error {
 	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
 	if !ok {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
+	}
+
+	labels, err := parseLabelFlags(labelFlagsFromContext(c))
+	if err != nil {
+		return err
 	}
 
 	shape := strings.TrimSpace(c.String("shape"))
@@ -156,6 +162,7 @@ func runCreate(c *cli.Context) error {
 	}
 
 	req := api.SandboxCreateReq{
+		Labels:         labels,
 		Shape:          shape,
 		Name:           name,
 		Rootfs:         rootfs,
@@ -302,6 +309,7 @@ func printCreateResult(resp *api.SandboxCreateResp) {
 		fmt.Printf("    %-9s %s\n", label+":", value)
 	}
 	row("Size", resp.Shape)
+	row("Labels", formatLabels(resp.Labels))
 	if resp.Rootfs != nil && *resp.Rootfs != "" {
 		row("Image", *resp.Rootfs)
 	}
