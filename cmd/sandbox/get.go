@@ -102,6 +102,7 @@ func printSandbox(s *api.SandboxView, bw *api.BandwidthView) {
 	pterm.Println()
 
 	row("Status", s.Status)
+	row("Labels", formatLabels(s.Labels))
 	row("Size", s.Shape)
 	if s.Rootfs != nil && *s.Rootfs != "" {
 		row("Image", *s.Rootfs)

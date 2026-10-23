@@ -27,9 +27,10 @@ import (
 func newEditCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "edit",
-		Usage:     "Change a sandbox's settings (public URL, SSH keys)",
+		Usage:     "Change a sandbox's settings (labels, public URL, SSH keys, auto-pause)",
 		ArgsUsage: "[<sandbox>]",
 		Flags: []cli.Flag{
+			labelFlag(),
 			&cli.StringFlag{
 				Name:  "ingress",
 				Usage: "Turn the public HTTPS URL `on` or `off`",
@@ -56,8 +57,12 @@ func runEdit(c *cli.Context) error {
 	// urfave/cli v2 stops flag parsing at the first positional, so
 	// `edit my-sb --ingress on` loses `--ingress`. Re-scan args by hand
 	// so users can put flags anywhere.
-	ref, ingressFlag, autoPauseFlag, sshFiles := parseEditArgs(c)
-	hasFlagChanges := ingressFlag != "" || autoPauseFlag != "" || len(sshFiles) > 0
+	ref, ingressFlag, autoPauseFlag, sshFiles, labelFlags := parseEditArgs(c)
+	labels, err := parseLabelFlags(labelFlags)
+	if err != nil {
+		return err
+	}
+	hasFlagChanges := ingressFlag != "" || autoPauseFlag != "" || len(sshFiles) > 0 || len(labels) > 0
 
 	// Resolve the sandbox first — either from positional or via picker.
 	id, label, err := resolveTarget(c, client, ref)
@@ -73,6 +78,12 @@ func runEdit(c *cli.Context) error {
 	// Flag mode wins whenever any flag is set — no prompts. We apply
 	// each requested change and bail with the first error.
 	if hasFlagChanges {
+		if len(labels) > 0 {
+			if _, err := client.SetSandboxLabels(c.Context, id, labels); err != nil {
+				return err
+			}
+			pterm.Success.Printfln("Labels updated for %s", refLabel(label, id))
+		}
 		if ingressFlag != "" {
 			if err := applyIngressFlag(c, client, label, id, ingressFlag); err != nil {
 				return err
@@ -93,7 +104,7 @@ func runEdit(c *cli.Context) error {
 
 	// No flags — interactive only.
 	if !terminal.IsInteractive() {
-		return fmt.Errorf("nothing to do — pass --ingress, --auto-pause, or --add-ssh-key, or run again on a terminal for an interactive menu")
+		return fmt.Errorf("nothing to do — pass --label, --ingress, --auto-pause, or --add-ssh-key, or run again on a terminal for an interactive menu")
 	}
 	return runEditMenu(c, client, label, id)
 }
@@ -103,15 +114,25 @@ func runEdit(c *cli.Context) error {
 // as the sandbox ref, and recognises `--ingress <value>`,
 // `--ingress=<value>`, `--add-ssh-key <path>`, `--add-ssh-key=<path>`
 // in any position.
-func parseEditArgs(c *cli.Context) (ref, ingressVal, autoPauseVal string, sshPaths []string) {
+func parseEditArgs(c *cli.Context) (ref, ingressVal, autoPauseVal string, sshPaths, labelFlags []string) {
 	ingressVal = strings.ToLower(strings.TrimSpace(c.String("ingress")))
 	autoPauseVal = strings.TrimSpace(c.String("auto-pause"))
 	sshPaths = append([]string{}, c.StringSlice("add-ssh-key")...)
 
+	labelFlags = append([]string{}, labelFlagsFromContext(c)...)
 	args := c.Args().Slice()
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--label":
+			if i+1 < len(args) {
+				labelFlags = append(labelFlags, args[i+1])
+				i++
+			} else {
+				labelFlags = append(labelFlags, "")
+			}
+		case strings.HasPrefix(a, "--label="):
+			labelFlags = append(labelFlags, strings.TrimPrefix(a, "--label="))
 		case a == "--ingress":
 			if i+1 < len(args) {
 				ingressVal = strings.ToLower(strings.TrimSpace(args[i+1]))
@@ -139,7 +160,7 @@ func parseEditArgs(c *cli.Context) (ref, ingressVal, autoPauseVal string, sshPat
 			}
 		}
 	}
-	return ref, ingressVal, autoPauseVal, sshPaths
+	return ref, ingressVal, autoPauseVal, sshPaths, labelFlags
 }
 
 // resolveTarget figures out which sandbox the user wants to edit. With

@@ -28,7 +28,7 @@ func TestSandboxListTableBreakpoints(t *testing.T) {
 		{name: "compact", width: 69, headers: []string{"Name", "Status", "Size"}},
 		{name: "medium", width: 89, headers: []string{"ID", "Name", "Status", "Size"}},
 		{name: "default", width: 120, headers: []string{"ID", "Name", "Status", "Size", "IP"}},
-		{name: "wide", width: 120, wide: true, headers: []string{"ID", "Name", "Status", "Size", "IP", "Created"}},
+		{name: "wide", width: 120, wide: true, headers: []string{"ID", "Name", "Status", "Size", "IP", "Created", "Labels"}},
 	}
 
 	for _, tt := range tests {

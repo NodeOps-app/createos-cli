@@ -27,6 +27,7 @@ const (
 // SandboxCreateReq is the body of POST /v1/sandboxes.
 // `host_id` is deliberately absent — pinning was removed from the API.
 type SandboxCreateReq struct {
+	Labels                map[string]string      `json:"labels,omitempty"`
 	Name                  string                 `json:"name,omitempty"`
 	Shape                 string                 `json:"shape"`
 	Rootfs                string                 `json:"rootfs,omitempty"`
@@ -43,9 +44,10 @@ type SandboxCreateReq struct {
 // SandboxPatchReq is the body of PATCH /v1/sandboxes/:id.
 // Only non-nil / non-zero fields are sent; omitempty keeps unset ones out of the wire.
 type SandboxPatchReq struct {
-	IngressEnabled        *bool `json:"ingress_enabled,omitempty"`
-	AutoPauseAfterSeconds *int  `json:"auto_pause_after_seconds,omitempty"`
-	DisableAutoPause      bool  `json:"disable_auto_pause,omitempty"`
+	Labels                map[string]string `json:"labels,omitempty"`
+	IngressEnabled        *bool             `json:"ingress_enabled,omitempty"`
+	AutoPauseAfterSeconds *int              `json:"auto_pause_after_seconds,omitempty"`
+	DisableAutoPause      bool              `json:"disable_auto_pause,omitempty"`
 }
 
 // SandboxNetworkAttach binds a sandbox to a private network at create time.
@@ -109,49 +111,51 @@ type SandboxForkReq struct {
 // SandboxCreateResp is the response body for POST /v1/sandboxes.
 // `mode` is deliberately absent — it's an internal boot-path detail.
 type SandboxCreateResp struct {
-	ID                    string   `json:"id"`
-	Name                  *string  `json:"name,omitempty"`
-	IP                    string   `json:"ip"`
-	Shape                 string   `json:"shape"`
-	Rootfs                *string  `json:"rootfs,omitempty"`
-	VCPU                  int      `json:"vcpu"`
-	MemMib                int      `json:"mem_mib"`
-	DiskMib               int64    `json:"disk_mib"`
-	SpawnMs               float64  `json:"spawn_ms,omitempty"`
-	Egress                []string `json:"egress,omitempty"`
-	BandwidthQuotaBytes   int64    `json:"bandwidth_quota_bytes,omitempty"`
-	IngressURLTemplate    string   `json:"ingress_url_template,omitempty"`
-	AutoPauseAfterSeconds *int     `json:"auto_pause_after_seconds,omitempty"`
+	Labels                map[string]string `json:"labels,omitempty"`
+	ID                    string            `json:"id"`
+	Name                  *string           `json:"name,omitempty"`
+	IP                    string            `json:"ip"`
+	Shape                 string            `json:"shape"`
+	Rootfs                *string           `json:"rootfs,omitempty"`
+	VCPU                  int               `json:"vcpu"`
+	MemMib                int               `json:"mem_mib"`
+	DiskMib               int64             `json:"disk_mib"`
+	SpawnMs               float64           `json:"spawn_ms,omitempty"`
+	Egress                []string          `json:"egress,omitempty"`
+	BandwidthQuotaBytes   int64             `json:"bandwidth_quota_bytes,omitempty"`
+	IngressURLTemplate    string            `json:"ingress_url_template,omitempty"`
+	AutoPauseAfterSeconds *int              `json:"auto_pause_after_seconds,omitempty"`
 }
 
 // SandboxView is the projection returned by GET /v1/sandboxes and
 // GET /v1/sandboxes/:id. The shape matches fc-spawn's SandboxView.
 type SandboxView struct {
-	ID                    string     `json:"id"`
-	Name                  *string    `json:"name,omitempty"`
-	Status                string     `json:"status"`
-	IP                    *string    `json:"ip,omitempty"`
-	VCPU                  int        `json:"vcpu"`
-	MemMib                int        `json:"mem_mib"`
-	DiskMib               int64      `json:"disk_mib"`
-	CreatedAt             time.Time  `json:"created_at"`
-	RunningAt             *time.Time `json:"running_at,omitempty"`
-	DestroyedAt           *time.Time `json:"destroyed_at,omitempty"`
-	SpawnMs               float64    `json:"spawn_ms,omitempty"`
-	Shape                 string     `json:"shape,omitempty"`
-	Rootfs                *string    `json:"rootfs,omitempty"`
-	Egress                []string   `json:"egress,omitempty"`
-	SSHPubkeys            []string   `json:"ssh_pubkeys,omitempty"`
-	CreatedBy             string     `json:"created_by,omitempty"`
-	Region                string     `json:"region"`
-	IngressEnabled        bool       `json:"ingress_enabled"`
-	IngressURLTemplate    string     `json:"ingress_url_template,omitempty"`
-	BandwidthIngressBytes int64      `json:"bandwidth_ingress_bytes,omitempty"`
-	Envs                  []string   `json:"envs,omitempty"`
-	PausedAt              *time.Time `json:"paused_at,omitempty"`
-	LastResumedAt         *time.Time `json:"last_resumed_at,omitempty"`
-	ForkedFrom            *string    `json:"forked_from,omitempty"`
-	AutoPauseAfterSeconds *int       `json:"auto_pause_after_seconds,omitempty"`
+	Labels                map[string]string `json:"labels,omitempty"`
+	ID                    string            `json:"id"`
+	Name                  *string           `json:"name,omitempty"`
+	Status                string            `json:"status"`
+	IP                    *string           `json:"ip,omitempty"`
+	VCPU                  int               `json:"vcpu"`
+	MemMib                int               `json:"mem_mib"`
+	DiskMib               int64             `json:"disk_mib"`
+	CreatedAt             time.Time         `json:"created_at"`
+	RunningAt             *time.Time        `json:"running_at,omitempty"`
+	DestroyedAt           *time.Time        `json:"destroyed_at,omitempty"`
+	SpawnMs               float64           `json:"spawn_ms,omitempty"`
+	Shape                 string            `json:"shape,omitempty"`
+	Rootfs                *string           `json:"rootfs,omitempty"`
+	Egress                []string          `json:"egress,omitempty"`
+	SSHPubkeys            []string          `json:"ssh_pubkeys,omitempty"`
+	CreatedBy             string            `json:"created_by,omitempty"`
+	Region                string            `json:"region"`
+	IngressEnabled        bool              `json:"ingress_enabled"`
+	IngressURLTemplate    string            `json:"ingress_url_template,omitempty"`
+	BandwidthIngressBytes int64             `json:"bandwidth_ingress_bytes,omitempty"`
+	Envs                  []string          `json:"envs,omitempty"`
+	PausedAt              *time.Time        `json:"paused_at,omitempty"`
+	LastResumedAt         *time.Time        `json:"last_resumed_at,omitempty"`
+	ForkedFrom            *string           `json:"forked_from,omitempty"`
+	AutoPauseAfterSeconds *int              `json:"auto_pause_after_seconds,omitempty"`
 }
 
 // ── List shape ────────────────────────────────────────────────────
