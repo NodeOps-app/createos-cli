@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/urfave/cli/v2"
+
+	"github.com/NodeOps-app/createos-cli/internal/api"
 )
 
 func TestLabelCommands(t *testing.T) {
