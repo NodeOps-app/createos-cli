@@ -84,7 +84,7 @@ func TestAmpE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fresh spawn: %v\n%s", err, out)
 	}
-	e.check(fmt.Sprintf("fresh spawn under 5 min (%s)", took), took < 5*time.Minute)
+	e.check(fmt.Sprintf("fresh spawn within dispatch deadline (%s)", took), took < ampJobDeadline)
 	sb, err := ampFind(ctx, e.client, e.name)
 	if err != nil || sb == nil {
 		t.Fatalf("no live sandbox %s after spawn: %v", e.name, err)

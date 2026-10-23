@@ -132,6 +132,12 @@ A paused sandbox costs no compute.
 | `--shape` | `CREATEOS_ORB_SHAPE` | `s-4vcpu-8gb` | Size of each sandbox. Smaller pauses faster: 8 GB ≈ 30 s, 1 GB ≈ 7 s. List sizes with `createos sandbox shapes`. |
 | `--template` | `CREATEOS_ORB_TEMPLATE` | `amp-orb` | Template each sandbox boots from. Built on first use. |
 
+The CLI waits up to 5 minutes for the template before falling back to
+`devbox:1`. Its overall dispatch deadline is 7 minutes 40 seconds, including
+template waiting and sandbox setup. Amp's documented five-minute job limit
+can still stop the dispatch earlier; increasing the CLI wait does not override
+that provider limit.
+
 ## Troubleshooting
 
 | You see | Do this |
@@ -146,8 +152,9 @@ A paused sandbox costs no compute.
 
 ## Stop it
 
-Press `Ctrl+C` in the provider window. It lets running jobs finish (up to about
-5 minutes), then exits.
+Press `Ctrl+C` in the provider window. It lets running jobs finish, then exits.
+The CLI allows up to 8 minutes 10 seconds for the provider to drain before
+forcing it to stop; Amp may enforce a shorter job timeout.
 To remove it for good, delete the provider in **Workspace Settings → Orbs**, and
 check for leftover sandboxes with `createos sandbox list`.
 

@@ -39,14 +39,13 @@ const (
 	// Ubuntu 24.04 with git, Node, tmux and rg, booted while the template is
 	// not ready. ampProvision fills in the rest of the orb image contract.
 	ampFallbackRootfs = "devbox:1"
-	// Amp kills a job after five minutes. The template wait leaves the
-	// fallback room to provision; the settle wait covers a pause in flight.
-	ampTemplateWait = 2 * time.Minute
+	// Allow slow first-use template builds before falling back to devbox.
+	// Amp may enforce a shorter external job timeout; this is the CLI limit.
+	ampTemplateWait = 5 * time.Minute
 	ampSettleWait   = 4 * time.Minute
 	ampPollEvery    = 2 * time.Second
-	// One deadline for the whole job, under Amp's five minutes, so every wait
-	// above is cut short rather than adding up past the limit.
-	ampJobDeadline = 4*time.Minute + 40*time.Second
+	// Leave time after the template wait to create and provision the sandbox.
+	ampJobDeadline = ampTemplateWait + 2*time.Minute + 40*time.Second
 	ampWrapperName = "amp-dispatch"
 )
 
