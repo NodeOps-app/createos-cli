@@ -20,6 +20,7 @@ import (
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 
+	"github.com/pterm/pterm"
 	"github.com/urfave/cli/v2"
 )
 
@@ -129,6 +130,10 @@ func newSetupAmpCommand() *cli.Command {
 			"     amp -ox \"your message\" --orb-provider <provider name>",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
+				Name:  "build-template",
+				Usage: "Build the Amp sandbox template and follow its logs",
+			},
+			&cli.BoolFlag{
 				Name:  "doctor",
 				Usage: "Check the prerequisites and report, without starting anything",
 			},
@@ -151,6 +156,9 @@ func newSetupAmpCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if (c.Bool("doctor") && c.Bool("build-template")) || (c.Bool("dispatch") && (c.Bool("doctor") || c.Bool("build-template"))) {
+				return fmt.Errorf("use only one of --doctor, --build-template, or --dispatch")
+			}
 			for _, f := range []string{"shape", "template"} {
 				if !ampFlagValueRE.MatchString(c.String(f)) {
 					return fmt.Errorf("--%s %q is not a valid name", f, c.String(f))
@@ -158,6 +166,9 @@ func newSetupAmpCommand() *cli.Command {
 			}
 			if c.Bool("dispatch") {
 				return runAmpDispatch(c)
+			}
+			if c.Bool("build-template") {
+				return runAmpBuildTemplate(c)
 			}
 			return runAmpSetup(c, c.Bool("doctor"))
 		},
@@ -170,6 +181,13 @@ func runAmpSetup(c *cli.Context, doctorOnly bool) error {
 	if runtime.GOOS == "windows" {
 		return fmt.Errorf("the Amp orb provider runs on macOS and Linux only")
 	}
+	fmt.Println()
+	pterm.NewStyle(pterm.FgCyan, pterm.Bold).Println("  Amp on CreateOS")
+	pterm.Println(pterm.Gray("  Checking your provider setup…"))
+	fmt.Println()
+	check := func(label, detail string) {
+		fmt.Printf("  %s %-16s %s\n", pterm.Green("✓"), label, pterm.Gray(detail))
+	}
 	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
 	if !ok {
 		return fmt.Errorf("you're not signed in — run 'createos login' first")
@@ -177,21 +195,32 @@ func runAmpSetup(c *cli.Context, doctorOnly bool) error {
 	if _, _, err := client.ListSandboxes(c.Context, api.ListSandboxesOpts{Limit: 1}); err != nil {
 		return fmt.Errorf("your session is not usable — run 'createos login' again: %w", err)
 	}
-	fmt.Println("signed in to CreateOS")
+	check("CreateOS", "Signed in · sandbox API reachable")
 
 	ampBin, err := exec.LookPath("amp")
 	if err != nil {
 		return fmt.Errorf("amp is not on PATH\n\n  Install it with:\n    curl -fsSL https://ampcode.com/install.sh | bash")
 	}
-	fmt.Println("amp found at", ampBin)
+	check("Amp CLI", ampBin)
 
 	if os.Getenv("AMP_ORB_PROVIDER_TOKEN") == "" {
 		return fmt.Errorf("AMP_ORB_PROVIDER_TOKEN is not set\n\n" +
 			"  In Amp, open Settings > Orbs, click Add Orb Provider and copy the token, then:\n" +
 			"    export AMP_ORB_PROVIDER_TOKEN=<the token>")
 	}
-	fmt.Println("AMP_ORB_PROVIDER_TOKEN is set")
+	check("Provider token", "Set · validated when the provider connects")
 	if doctorOnly {
+		ready, checkErr := ampDoctorTemplate(c.Context, client, c.String("template"), os.Stdout)
+		if checkErr != nil {
+			return checkErr
+		}
+		if !ready {
+			return nil
+		}
+		fmt.Println()
+		pterm.NewStyle(pterm.FgGreen, pterm.Bold).Println("  Prerequisites look good.")
+		pterm.Println(pterm.Gray("  Start your provider and leave it running:"))
+		fmt.Printf("\n    createos sandbox setup amp --shape %s --template %s\n\n", c.String("shape"), c.String("template"))
 		return nil
 	}
 
@@ -218,6 +247,48 @@ func runAmpSetup(c *cli.Context, doctorOnly bool) error {
 		return nil // stopped on request and amp exited by itself after draining
 	}
 	return err
+}
+
+// Doctor only reads template state; building is an explicit separate action.
+func ampDoctorTemplate(ctx context.Context, client *api.SandboxClient, name string, out io.Writer) (bool, error) {
+	tpl, err := client.GetTemplate(ctx, name, false)
+	switch {
+	case api.IsNotFound(err):
+		_, writeErr := fmt.Fprintf(out, "\n  %s Template %s is missing.\n\n  Build it with:\n\n    createos sandbox setup amp --build-template --template %s\n\n", pterm.Yellow("!"), name, name)
+		return false, writeErr
+	case err != nil:
+		return false, fmt.Errorf("could not check template %s: %w", name, err)
+	case tpl.Status == "ready":
+		_, writeErr := fmt.Fprintf(out, "\n  %s Template %s is ready.\n", pterm.Green("✓"), name)
+		return true, writeErr
+	default:
+		_, writeErr := fmt.Fprintf(out, "\n  %s Template %s is %s.\n\n  Check its build logs:\n\n    createos sandbox template logs %s --follow\n\n", pterm.Yellow("!"), name, tpl.Status, name)
+		return false, writeErr
+	}
+}
+
+func runAmpBuildTemplate(c *cli.Context) error {
+	client, ok := c.App.Metadata[api.SandboxClientKey].(*api.SandboxClient)
+	if !ok {
+		return fmt.Errorf("you're not signed in — run 'createos login' first")
+	}
+	name := c.String("template")
+	tpl, err := client.GetTemplate(c.Context, name, false)
+	if api.IsNotFound(err) {
+		tpl, err = client.CreateTemplate(c.Context, api.TemplateCreateReq{Name: name, Dockerfile: ampDockerfile})
+	}
+	if err != nil {
+		return fmt.Errorf("build template %s: %w", name, err)
+	}
+	if tpl.Status == "ready" {
+		pterm.Success.Printfln("Template %s is already ready", name)
+		return nil
+	}
+	if tpl.Status == "failed" || tpl.Status == "cancelled" {
+		return fmt.Errorf("template %s is %s; inspect it with 'createos sandbox template logs %s', then use a new --template name to build again", name, tpl.Status, name)
+	}
+	pterm.Info.Printfln("Building template %s", name)
+	return streamTemplateLogs(c, client, tpl.ID)
 }
 
 // writeAmpWrapper writes the program Amp runs per job and returns its path.

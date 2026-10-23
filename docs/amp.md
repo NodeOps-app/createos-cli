@@ -74,13 +74,40 @@ createos sandbox setup amp --doctor   # checks only, starts nothing
 createos sandbox setup amp            # leave this running
 ```
 
-`--doctor` prints three lines:
+`--doctor` checks your prerequisites and shows the provider settings:
 
 ```text
-signed in to CreateOS
-amp found at /Users/you/.local/bin/amp
-AMP_ORB_PROVIDER_TOKEN is set
+  Amp on CreateOS
+  Checking your provider setup…
+
+  ✓ CreateOS         Signed in · sandbox API reachable
+  ✓ Amp CLI          /Users/you/.local/bin/amp
+  ✓ Provider token   Set · validated when the provider connects
+
+  ✓ Template amp-orb is ready.
+
+  Prerequisites look good.
+  Start your provider and leave it running:
+
+    createos sandbox setup amp --shape s-4vcpu-8gb --template amp-orb
 ```
+
+Doctor checks the template through the API without creating anything. If it is
+missing, it shows:
+
+```text
+  ! Template amp-orb is missing.
+
+  Build it with:
+
+    createos sandbox setup amp --build-template --template amp-orb
+```
+
+That command submits the Dockerfile embedded in the CLI and follows the build
+logs; no repository checkout is needed. It reuses a ready template or follows
+an existing build. Use `--template <name>` on both commands for a custom name.
+For a failed build, inspect its logs and use a new name to try again.
+Doctor reports API errors separately from missing templates.
 
 Then the provider waits for work:
 
