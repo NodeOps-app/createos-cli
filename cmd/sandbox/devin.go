@@ -213,6 +213,7 @@ func runDevinSetup(c *cli.Context) error {
 	o := &devinOrch{
 		devin: devin, client: client, outpost: outpost.Metadata.OutpostID, acceptor: acceptor,
 		shape: c.String("shape"), rootfs: c.String("rootfs"), busy: map[string]bool{},
+		recordDir: filepath.Join(filepath.Dir(acceptorPath()), "devin-sessions"),
 	}
 	return o.run(ctx, c.Int("max-sessions"))
 }
@@ -221,11 +222,10 @@ func runDevinSetup(c *cli.Context) error {
 // it can pick its claimed sessions back up. Devin's docs forbid sharing one
 // across machines, so it is random rather than derived from anything copied.
 func devinAcceptorID() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not find your home folder: %w", err)
+	path := acceptorPath()
+	if path == "" {
+		return "", fmt.Errorf("could not find your home folder")
 	}
-	path := filepath.Join(home, ".createos", "devin-acceptor-id")
 	if b, err := os.ReadFile(path); err == nil { // #nosec G304 -- fixed path under the user's home
 		if id := strings.TrimSpace(string(b)); id != "" {
 			return id, nil
@@ -240,6 +240,14 @@ func devinAcceptorID() (string, error) {
 		return "", err
 	}
 	return id, os.WriteFile(path, []byte(id+"\n"), 0o600)
+}
+
+func acceptorPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".createos", "devin-acceptor-id")
 }
 
 // devinSandboxName maps a session to its sandbox. Names cap at 22 characters.
@@ -391,6 +399,7 @@ type devinOrch struct {
 	client            *api.SandboxClient
 	outpost, acceptor string
 	shape, rootfs     string
+	recordDir         string // one file per sandbox this machine owns, named after it
 	mu                sync.Mutex
 	busy              map[string]bool
 	wg                sync.WaitGroup
@@ -408,6 +417,13 @@ func (o *devinOrch) run(ctx context.Context, maxSessions int) error {
 		return err
 	}
 	for _, e := range mine {
+		o.start(ctx, e, o.adopt)
+	}
+	// A session that ended while this was stopped has left the queue, so only
+	// the local record still points at its sandbox.
+	for _, id := range o.records() {
+		var e devinEntry
+		e.Metadata.SessionID = id
 		o.start(ctx, e, o.adopt)
 	}
 	for {
@@ -484,12 +500,13 @@ func (o *devinOrch) serve(ctx context.Context, e devinEntry) {
 		}
 		return
 	}
+	o.record(id, true)
 	devinLog("%s: serving in %s", id, devinSandboxName(id))
 	o.watch(ctx, id, sbID, procID)
 }
 
 // launch readies the session's sandbox and starts devin-remote in it.
-func (o *devinOrch) launch(ctx context.Context, e devinEntry) (sbID, procID string, err error) {
+func (o *devinOrch) launch(ctx context.Context, e devinEntry) (_, _ string, err error) {
 	id := e.Metadata.SessionID
 	name := devinSandboxName(id)
 	sha := e.Spec.RemoteBinarySHA
@@ -511,6 +528,23 @@ func (o *devinOrch) launch(ctx context.Context, e devinEntry) (sbID, procID stri
 		}
 		sb = nil
 	}
+	var sbID string
+	fresh := false
+	// On failure, a sandbox made for this attempt holds no work yet and is
+	// deleted. An older one keeps its work, but a remote that may have started
+	// (a lost CreateProcess reply) is stopped before the claim is released.
+	defer func() {
+		if err == nil || sbID == "" {
+			return
+		}
+		bg := context.WithoutCancel(ctx)
+		if fresh {
+			_ = o.client.DestroySandbox(bg, sbID) //nolint:errcheck // best effort
+			return
+		}
+		_, _ = o.client.ExecSandbox(bg, sbID, api.SandboxExecReq{ //nolint:errcheck // best effort
+			Cmd: "pkill", Args: []string{"-f", "^" + devinRemoteBin + " serve"}})
+	}()
 	switch {
 	case sb == nil:
 		if e.Spec.Kind == "resume" {
@@ -526,14 +560,7 @@ func (o *devinOrch) launch(ctx context.Context, e devinEntry) (sbID, procID stri
 		}); err != nil {
 			return "", "", fmt.Errorf("create %s: %w", name, err)
 		}
-		sbID = created.ID
-		// A sandbox made for this attempt holds no work yet, so a failed
-		// launch deletes it rather than leaving it billing.
-		defer func() {
-			if err != nil {
-				_ = o.client.DestroySandbox(context.WithoutCancel(ctx), sbID) //nolint:errcheck // best effort
-			}
-		}()
+		sbID, fresh = created.ID, true
 	case sb.Status == api.SandboxStatusPaused:
 		sbID = sb.ID
 		if _, err = o.client.ResumeSandbox(ctx, sbID); err != nil {
@@ -629,19 +656,26 @@ func (o *devinOrch) finish(ctx context.Context, id, sbID string) {
 			return
 		}
 	}
+	name := devinSandboxName(id)
 	switch status {
 	case "suspended":
-		if sb, err := o.client.GetSandbox(ctx, sbID); err == nil && sb.Status == api.SandboxStatusRunning {
-			if _, err = o.client.PauseSandbox(ctx, sbID); err != nil {
-				devinLog("%s: pause %s: %v", id, sbID, err)
-			}
+		if o.retry(ctx, func() error { return o.pause(ctx, sbID) }) {
+			devinLog("%s: suspended; sandbox paused", id)
+		} else {
+			devinLog("%s: suspended, but %s could not be paused; pause it with 'createos sandbox pause %s'", id, name, name)
 		}
-		devinLog("%s: suspended; sandbox paused", id)
 	case "terminated":
-		if err := o.client.DestroySandbox(ctx, sbID); err != nil && !api.IsNotFound(err) {
-			devinLog("%s: delete %s: %v", id, sbID, err)
+		if o.retry(ctx, func() error {
+			if err := o.client.DestroySandbox(ctx, sbID); err != nil && !api.IsNotFound(err) {
+				return err
+			}
+			return nil
+		}) {
+			o.record(id, false)
+			devinLog("%s: ended; sandbox deleted", id)
+		} else {
+			devinLog("%s: ended, but %s could not be deleted; delete it with 'createos sandbox rm %s'", id, name, name)
 		}
-		devinLog("%s: ended; sandbox deleted", id)
 	default:
 		// The next claim finds the sandbox still running and starts a new remote.
 		devinLog("%s: devin-remote stopped while the session is %q; returning it to the queue", id, status)
@@ -658,6 +692,7 @@ func (o *devinOrch) adopt(ctx context.Context, e devinEntry) {
 		return
 	}
 	if sb == nil {
+		o.record(id, false)
 		o.release(ctx, id)
 		return
 	}
@@ -676,6 +711,64 @@ func (o *devinOrch) adopt(ctx context.Context, e devinEntry) {
 		}
 	}
 	o.finish(ctx, id, sb.ID)
+}
+
+func (o *devinOrch) pause(ctx context.Context, sbID string) error {
+	sb, err := o.client.GetSandbox(ctx, sbID)
+	if err != nil || sb.Status == api.SandboxStatusPaused {
+		return err
+	}
+	if sb.Status == api.SandboxStatusRunning {
+		if _, err = o.client.PauseSandbox(ctx, sbID); err != nil {
+			return err
+		}
+	}
+	return ampWaitStatus(ctx, o.client, sbID, api.SandboxStatusPaused, ampSettleWait)
+}
+
+// retry runs fn up to three times, so one API hiccup does not leave an idle
+// sandbox billing. It reports whether fn succeeded.
+func (o *devinOrch) retry(ctx context.Context, fn func() error) bool {
+	for try := 1; ; try++ {
+		err := fn()
+		if err == nil {
+			return true
+		}
+		devinLog("attempt %d: %v", try, err)
+		if try == 3 || ampSleep(ctx, devinPollEvery) != nil {
+			return false
+		}
+	}
+}
+
+// record marks (or, with keep false, unmarks) a session's sandbox as owned by
+// this machine. A failed write only costs restart recovery, so it is logged.
+func (o *devinOrch) record(id string, keep bool) {
+	path := filepath.Join(o.recordDir, devinSandboxName(id))
+	var err error
+	if keep {
+		if err = os.MkdirAll(o.recordDir, 0o700); err == nil {
+			err = os.WriteFile(path, []byte(id+"\n"), 0o600)
+		}
+	} else if err = os.Remove(path); errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	if err != nil {
+		devinLog("%s: %v", id, err)
+	}
+}
+
+// records returns the session IDs of every sandbox this machine owns.
+func (o *devinOrch) records() []string {
+	files, _ := os.ReadDir(o.recordDir) //nolint:errcheck // no folder means no records
+	var ids []string
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(o.recordDir, f.Name())) // #nosec G304 -- our own folder
+		if id := strings.TrimSpace(string(b)); err == nil && devinSessionIDRE.MatchString(id) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func (o *devinOrch) release(ctx context.Context, id string) {

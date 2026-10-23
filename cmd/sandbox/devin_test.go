@@ -95,6 +95,9 @@ type fakeCreateOS struct {
 	mu          sync.Mutex
 	devin       *fakeDevin
 	finalStatus string
+	execExit    int    // provision exit code
+	listed      string // name of a running sandbox the list returns, if any
+	paused      bool
 	created     map[string]any
 	exec        map[string]any
 	proc        map[string]any
@@ -113,16 +116,27 @@ func (f *fakeCreateOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.calls = append(f.calls, route)
 	switch route {
 	case "GET /v1/sandboxes":
+		if f.listed != "" && r.URL.Query().Get("status") == "running" {
+			ok(map[string]any{"data": []any{map[string]any{"id": "sb1", "name": f.listed, "status": "running"}},
+				"pagination": map[string]any{"total": 1}})
+			return
+		}
 		ok(map[string]any{"data": []any{}, "pagination": map[string]any{"total": 0}})
 	case "POST /v1/sandboxes":
 		_ = json.NewDecoder(r.Body).Decode(&f.created) //nolint:errcheck
 		ok(map[string]any{"id": "sb1"})
 	case "GET /v1/sandboxes/sb1":
-		ok(map[string]any{"id": "sb1", "status": "running"})
+		status := "running"
+		if f.paused {
+			status = "paused"
+		}
+		ok(map[string]any{"id": "sb1", "status": status})
 	case "POST /v1/sandboxes/sb1/exec":
 		_ = json.NewDecoder(r.Body).Decode(&f.exec) //nolint:errcheck
 		fmt.Fprintln(w, `{"stdout":"ok\n"}`)
-		fmt.Fprintln(w, `{"exit_code":0}`)
+		fmt.Fprintf(w, "{\"exit_code\":%d}\n", f.execExit)
+	case "GET /v1/sandboxes/sb1/processes":
+		ok(map[string]any{"processes": []any{}})
 	case "POST /v1/sandboxes/sb1/processes":
 		_ = json.NewDecoder(r.Body).Decode(&f.proc) //nolint:errcheck
 		ok(map[string]any{"process_id": "p1"})
@@ -138,30 +152,40 @@ func (f *fakeCreateOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.devin.status = f.finalStatus
 		f.devin.mu.Unlock()
 		ok(map[string]any{"process_id": "p1", "exit_code": 0, "leader_exited": true})
-	case "POST /v1/sandboxes/sb1/pause", "DELETE /v1/sandboxes/sb1":
+	case "POST /v1/sandboxes/sb1/pause":
+		f.paused = true
+		ok(map[string]any{"id": "sb1"})
+	case "DELETE /v1/sandboxes/sb1":
 		ok(map[string]any{"id": "sb1"})
 	default:
 		http.NotFound(w, r)
 	}
 }
 
+func newTestOrch(t *testing.T, devin *fakeDevin, cos *fakeCreateOS) *devinOrch {
+	devinSrv, cosSrv := httptest.NewServer(devin), httptest.NewServer(cos)
+	t.Cleanup(devinSrv.Close)
+	t.Cleanup(cosSrv.Close)
+	client := api.NewSandboxClient("cos-key", cosSrv.URL, false)
+	return &devinOrch{
+		devin: newDevinAPI(devinSrv.URL, "devin-secret"), client: &client,
+		outpost: "outpost_env-1", acceptor: "createos-test", recordDir: t.TempDir(),
+		shape: devinDefaultShape, rootfs: devinDefaultRootfs, busy: map[string]bool{},
+	}
+}
+
 func TestDevinSessionLifecycle(t *testing.T) {
-	for _, tc := range []struct{ final, wantCall string }{
-		{"suspended", "POST /v1/sandboxes/sb1/pause"},
-		{"terminated", "DELETE /v1/sandboxes/sb1"},
+	for _, tc := range []struct {
+		final, wantCall string
+		wantRecord      bool
+	}{
+		{"suspended", "POST /v1/sandboxes/sb1/pause", true},
+		{"terminated", "DELETE /v1/sandboxes/sb1", false},
 	} {
 		t.Run(tc.final, func(t *testing.T) {
 			devin := &fakeDevin{status: "running"}
 			cos := &fakeCreateOS{devin: devin, finalStatus: tc.final}
-			devinSrv, cosSrv := httptest.NewServer(devin), httptest.NewServer(cos)
-			defer devinSrv.Close()
-			defer cosSrv.Close()
-			client := api.NewSandboxClient("cos-key", cosSrv.URL, false)
-			o := &devinOrch{
-				devin: newDevinAPI(devinSrv.URL, "devin-secret"), client: &client,
-				outpost: "outpost_env-1", acceptor: "createos-test",
-				shape: devinDefaultShape, rootfs: devinDefaultRootfs, busy: map[string]bool{},
-			}
+			o := newTestOrch(t, devin, cos)
 
 			ctx := context.Background()
 			o.claimAndServe(ctx, "s2") // lost race: no sandbox
@@ -192,9 +216,56 @@ func TestDevinSessionLifecycle(t *testing.T) {
 			if !slices.Contains(cos.calls, tc.wantCall) {
 				t.Errorf("calls %v lack %s", cos.calls, tc.wantCall)
 			}
+			// A paused sandbox stays owned, so a restart can still clean it up.
+			if got := slices.Equal(o.records(), []string{"s1"}); got != tc.wantRecord {
+				t.Errorf("records = %v, want kept=%v", o.records(), tc.wantRecord)
+			}
 			if o.count() != 0 {
 				t.Errorf("%d sessions still marked busy", o.count())
 			}
 		})
+	}
+}
+
+// A sandbox made for a failed attempt holds no work, so it must be deleted by
+// its real ID, and the session must go back to the queue.
+func TestDevinFailedSetupDeletesFreshSandbox(t *testing.T) {
+	devin := &fakeDevin{status: "running"}
+	cos := &fakeCreateOS{devin: devin, execExit: 1}
+	o := newTestOrch(t, devin, cos)
+	o.claimAndServe(context.Background(), "s1")
+	o.wg.Wait()
+	if !slices.Contains(cos.calls, "DELETE /v1/sandboxes/sb1") {
+		t.Errorf("calls %v do not delete sb1", cos.calls)
+	}
+	if slices.Contains(cos.calls, "POST /v1/sandboxes/sb1/processes") {
+		t.Error("devin-remote was started after a failed setup")
+	}
+	if !slices.Equal(devin.released, []string{"s1"}) {
+		t.Errorf("released = %v, want [s1]", devin.released)
+	}
+	if len(o.records()) != 0 {
+		t.Errorf("records = %v, want none", o.records())
+	}
+}
+
+// A session that ended while the orchestrator was stopped is gone from the
+// queue; its local record is the only way back to the sandbox.
+func TestDevinRestartDeletesSandboxOfEndedSession(t *testing.T) {
+	devin := &fakeDevin{status: "running"}
+	cos := &fakeCreateOS{devin: devin, listed: devinSandboxName("s3")}
+	o := newTestOrch(t, devin, cos)
+	o.record("s3", true)
+	for _, id := range o.records() {
+		var e devinEntry
+		e.Metadata.SessionID = id
+		o.start(context.Background(), e, o.adopt)
+	}
+	o.wg.Wait()
+	if !slices.Contains(cos.calls, "DELETE /v1/sandboxes/sb1") {
+		t.Errorf("calls %v do not delete the orphan", cos.calls)
+	}
+	if len(o.records()) != 0 {
+		t.Errorf("records = %v, want none", o.records())
 	}
 }
