@@ -43,7 +43,12 @@ const (
 	devinDefaultRootfs = "devbox:1"
 	devinDefaultAPI    = "https://api.devin.ai"
 	devinPollEvery     = 5 * time.Second
-	devinWaitChunk     = 30 * time.Second
+	devinSweepEvery    = 10 * time.Minute
+	// Labels mark the sandboxes an outpost owns, so a restart (on any
+	// machine) finds them through the API rather than local state.
+	devinLabelOutpost = "createos.devin/outpost"
+	devinLabelSession = "createos.devin/session"
+	devinWaitChunk    = 30 * time.Second
 	// The session status can lag the remote's exit by a few seconds.
 	devinStatusTries = 6
 	devinRemoteBin   = "/usr/local/bin/devin-remote"
@@ -108,8 +113,7 @@ func newSetupDevinCommand() *cli.Command {
 		Usage: "Run Devin Outposts sessions on CreateOS Sandboxes",
 		Description: "Serves a Devin outpost so each Devin session gets its own sandbox.\n\n" +
 			"   First, create a Linux outpost in Devin (Settings > Environment > Outposts)\n" +
-			"   and a v3 API token for a service user with the Outposts write\n" +
-			"   permission. Then:\n\n" +
+			"   and copy the outpost token it shows once. Then:\n\n" +
 			"     export DEVIN_API_TOKEN=<the token>\n" +
 			"     createos sandbox setup devin --outpost <outpost name>\n\n" +
 			"   Leave it running, then pick the outpost under Configuration >\n" +
@@ -141,6 +145,13 @@ func newSetupDevinCommand() *cli.Command {
 				Usage: "Most sessions to serve at once; keep it within your sandbox quota",
 				Value: 2,
 			},
+			&cli.DurationFlag{
+				Name: "delete-paused-after",
+				Usage: "Delete a session's sandbox once it has been paused this long " +
+					"(a sleeping or archived session); 0 keeps it forever",
+				Value:   7 * 24 * time.Hour,
+				EnvVars: []string{"CREATEOS_DEVIN_DELETE_PAUSED_AFTER"},
+			},
 			&cli.StringFlag{
 				Name:    "api-url",
 				Usage:   "Devin API base URL",
@@ -171,7 +182,8 @@ func runDevinSetup(c *cli.Context) error {
 	token := os.Getenv("DEVIN_API_TOKEN")
 	if token == "" {
 		return fmt.Errorf("DEVIN_API_TOKEN is not set\n\n" +
-			"  Create a v3 API token for a service user whose role has Outposts write, then:\n" +
+			"  Use the outpost token Devin showed when you created the outpost, or a\n" +
+			"  service-user v3 token with the Outposts write permission, then:\n" +
 			"    export DEVIN_API_TOKEN=<the token>")
 	}
 	devin := newDevinAPI(c.String("api-url"), token)
@@ -214,7 +226,7 @@ func runDevinSetup(c *cli.Context) error {
 	o := &devinOrch{
 		devin: devin, client: client, outpost: outpost.Metadata.OutpostID, acceptor: acceptor,
 		shape: c.String("shape"), rootfs: c.String("rootfs"), busy: map[string]bool{},
-		recordDir: filepath.Join(filepath.Dir(acceptorPath()), "devin-sessions"),
+		deletePausedAfter: c.Duration("delete-paused-after"),
 	}
 	return o.run(ctx, c.Int("max-sessions"))
 }
@@ -223,10 +235,11 @@ func runDevinSetup(c *cli.Context) error {
 // it can pick its claimed sessions back up. Devin's docs forbid sharing one
 // across machines, so it is random rather than derived from anything copied.
 func devinAcceptorID() (string, error) {
-	path := acceptorPath()
-	if path == "" {
-		return "", fmt.Errorf("could not find your home folder")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not find your home folder: %w", err)
 	}
+	path := filepath.Join(home, ".createos", "devin-acceptor-id")
 	if b, err := os.ReadFile(path); err == nil { // #nosec G304 -- fixed path under the user's home
 		if id := strings.TrimSpace(string(b)); id != "" {
 			return id, nil
@@ -241,14 +254,6 @@ func devinAcceptorID() (string, error) {
 		return "", err
 	}
 	return id, os.WriteFile(path, []byte(id+"\n"), 0o600)
-}
-
-func acceptorPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".createos", "devin-acceptor-id")
 }
 
 // devinSandboxName maps a session to its sandbox. Names cap at 22 characters.
@@ -350,7 +355,7 @@ func devinList[T any](ctx context.Context, d *devinAPI, path string, query url.V
 func (d *devinAPI) findOutpost(ctx context.Context, ref string) (*devinOutpost, error) {
 	outposts, err := devinList[devinOutpost](ctx, d, "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("list outposts (is DEVIN_API_TOKEN an Outposts token?): %w", err)
+		return nil, fmt.Errorf("list outposts (is DEVIN_API_TOKEN an outpost token?): %w", err)
 	}
 	for _, o := range outposts {
 		if o.Spec.Name == ref || o.Metadata.OutpostID == ref {
@@ -402,7 +407,7 @@ type devinOrch struct {
 	client            *api.SandboxClient
 	outpost, acceptor string
 	shape, rootfs     string
-	recordDir         string // one file per sandbox this machine owns, named after it
+	deletePausedAfter time.Duration
 	mu                sync.Mutex
 	busy              map[string]bool
 	wg                sync.WaitGroup
@@ -422,13 +427,18 @@ func (o *devinOrch) run(ctx context.Context, maxSessions int) error {
 	for _, e := range mine {
 		o.start(ctx, e, o.adopt)
 	}
-	// A session that ended while this was stopped has left the queue, so only
-	// the local record still points at its sandbox.
-	for _, id := range o.records() {
+	// A session that slept or ended while this was stopped has left the
+	// queue, so only its sandbox's labels still point at it.
+	owned, err := o.owned(ctx)
+	if err != nil {
+		return err
+	}
+	for _, sb := range owned {
 		var e devinEntry
-		e.Metadata.SessionID = id
+		e.Metadata.SessionID = sb.Labels[devinLabelSession]
 		o.start(ctx, e, o.adopt)
 	}
+	lastSweep := time.Time{}
 	for {
 		if o.count() < maxSessions {
 			pending, err := devinList[devinEntry](ctx, o.devin, "/devins", url.Values{
@@ -442,6 +452,10 @@ func (o *devinOrch) run(ctx context.Context, maxSessions int) error {
 				}
 				o.claimAndServe(ctx, e.Metadata.SessionID)
 			}
+		}
+		if o.deletePausedAfter > 0 && time.Since(lastSweep) > devinSweepEvery {
+			o.sweep(ctx)
+			lastSweep = time.Now()
 		}
 		if ampSleep(ctx, devinPollEvery) != nil {
 			o.wg.Wait()
@@ -503,7 +517,6 @@ func (o *devinOrch) serve(ctx context.Context, e devinEntry) {
 		}
 		return
 	}
-	o.record(id, true)
 	devinLog("%s: serving in %s", id, devinSandboxName(id))
 	o.watch(ctx, id, sbID, procID)
 }
@@ -560,6 +573,7 @@ func (o *devinOrch) launch(ctx context.Context, e devinEntry) (_, _ string, err 
 		var created *api.SandboxCreateResp
 		if created, err = o.client.CreateSandbox(ctx, api.SandboxCreateReq{
 			Name: name, Shape: o.shape, Rootfs: o.rootfs, Envs: envs,
+			Labels: map[string]string{devinLabelOutpost: o.outpost, devinLabelSession: id},
 		}); err != nil {
 			return "", "", fmt.Errorf("create %s: %w", name, err)
 		}
@@ -647,7 +661,10 @@ func (o *devinOrch) finish(ctx context.Context, id, sbID string) {
 	for range devinStatusTries {
 		e, err := o.devin.get(ctx, id)
 		if err == nil && e == nil {
-			status = "terminated"
+			// A suspended session leaves the queue too (seen live), so a
+			// missing entry cannot tell sleep from end. Pausing loses nothing;
+			// the sweep deletes the sandbox if it is never resumed.
+			status = "gone"
 			break
 		}
 		if e != nil {
@@ -661,9 +678,10 @@ func (o *devinOrch) finish(ctx context.Context, id, sbID string) {
 	}
 	name := devinSandboxName(id)
 	switch status {
-	case "suspended":
+	case "suspended", "gone":
 		if o.retry(ctx, func() error { return o.pause(ctx, sbID) }) {
-			devinLog("%s: suspended; sandbox paused", id)
+			devinLog("%s: %s; sandbox paused", id, map[string]string{
+				"suspended": "suspended", "gone": "left the queue (asleep or ended)"}[status])
 		} else {
 			devinLog("%s: suspended, but %s could not be paused; pause it with 'createos sandbox pause %s'", id, name, name)
 		}
@@ -674,7 +692,6 @@ func (o *devinOrch) finish(ctx context.Context, id, sbID string) {
 			}
 			return nil
 		}) {
-			o.record(id, false)
 			devinLog("%s: ended; sandbox deleted", id)
 		} else {
 			devinLog("%s: ended, but %s could not be deleted; delete it with 'createos sandbox rm %s'", id, name, name)
@@ -695,7 +712,6 @@ func (o *devinOrch) adopt(ctx context.Context, e devinEntry) {
 		return
 	}
 	if sb == nil {
-		o.record(id, false)
 		o.release(ctx, id)
 		return
 	}
@@ -744,34 +760,52 @@ func (o *devinOrch) retry(ctx context.Context, fn func() error) bool {
 	}
 }
 
-// record marks (or, with keep false, unmarks) a session's sandbox as owned by
-// this machine. A failed write only costs restart recovery, so it is logged.
-func (o *devinOrch) record(id string, keep bool) {
-	path := filepath.Join(o.recordDir, devinSandboxName(id))
-	var err error
-	if keep {
-		if err = os.MkdirAll(o.recordDir, 0o700); err == nil {
-			err = os.WriteFile(path, []byte(id+"\n"), 0o600)
+// owned returns the live sandboxes this outpost's sessions run in.
+func (o *devinOrch) owned(ctx context.Context) ([]api.SandboxView, error) {
+	var owned []api.SandboxView
+	for offset := 0; ; {
+		rows, page, err := o.client.ListSandboxes(ctx, api.ListSandboxesOpts{
+			Limit: 200, Offset: offset, Labels: map[string]string{devinLabelOutpost: o.outpost}})
+		if err != nil {
+			return nil, fmt.Errorf("list this outpost's sandboxes: %w", err)
 		}
-	} else if err = os.Remove(path); errors.Is(err, os.ErrNotExist) {
-		err = nil
-	}
-	if err != nil {
-		devinLog("%s: %v", id, err)
+		for _, sb := range rows {
+			if slices.Contains(ampLiveStatuses, sb.Status) && devinSessionIDRE.MatchString(sb.Labels[devinLabelSession]) {
+				owned = append(owned, sb)
+			}
+		}
+		offset += len(rows)
+		if len(rows) == 0 || offset >= page.Total {
+			return owned, nil
+		}
 	}
 }
 
-// records returns the session IDs of every sandbox this machine owns.
-func (o *devinOrch) records() []string {
-	files, _ := os.ReadDir(o.recordDir) //nolint:errcheck // no folder means no records
-	var ids []string
-	for _, f := range files {
-		b, err := os.ReadFile(filepath.Join(o.recordDir, f.Name())) // #nosec G304 -- our own folder
-		if id := strings.TrimSpace(string(b)); err == nil && devinSessionIDRE.MatchString(id) {
-			ids = append(ids, id)
-		}
+// sweep deletes sandboxes paused for longer than deletePausedAfter, unless
+// their session is queued to resume. A session woken after that starts in an
+// empty sandbox, and Devin warns about it in the session.
+func (o *devinOrch) sweep(ctx context.Context) {
+	owned, err := o.owned(ctx)
+	if err != nil {
+		devinLog("sweep: %v", err)
+		return
 	}
-	return ids
+	for _, sb := range owned {
+		id := sb.Labels[devinLabelSession]
+		if sb.Status != api.SandboxStatusPaused || sb.PausedAt == nil ||
+			time.Since(*sb.PausedAt) < o.deletePausedAfter || o.isBusy(id) {
+			continue
+		}
+		// A sleeping session has no queue entry; one that is queued is about to resume.
+		if e, err := o.devin.get(ctx, id); err != nil || (e != nil && e.Status.SessionStatus != "terminated") {
+			continue
+		}
+		if err := o.client.DestroySandbox(ctx, sb.ID); err != nil && !api.IsNotFound(err) {
+			devinLog("%s: delete %s: %v", id, devinSandboxName(id), err)
+			continue
+		}
+		devinLog("%s: deleted %s, paused since %s", id, devinSandboxName(id), sb.PausedAt.Format(time.DateTime))
+	}
 }
 
 func (o *devinOrch) release(ctx context.Context, id string) {

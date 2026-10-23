@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NodeOps-app/createos-cli/internal/api"
 )
@@ -95,8 +96,8 @@ type fakeCreateOS struct {
 	mu          sync.Mutex
 	devin       *fakeDevin
 	finalStatus string
-	execExit    int    // provision exit code
-	listed      string // name of a running sandbox the list returns, if any
+	execExit    int            // provision exit code
+	listed      map[string]any // a labelled sandbox the list returns, if any
 	paused      bool
 	created     map[string]any
 	exec        map[string]any
@@ -116,9 +117,8 @@ func (f *fakeCreateOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.calls = append(f.calls, route)
 	switch route {
 	case "GET /v1/sandboxes":
-		if f.listed != "" && r.URL.Query().Get("status") == "running" {
-			ok(map[string]any{"data": []any{map[string]any{"id": "sb1", "name": f.listed, "status": "running"}},
-				"pagination": map[string]any{"total": 1}})
+		if q := r.URL.Query().Get("status"); f.listed != nil && (q == "" || q == f.listed["status"]) {
+			ok(map[string]any{"data": []any{f.listed}, "pagination": map[string]any{"total": 1}})
 			return
 		}
 		ok(map[string]any{"data": []any{}, "pagination": map[string]any{"total": 0}})
@@ -127,6 +127,9 @@ func (f *fakeCreateOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ok(map[string]any{"id": "sb1"})
 	case "GET /v1/sandboxes/sb1":
 		status := "running"
+		if f.listed != nil {
+			status, _ = f.listed["status"].(string)
+		}
 		if f.paused {
 			status = "paused"
 		}
@@ -169,7 +172,7 @@ func newTestOrch(t *testing.T, devin *fakeDevin, cos *fakeCreateOS) *devinOrch {
 	client := api.NewSandboxClient("cos-key", cosSrv.URL, false)
 	return &devinOrch{
 		devin: newDevinAPI(devinSrv.URL, "devin-secret"), client: &client,
-		outpost: "outpost_env-1", acceptor: "createos-test", recordDir: t.TempDir(),
+		outpost: "outpost_env-1", acceptor: "createos-test", deletePausedAfter: 7 * 24 * time.Hour,
 		shape: devinDefaultShape, rootfs: devinDefaultRootfs, busy: map[string]bool{},
 	}
 }
@@ -177,10 +180,9 @@ func newTestOrch(t *testing.T, devin *fakeDevin, cos *fakeCreateOS) *devinOrch {
 func TestDevinSessionLifecycle(t *testing.T) {
 	for _, tc := range []struct {
 		final, wantCall string
-		wantRecord      bool
 	}{
-		{"suspended", "POST /v1/sandboxes/sb1/pause", true},
-		{"terminated", "DELETE /v1/sandboxes/sb1", false},
+		{"suspended", "POST /v1/sandboxes/sb1/pause"},
+		{"terminated", "DELETE /v1/sandboxes/sb1"},
 	} {
 		t.Run(tc.final, func(t *testing.T) {
 			devin := &fakeDevin{status: "running"}
@@ -216,9 +218,10 @@ func TestDevinSessionLifecycle(t *testing.T) {
 			if !slices.Contains(cos.calls, tc.wantCall) {
 				t.Errorf("calls %v lack %s", cos.calls, tc.wantCall)
 			}
-			// A paused sandbox stays owned, so a restart can still clean it up.
-			if got := slices.Equal(o.records(), []string{"s1"}); got != tc.wantRecord {
-				t.Errorf("records = %v, want kept=%v", o.records(), tc.wantRecord)
+			// Labels are how a restart finds the sandbox again.
+			labels, _ := cos.created["labels"].(map[string]any)
+			if labels[devinLabelOutpost] != "outpost_env-1" || labels[devinLabelSession] != "s1" {
+				t.Errorf("labels = %v", labels)
 			}
 			if o.count() != 0 {
 				t.Errorf("%d sessions still marked busy", o.count())
@@ -244,28 +247,57 @@ func TestDevinFailedSetupDeletesFreshSandbox(t *testing.T) {
 	if !slices.Equal(devin.released, []string{"s1"}) {
 		t.Errorf("released = %v, want [s1]", devin.released)
 	}
-	if len(o.records()) != 0 {
-		t.Errorf("records = %v, want none", o.records())
+}
+
+func labelled(session, status string, pausedAt time.Time) map[string]any {
+	return map[string]any{
+		"id": "sb1", "name": devinSandboxName(session), "status": status,
+		"paused_at": pausedAt.UTC().Format(time.RFC3339),
+		"labels":    map[string]any{devinLabelOutpost: "outpost_env-1", devinLabelSession: session},
 	}
 }
 
-// A session that ended while the orchestrator was stopped is gone from the
-// queue; its local record is the only way back to the sandbox.
-func TestDevinRestartDeletesSandboxOfEndedSession(t *testing.T) {
+// A sleeping session leaves the queue as well as an ended one (seen live), so
+// a restart that finds its sandbox without a queue entry must pause it, not
+// delete it: deleting would wipe the files of a session that may still wake.
+func TestDevinRestartPausesSandboxOfLeftSession(t *testing.T) {
 	devin := &fakeDevin{status: "running"}
-	cos := &fakeCreateOS{devin: devin, listed: devinSandboxName("s3")}
+	cos := &fakeCreateOS{devin: devin, listed: labelled("s3", "running", time.Now())}
 	o := newTestOrch(t, devin, cos)
-	o.record("s3", true)
-	for _, id := range o.records() {
+	owned, err := o.owned(context.Background())
+	if err != nil || len(owned) != 1 {
+		t.Fatalf("owned = %v, %v", owned, err)
+	}
+	for _, sb := range owned {
 		var e devinEntry
-		e.Metadata.SessionID = id
+		e.Metadata.SessionID = sb.Labels[devinLabelSession]
 		o.start(context.Background(), e, o.adopt)
 	}
 	o.wg.Wait()
-	if !slices.Contains(cos.calls, "DELETE /v1/sandboxes/sb1") {
-		t.Errorf("calls %v do not delete the orphan", cos.calls)
+	if !slices.Contains(cos.calls, "POST /v1/sandboxes/sb1/pause") || slices.Contains(cos.calls, "DELETE /v1/sandboxes/sb1") {
+		t.Errorf("calls %v, want a pause and no delete", cos.calls)
 	}
-	if len(o.records()) != 0 {
-		t.Errorf("records = %v, want none", o.records())
+}
+
+func TestDevinSweepDeletesOnlyLongPausedSandboxes(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		session    string // s1 has a queue entry; s3 has none
+		pausedFor  time.Duration
+		wantDelete bool
+	}{
+		{"paused past the limit", "s3", 8 * 24 * time.Hour, true},
+		{"paused under the limit", "s3", 24 * time.Hour, false},
+		{"queued to resume", "s1", 8 * 24 * time.Hour, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			devin := &fakeDevin{status: "pending"}
+			cos := &fakeCreateOS{devin: devin, listed: labelled(tc.session, "paused", time.Now().Add(-tc.pausedFor))}
+			o := newTestOrch(t, devin, cos)
+			o.sweep(context.Background())
+			if got := slices.Contains(cos.calls, "DELETE /v1/sandboxes/sb1"); got != tc.wantDelete {
+				t.Errorf("deleted = %v, want %v (calls %v)", got, tc.wantDelete, cos.calls)
+			}
+		})
 	}
 }
