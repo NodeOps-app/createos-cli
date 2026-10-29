@@ -59,7 +59,7 @@ brew upgrade createos
 
 ### Build from source
 
-Requires Go 1.26+.
+Requires Go 1.27.3 or later.
 
 ```bash
 git clone https://github.com/NodeOps-app/createos-cli
