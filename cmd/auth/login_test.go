@@ -32,7 +32,7 @@ func TestLoginWithAPITokenValidatesBeforeSaving(t *testing.T) {
 			if err := config.SaveToken("existing-token"); err != nil {
 				t.Fatal(err)
 			}
-			previousSession := config.OAuthSession{
+			previousSession := config.OAuthSession{ // #nosec G101 -- dummy credentials used only in this test
 				AccessToken: "previous-access-token", RefreshToken: "previous-refresh-token",
 				ExpiresAt: time.Now().Unix() + 3600, TokenEndpoint: "https://example.com/token",
 			}
@@ -123,18 +123,18 @@ func TestSaveLoginSessionReplacesPreviousCredentials(t *testing.T) {
 			}
 			endpoint := "https://example.com/token"
 			started := time.Now().Unix()
-			err := saveLoginSession(token, endpoint)
+			saveErr := saveLoginSession(token, endpoint)
 			if saveFails {
-				if err == nil || !strings.Contains(err.Error(), "could not save your session") {
-					t.Fatalf("save error = %v, want session save failure", err)
+				if saveErr == nil || !strings.Contains(saveErr.Error(), "could not save your session") {
+					t.Fatalf("save error = %v, want session save failure", saveErr)
 				}
 				if got, err := config.LoadToken(); err != nil || got != "previous-api-token" {
 					t.Fatalf("previous API token was not preserved: token=%q, err=%v", got, err)
 				}
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
+			if saveErr != nil {
+				t.Fatal(saveErr)
 			}
 			if _, err := os.Stat(filepath.Join(homeDir, ".createos", ".token")); !os.IsNotExist(err) {
 				t.Fatalf("previous API token was not removed: %v", err)
