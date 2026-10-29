@@ -3,12 +3,16 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/NodeOps-app/createos-cli/internal/config"
+	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
 )
 
 func TestLoginWithAPITokenValidatesBeforeSaving(t *testing.T) {
@@ -26,6 +30,13 @@ func TestLoginWithAPITokenValidatesBeforeSaving(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			if err := config.SaveToken("existing-token"); err != nil {
+				t.Fatal(err)
+			}
+			previousSession := config.OAuthSession{
+				AccessToken: "previous-access-token", RefreshToken: "previous-refresh-token",
+				ExpiresAt: time.Now().Unix() + 3600, TokenEndpoint: "https://example.com/token",
+			}
+			if err := config.SaveOAuthSession(previousSession); err != nil {
 				t.Fatal(err)
 			}
 			var requests int
@@ -69,6 +80,74 @@ func TestLoginWithAPITokenValidatesBeforeSaving(t *testing.T) {
 			}
 			if gotToken != tc.wantToken {
 				t.Errorf("saved token = %q, want %q", gotToken, tc.wantToken)
+			}
+			session, err := config.LoadOAuthSession()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantError == "" {
+				if session != nil {
+					t.Error("successful API-token login retained the previous OAuth session")
+				}
+			} else if session == nil || *session != previousSession {
+				t.Error("failed API-token login changed the previous OAuth session")
+			}
+		})
+	}
+}
+
+func TestSaveLoginSessionReplacesPreviousCredentials(t *testing.T) {
+	for _, saveFails := range []bool{false, true} {
+		name := "success"
+		if saveFails {
+			name = "save failure preserves API token"
+		}
+		t.Run(name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			t.Setenv("HOME", homeDir)
+			if err := config.SaveToken("previous-api-token"); err != nil {
+				t.Fatal(err)
+			}
+			if saveFails {
+				// A directory at the session path prevents writing the new session.
+				if err := os.Mkdir(filepath.Join(homeDir, ".createos", ".oauth"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := config.SaveOAuthSession(config.OAuthSession{AccessToken: "previous-access-token"}); err != nil {
+				t.Fatal(err)
+			}
+
+			token := &internaloauth.TokenResponse{
+				AccessToken: "new-access-token", RefreshToken: "new-refresh-token",
+				ExpiresIn: 3600, TokenType: "Bearer",
+			}
+			endpoint := "https://example.com/token"
+			started := time.Now().Unix()
+			err := saveLoginSession(token, endpoint)
+			if saveFails {
+				if err == nil || !strings.Contains(err.Error(), "could not save your session") {
+					t.Fatalf("save error = %v, want session save failure", err)
+				}
+				if got, err := config.LoadToken(); err != nil || got != "previous-api-token" {
+					t.Fatalf("previous API token was not preserved: token=%q, err=%v", got, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(homeDir, ".createos", ".token")); !os.IsNotExist(err) {
+				t.Fatalf("previous API token was not removed: %v", err)
+			}
+			session, err := config.LoadOAuthSession()
+			if err != nil || session == nil {
+				t.Fatalf("load session: session=%v, err=%v", session, err)
+			}
+			if session.AccessToken != token.AccessToken || session.RefreshToken != token.RefreshToken || session.TokenEndpoint != endpoint {
+				t.Error("saved session does not match the new login")
+			}
+			if session.ExpiresAt < started+3600 || session.ExpiresAt > time.Now().Unix()+3600 {
+				t.Errorf("unexpected session expiry: %d", session.ExpiresAt)
 			}
 		})
 	}

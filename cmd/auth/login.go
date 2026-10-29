@@ -100,6 +100,9 @@ func loginWithAPIToken(c *cli.Context, token string) error {
 	if err := config.SaveToken(token); err != nil {
 		return fmt.Errorf("could not save your token: %w", err)
 	}
+	if err := config.DeleteOAuthSession(); err != nil {
+		return fmt.Errorf("could not clear your previous OAuth session: %w", err)
+	}
 	pterm.Success.Println("You're signed in.")
 	return nil
 }
@@ -215,6 +218,9 @@ func saveLoginSession(tokenResp *internaloauth.TokenResponse, tokenEndpoint stri
 	}
 	if err := config.SaveOAuthSession(session); err != nil {
 		return fmt.Errorf("could not save your session: %w", err)
+	}
+	if err := config.DeleteToken(); err != nil {
+		return fmt.Errorf("could not clear your previous API token: %w", err)
 	}
 
 	fmt.Println()
