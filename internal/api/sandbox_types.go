@@ -27,6 +27,7 @@ const (
 // SandboxCreateReq is the body of POST /v1/sandboxes.
 // `host_id` is deliberately absent — pinning was removed from the API.
 type SandboxCreateReq struct {
+	SnapshotID            string                 `json:"snapshot_id,omitempty"`
 	Labels                map[string]string      `json:"labels,omitempty"`
 	Name                  string                 `json:"name,omitempty"`
 	Shape                 string                 `json:"shape"`
