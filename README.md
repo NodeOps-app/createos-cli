@@ -317,6 +317,7 @@ asks for a few more characters rather than guessing.
 | `createos sandbox edit`            | Change a sandbox's settings (labels, public URL, SSH keys, auto-pause)|
 | `createos sandbox pause`           | Snapshot a running sandbox so you can resume it later         |
 | `createos sandbox resume`          | Bring a paused sandbox back to life                           |
+| `createos sandbox snapshot`       | Create, list, inspect, and delete reusable disk/full snapshots |
 | `createos sandbox fork`            | Clone a paused sandbox into a brand-new one                   |
 | `createos sandbox rm`              | Delete one or more sandboxes                                  |
 | `createos sandbox exec`            | Run a command inside a sandbox                                |
@@ -336,6 +337,7 @@ asks for a few more characters rather than guessing.
 | --------------- | -------------------------------------------------------------------------------- |
 | `--shape`       | Size of the sandbox (see `createos sandbox shapes`)                              |
 | `--name`        | Friendly name for the sandbox                                                    |
+| `--snapshot`    | Restore a ready snapshot by ID; inherits its shape and disk size                |
 | `--rootfs`      | Base image or custom template to start from                                      |
 | `--disk-mib`    | Disk size in MiB (defaults to the shape's standard disk)                         |
 | `--ssh-key`     | Path to an SSH public key file (repeatable)                                      |
@@ -513,6 +515,61 @@ Interactive attach without a process ID shows running managed processes. Pick a 
 | `createos sandbox template show <name\|id>`    | Show details for one image                               |
 | `createos sandbox template logs <name\|id>`    | Show (or follow) the build output for an image           |
 | `createos sandbox template rm <name\|id>`      | Delete a custom image                                    |
+
+#### Reusable snapshots
+
+Create independent VMs from a saved sandbox state. Capture is asynchronous and
+leaves the source sandbox running. The source must be running and have no
+attached external disks.
+
+| Type | Restored state | Sizing |
+| --- | --- | --- |
+| `disk` | Saved disk contents with a fresh boot | May change shape or increase disk size |
+| `full` | Saved disk, memory, and process state | Must retain captured CPU, memory, and disk size |
+
+Create a source sandbox and capture its disk:
+
+```sh
+createos sandbox create --rootfs alpine:3.20 --shape s-1vcpu-256mb --name snapshot-source
+createos sandbox snapshot create --type disk --name disk-checkpoint snapshot-source
+```
+
+Copy the returned `snap_...` ID. Check it until the status is `ready`, then
+restore it into a new VM:
+
+```sh
+createos sandbox snapshot get <disk-snapshot-id>
+createos sandbox create --snapshot <disk-snapshot-id> --name disk-restored
+```
+
+To preserve memory and running processes too, capture a full snapshot. Again,
+wait for `ready` before restoring:
+
+```sh
+createos sandbox snapshot create --type full --name full-checkpoint snapshot-source
+createos sandbox snapshot get <full-snapshot-id>
+createos sandbox create --snapshot <full-snapshot-id> --name full-restored
+```
+
+Both restore commands inherit the captured shape and disk size. `--snapshot`
+cannot be combined with `--rootfs`. Each restore creates a separate sandbox;
+ready snapshots remain usable even after the source sandbox is deleted.
+
+List snapshots, retrieve structured results, or remove one:
+
+```sh
+createos sandbox snapshot list
+createos sandbox snapshot list --limit 50 --offset 50
+createos --output json sandbox snapshot get <snapshot-id>
+createos sandbox snapshot rm --force <snapshot-id>
+```
+
+Snapshot names are optional display labels and are not unique; use IDs for
+inspection, restore, and deletion. The server permits five snapshots per account.
+A snapshot being captured cannot be deleted yet. If capture reports `failed`,
+delete that snapshot and retry after checking the source sandbox.
+Place flags before positional IDs. Deleting a snapshot does not delete VMs
+already restored from it; delete those separately with `sandbox rm`.
 
 ### Webhooks
 

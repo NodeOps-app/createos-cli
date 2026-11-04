@@ -37,6 +37,7 @@ Examples:
     --disk my-bucket:/mnt/data --network my-net`,
 		Flags: []cli.Flag{
 			labelFlag(),
+			&cli.StringFlag{Name: "snapshot", Usage: "Restore a ready snapshot by ID (inherits its shape and disk size)"},
 			&cli.StringFlag{
 				Name:  "shape",
 				Usage: "Size of the sandbox (run 'createos sandbox shapes' to see options)",
@@ -101,6 +102,10 @@ func runCreate(c *cli.Context) error {
 	shape := strings.TrimSpace(c.String("shape"))
 	name := strings.TrimSpace(c.String("name"))
 	rootfs := strings.TrimSpace(c.String("rootfs"))
+	snapshotID := strings.TrimSpace(c.String("snapshot"))
+	if snapshotID != "" && rootfs != "" {
+		return fmt.Errorf("--snapshot and --rootfs cannot be combined")
+	}
 	ingress := c.Bool("ingress")
 	netIDs := stringSliceCleanup(c.StringSlice("network"))
 
@@ -126,7 +131,7 @@ func runCreate(c *cli.Context) error {
 		autoPauseSecs = &secs
 	}
 
-	if shape == "" {
+	if shape == "" && snapshotID == "" {
 		w, werr := runCreateWizard(c, client, wizardSeed{
 			name:          name,
 			rootfs:        rootfs,
@@ -162,6 +167,7 @@ func runCreate(c *cli.Context) error {
 	}
 
 	req := api.SandboxCreateReq{
+		SnapshotID:     snapshotID,
 		Labels:         labels,
 		Shape:          shape,
 		Name:           name,
