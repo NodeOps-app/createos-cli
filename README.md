@@ -317,6 +317,7 @@ asks for a few more characters rather than guessing.
 | `createos sandbox edit`            | Change a sandbox's settings (labels, public URL, SSH keys, auto-pause)|
 | `createos sandbox pause`           | Snapshot a running sandbox so you can resume it later         |
 | `createos sandbox resume`          | Bring a paused sandbox back to life                           |
+| `createos sandbox checkpoint`     | Save, list, restore, and delete directory history inside a VM |
 | `createos sandbox snapshot`       | Create, list, inspect, and delete reusable disk/full snapshots |
 | `createos sandbox fork`            | Clone a paused sandbox into a brand-new one                   |
 | `createos sandbox rm`              | Delete one or more sandboxes                                  |
@@ -534,6 +535,43 @@ A snapshot being captured cannot be deleted yet. If capture reports `failed`,
 delete that snapshot and retry after checking the source sandbox.
 Place flags before positional IDs. Deleting a snapshot does not delete VMs
 already restored from it; delete those separately with `sandbox rm`.
+
+#### Directory checkpoints
+
+Checkpoints save file history for a directory inside a running sandbox. They
+stay on its disk, capture no VM memory, and are lost when the sandbox is deleted.
+Use reusable snapshots above to create independent VMs from saved state.
+
+Stop all writers, file transfers, and processes using the directory before
+creating or restoring a checkpoint. Processes are not automatically paused;
+busy directories return an error. Restore replaces the current directory view
+at its original path, so save any changes you want to retain first.
+
+```sh
+createos sandbox checkpoint create --name before-update my-box /workspace/project
+createos sandbox checkpoint list my-box
+createos sandbox checkpoint restore --force my-box <checkpoint-id>
+createos sandbox checkpoint rm --force my-box <checkpoint-id>
+createos --output json sandbox checkpoint list my-box
+```
+
+Use the returned `cp_...` ID for restore/delete; names are optional, non-unique
+labels. Place flags before positional arguments. Restore/delete prompt for
+confirmation in a terminal and require `--force` in scripts. Full sandbox IDs
+also work with sandbox-scoped credentials without listing other sandboxes.
+
+Choose an absolute application directory such as `/workspace/project` or
+`/root/project`. System paths, overlapping checkpoint roots, separate/nested
+mounts, special files, hardlinks, and symlinks in the selected root path are
+unsupported. List returns all records for the sandbox, oldest first, without
+pagination. Parent IDs describe history and may refer to deleted records.
+Deleting a checkpoint preserves layers still used by other checkpoints or the
+live directory; it does not roll back current files. Even after all records
+are deleted, the managed directory remains a mount and cannot be renamed or
+removed as a normal directory.
+
+These commands require a backend and guest agent with directory checkpoint
+support; existing VMs running an older agent must be replaced or upgraded.
 
 ### Webhooks
 
