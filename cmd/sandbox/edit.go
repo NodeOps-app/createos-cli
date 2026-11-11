@@ -65,7 +65,7 @@ func runEdit(c *cli.Context) error {
 	hasFlagChanges := ingressFlag != "" || autoPauseFlag != "" || len(sshFiles) > 0 || len(labels) > 0
 
 	// Resolve the sandbox first — either from positional or via picker.
-	id, label, err := resolveTarget(c, client, ref)
+	id, label, err := resolveTarget(c, client, ref, "Pick a sandbox to edit")
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func parseEditArgs(c *cli.Context) (ref, ingressVal, autoPauseVal string, sshPat
 
 // resolveTarget figures out which sandbox the user wants to edit. With
 // a positional ref → resolve. Without one, picker on TTY, error otherwise.
-func resolveTarget(c *cli.Context, client *api.SandboxClient, ref string) (id, label string, err error) {
+func resolveTarget(c *cli.Context, client *api.SandboxClient, ref, pickTitle string) (id, label string, err error) {
 	if ref != "" {
 		resolved, err := resolveSandboxRef(c.Context, client, ref)
 		if err != nil {
@@ -176,7 +176,7 @@ func resolveTarget(c *cli.Context, client *api.SandboxClient, ref string) (id, l
 	if !terminal.IsInteractive() {
 		return "", "", fmt.Errorf("please provide a sandbox ID or name\n\n  To see your sandboxes, run:\n    createos sandbox list")
 	}
-	return pickByStatus(c, client, "Pick a sandbox to edit", api.SandboxStatusRunning)
+	return pickByStatus(c, client, pickTitle, api.SandboxStatusRunning)
 }
 
 // runEditMenu is the interactive flow once a sandbox is selected. Pulls
@@ -349,6 +349,7 @@ func applyIngressFlag(c *cli.Context, client *api.SandboxClient, label, id, valu
 			fmt.Printf("    %s\n", updated.IngressURLTemplate)
 			pterm.Println(pterm.Gray("  Replace <port> with the port your service is listening on."))
 		}
+		warnIngressCaveats()
 	} else {
 		pterm.Success.Printfln("Public URL is off for %s", refLabel(label, id))
 	}
