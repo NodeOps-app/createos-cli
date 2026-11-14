@@ -58,6 +58,10 @@ func runPull(c *cli.Context) error {
 		return err
 	}
 
+	if err = refuseDiskMountTransfer(c.Context, client, id, remote, "pull"); err != nil {
+		return err
+	}
+
 	f, err := os.Create(local) // #nosec G304 -- local is a user-supplied destination path
 	if err != nil {
 		return fmt.Errorf("could not create %s: %w", local, err)
