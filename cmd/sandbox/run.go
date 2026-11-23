@@ -50,6 +50,8 @@ Disk format:
 The disk is attached to the sandbox at <sandbox-path>, then passed to Docker as
 -v <sandbox-path>:<container-path>.`,
 		Flags: []cli.Flag{
+			timeoutMinutesFlag(),
+			sigtermExpiryFlag(),
 			&cli.StringFlag{Name: "shape", Value: runDefaultShape, Usage: "Sandbox size"},
 			&cli.StringFlag{Name: "name", Usage: "Friendly name for the sandbox"},
 			&cli.IntFlag{Name: "local", Usage: "Local port to listen on"},
@@ -76,28 +78,30 @@ The disk is attached to the sandbox at <sandbox-path>, then passed to Docker as
 }
 
 type runOptions struct {
-	image         string
-	imageArgs     []string
-	shape         string
-	name          string
-	local         int
-	remote        int
-	bind          string
-	networks      []string
-	disks         []runDiskMount
-	syncs         []runSyncMount
-	envs          []string
-	identity      string
-	user          string
-	forceSync     bool
-	assumeYes     bool
-	exclude       []string
-	syncMode      string
-	pull          bool
-	pushLocal     bool
-	removeSandbox bool
-	keepContainer bool
-	noFollow      bool
+	timeoutRaw          string
+	sigtermBeforeExpiry bool
+	image               string
+	imageArgs           []string
+	shape               string
+	name                string
+	local               int
+	remote              int
+	bind                string
+	networks            []string
+	disks               []runDiskMount
+	syncs               []runSyncMount
+	envs                []string
+	identity            string
+	user                string
+	forceSync           bool
+	assumeYes           bool
+	exclude             []string
+	syncMode            string
+	pull                bool
+	pushLocal           bool
+	removeSandbox       bool
+	keepContainer       bool
+	noFollow            bool
 }
 
 type runDiskMount struct {
@@ -122,10 +126,16 @@ func runDockerImage(c *cli.Context) error {
 		return err
 	}
 
+	timeoutMinutes, err := parseSandboxTimeout(opts.timeoutRaw, opts.sigtermBeforeExpiry)
+	if err != nil {
+		return err
+	}
 	req := api.SandboxCreateReq{
-		Shape:  opts.shape,
-		Name:   opts.name,
-		Rootfs: runSandboxRootfs,
+		TimeoutMinutes:      timeoutMinutes,
+		SigtermBeforeExpiry: opts.sigtermBeforeExpiry,
+		Shape:               opts.shape,
+		Name:                opts.name,
+		Rootfs:              runSandboxRootfs,
 	}
 	for _, n := range opts.networks {
 		req.Networks = append(req.Networks, api.SandboxNetworkAttach{ID: n})
@@ -266,24 +276,26 @@ func runDockerImage(c *cli.Context) error {
 
 func parseRunArgs(c *cli.Context) (runOptions, error) {
 	opts := runOptions{
-		shape:         strings.TrimSpace(c.String("shape")),
-		name:          strings.TrimSpace(c.String("name")),
-		local:         c.Int("local"),
-		remote:        c.Int("remote"),
-		bind:          strings.TrimSpace(c.String("bind")),
-		networks:      stringSliceCleanup(c.StringSlice("network")),
-		envs:          c.StringSlice("env"),
-		identity:      strings.TrimSpace(c.String("identity")),
-		user:          strings.TrimSpace(c.String("user")),
-		forceSync:     c.Bool("force-sync"),
-		assumeYes:     c.Bool("yes"),
-		exclude:       append([]string{}, c.StringSlice("exclude")...),
-		syncMode:      c.String("sync-mode"),
-		pull:          c.Bool("pull"),
-		pushLocal:     c.Bool("push-local"),
-		removeSandbox: c.Bool("rm"),
-		keepContainer: c.Bool("keep-container"),
-		noFollow:      c.Bool("no-follow"),
+		shape:               strings.TrimSpace(c.String("shape")),
+		name:                strings.TrimSpace(c.String("name")),
+		local:               c.Int("local"),
+		remote:              c.Int("remote"),
+		bind:                strings.TrimSpace(c.String("bind")),
+		networks:            stringSliceCleanup(c.StringSlice("network")),
+		envs:                c.StringSlice("env"),
+		identity:            strings.TrimSpace(c.String("identity")),
+		user:                strings.TrimSpace(c.String("user")),
+		forceSync:           c.Bool("force-sync"),
+		assumeYes:           c.Bool("yes"),
+		exclude:             append([]string{}, c.StringSlice("exclude")...),
+		syncMode:            c.String("sync-mode"),
+		pull:                c.Bool("pull"),
+		pushLocal:           c.Bool("push-local"),
+		removeSandbox:       c.Bool("rm"),
+		keepContainer:       c.Bool("keep-container"),
+		noFollow:            c.Bool("no-follow"),
+		timeoutRaw:          c.String("timeout-minutes"),
+		sigtermBeforeExpiry: c.Bool("sigterm-before-expiry"),
 	}
 	if opts.shape == "" {
 		opts.shape = runDefaultShape
@@ -407,6 +419,20 @@ func parseRunArgs(c *cli.Context) (runOptions, error) {
 			opts.removeSandbox = true
 		case a == "--keep-container":
 			opts.keepContainer = true
+		case a == "--timeout-minutes":
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("--timeout-minutes requires a value")
+			}
+			i++
+			opts.timeoutRaw = args[i]
+		case strings.HasPrefix(a, "--timeout-minutes="):
+			opts.timeoutRaw = strings.TrimPrefix(a, "--timeout-minutes=")
+		case a == "--sigterm-before-expiry":
+			opts.sigtermBeforeExpiry = true
+		case a == "--sigterm-before-expiry=false":
+			opts.sigtermBeforeExpiry = false
+		case a == "--sigterm-before-expiry=true":
+			opts.sigtermBeforeExpiry = true
 		case a == "--no-follow":
 			opts.noFollow = true
 		case strings.HasPrefix(a, "-"):

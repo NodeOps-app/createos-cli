@@ -46,11 +46,8 @@ sandbox exits with 1, this CLI also exits with 1.`,
 				Usage:   "Show output live as the command runs",
 			},
 			&cli.StringSliceFlag{
-				Name: "env",
-				Usage: "Override an environment variable for this exec (repeatable): KEY=VALUE. " +
-					"The KEY must have been declared at sandbox create time " +
-					"(with `createos sandbox create --env KEY=value`). To add a fresh var " +
-					"inline, prefix your command: `bash -c 'FOO=bar mycmd'`.",
+				Name:  "env",
+				Usage: "Add or override an environment variable for this exec (repeatable): KEY=VALUE. Omitted keys inherit sandbox defaults.",
 			},
 		},
 		Action: runExec,

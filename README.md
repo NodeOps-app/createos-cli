@@ -350,6 +350,28 @@ asks for a few more characters rather than guessing.
 | `--ingress`     | Give the sandbox a public HTTPS URL                                               |
 | `--auto-pause`  | Auto-pause after inactivity (e.g. `10m`, `1h`). Omit to keep running.            |
 
+**Sandbox expiry:**
+
+Use a lifetime in whole minutes to automatically destroy a sandbox:
+
+```sh
+createos sandbox create --rootfs alpine:3.20 --shape s-1vcpu-256mb --timeout-minutes 30 --sigterm-before-expiry
+createos sandbox run --timeout-minutes 30 --sigterm-before-expiry nginx
+```
+
+`--timeout-minutes` accepts 2–1440 minutes. The deadline starts when the VM first
+reaches running (at claim for prewarmed VMs), includes time paused, and is not
+extended by activity or pause/resume. Expiry destroys the VM; save data you need
+before the deadline. Omit the flag to leave the lifetime unspecified.
+
+`--sigterm-before-expiry` requires a lifetime and requests a best-effort SIGTERM
+to managed workloads in the final minute while the VM is running. Delivery is
+not guaranteed. This is separate from `--auto-pause`, which pauses idle VMs.
+The deadline is set at creation; these flags are not sandbox edit options.
+
+Create/get output and `sandbox list --wide` show expiry. JSON responses retain
+`expires_at` and `sigterm_before_expiry` when returned by the backend.
+
 **Sandbox labels:**
 
 Use repeatable `--label KEY=VALUE` flags to organize sandboxes and filter lists.

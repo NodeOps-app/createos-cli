@@ -146,6 +146,10 @@ func printSandbox(s *api.SandboxView, bw *api.BandwidthView) {
 	}
 
 	rowTime("Created", &s.CreatedAt)
+	rowTime("Expires", s.ExpiresAt)
+	if s.SigtermBeforeExpiry {
+		row("SIGTERM", "Best effort in the final minute")
+	}
 	rowTime("Running since", s.RunningAt)
 	rowTime("Paused at", s.PausedAt)
 	rowTime("Last resumed", s.LastResumedAt)

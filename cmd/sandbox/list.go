@@ -153,7 +153,7 @@ func runList(c *cli.Context) error {
 func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableData {
 	columns := []string{"ID", "Name", "Status", "Size", "IP"}
 	if wide {
-		columns = append(columns, "Created", "Labels")
+		columns = append(columns, "Created", "Expires", "Labels")
 	}
 	switch {
 	case width < 70:
@@ -173,6 +173,10 @@ func sandboxListTable(rows []api.SandboxView, width int, wide bool) pterm.TableD
 			"Size":    r.Shape,
 			"IP":      ptrOrDash(r.IP),
 			"Created": r.CreatedAt.Local().Format("2006-01-02 15:04"),
+		}
+		values["Expires"] = "-"
+		if r.ExpiresAt != nil {
+			values["Expires"] = r.ExpiresAt.Local().Format("2006-01-02 15:04")
 		}
 		row := make([]string, 0, len(columns))
 		for _, col := range columns {

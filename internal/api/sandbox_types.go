@@ -27,6 +27,8 @@ const (
 // SandboxCreateReq is the body of POST /v1/sandboxes.
 // `host_id` is deliberately absent — pinning was removed from the API.
 type SandboxCreateReq struct {
+	TimeoutMinutes        *int32                 `json:"timeout_minutes,omitempty"`
+	SigtermBeforeExpiry   bool                   `json:"sigterm_before_expiry,omitempty"`
 	SnapshotID            string                 `json:"snapshot_id,omitempty"`
 	Labels                map[string]string      `json:"labels,omitempty"`
 	Name                  string                 `json:"name,omitempty"`
@@ -112,6 +114,8 @@ type SandboxForkReq struct {
 // SandboxCreateResp is the response body for POST /v1/sandboxes.
 // `mode` is deliberately absent — it's an internal boot-path detail.
 type SandboxCreateResp struct {
+	ExpiresAt             *time.Time        `json:"expires_at,omitempty"`
+	SigtermBeforeExpiry   bool              `json:"sigterm_before_expiry,omitempty"`
 	Labels                map[string]string `json:"labels,omitempty"`
 	ID                    string            `json:"id"`
 	Name                  *string           `json:"name,omitempty"`
@@ -131,6 +135,8 @@ type SandboxCreateResp struct {
 // SandboxView is the projection returned by GET /v1/sandboxes and
 // GET /v1/sandboxes/:id. The shape matches fc-spawn's SandboxView.
 type SandboxView struct {
+	ExpiresAt             *time.Time        `json:"expires_at,omitempty"`
+	SigtermBeforeExpiry   bool              `json:"sigterm_before_expiry,omitempty"`
 	Labels                map[string]string `json:"labels,omitempty"`
 	ID                    string            `json:"id"`
 	Name                  *string           `json:"name,omitempty"`
