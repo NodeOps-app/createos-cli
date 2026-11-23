@@ -37,6 +37,8 @@ Examples:
     --disk my-bucket:/mnt/data --network my-net`,
 		Flags: []cli.Flag{
 			labelFlag(),
+			timeoutMinutesFlag(),
+			sigtermExpiryFlag(),
 			&cli.StringFlag{Name: "snapshot", Usage: "Restore a ready snapshot by ID (inherits its shape and disk size)"},
 			&cli.StringFlag{
 				Name:  "shape",
@@ -94,6 +96,10 @@ func runCreate(c *cli.Context) error {
 		return fmt.Errorf("you're not signed in — run 'createos login' to get started")
 	}
 
+	timeoutMinutes, err := parseSandboxTimeout(c.String("timeout-minutes"), c.Bool("sigterm-before-expiry"))
+	if err != nil {
+		return err
+	}
 	labels, err := parseLabelFlags(labelFlagsFromContext(c))
 	if err != nil {
 		return err
@@ -167,13 +173,15 @@ func runCreate(c *cli.Context) error {
 	}
 
 	req := api.SandboxCreateReq{
-		SnapshotID:     snapshotID,
-		Labels:         labels,
-		Shape:          shape,
-		Name:           name,
-		Rootfs:         rootfs,
-		DiskMib:        c.Int64("disk-mib"),
-		IngressEnabled: ingress,
+		TimeoutMinutes:      timeoutMinutes,
+		SigtermBeforeExpiry: c.Bool("sigterm-before-expiry"),
+		SnapshotID:          snapshotID,
+		Labels:              labels,
+		Shape:               shape,
+		Name:                name,
+		Rootfs:              rootfs,
+		DiskMib:             c.Int64("disk-mib"),
+		IngressEnabled:      ingress,
 	}
 
 	if envs, envErr := parseEnvFlags(c.StringSlice("env")); envErr != nil {
@@ -315,6 +323,12 @@ func printCreateResult(resp *api.SandboxCreateResp) {
 		fmt.Printf("    %-9s %s\n", label+":", value)
 	}
 	row("Size", resp.Shape)
+	if resp.ExpiresAt != nil {
+		row("Expires", resp.ExpiresAt.Local().Format(time.RFC3339))
+	}
+	if resp.SigtermBeforeExpiry {
+		row("SIGTERM", "Best effort in the final minute")
+	}
 	row("Labels", formatLabels(resp.Labels))
 	if resp.Rootfs != nil && *resp.Rootfs != "" {
 		row("Image", *resp.Rootfs)
