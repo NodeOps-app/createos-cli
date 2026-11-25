@@ -18,12 +18,12 @@ const (
 )
 
 // RenderTable prints a pterm table constrained to the current terminal width.
-// Long cells are shortened before rendering so rows do not wrap in narrow panes.
-func RenderTable(data pterm.TableData) error {
+// Columns listed in fullWidthColumns retain their entire contents.
+func RenderTable(data pterm.TableData, fullWidthColumns ...int) error {
 	return pterm.DefaultTable.
 		WithHasHeader().
 		WithSeparator(tableSeparator).
-		WithData(FitTable(data, TerminalWidth())).
+		WithData(FitTable(data, TerminalWidth(), fullWidthColumns...)).
 		Render()
 }
 
@@ -51,7 +51,7 @@ func usableTableWidth(width int) int {
 }
 
 // FitTable returns a copy of data with cell contents shortened to fit width.
-func FitTable(data pterm.TableData, width int) pterm.TableData {
+func FitTable(data pterm.TableData, width int, fullWidthColumns ...int) pterm.TableData {
 	if len(data) == 0 || width <= 0 {
 		return data
 	}
@@ -67,6 +67,11 @@ func FitTable(data pterm.TableData, width int) pterm.TableData {
 	}
 
 	minWidths := minimumWidths(data[0], maxWidths)
+	for _, column := range fullWidthColumns {
+		if column >= 0 && column < cols {
+			minWidths[column] = maxWidths[column]
+		}
+	}
 	targets := append([]int(nil), maxWidths...)
 	for tableWidth(targets) > width {
 		idx := widestReducibleColumn(targets, minWidths)
