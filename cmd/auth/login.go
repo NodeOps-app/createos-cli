@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,12 +15,16 @@ import (
 	"github.com/NodeOps-app/createos-cli/internal/api"
 	"github.com/NodeOps-app/createos-cli/internal/config"
 	internaloauth "github.com/NodeOps-app/createos-cli/internal/oauth"
+	"github.com/NodeOps-app/createos-cli/internal/output"
 	"github.com/NodeOps-app/createos-cli/internal/terminal"
 )
 
 const (
 	oauthCallbackPort = 65341
 	oauthCallbackURI  = "http://localhost:65341/callback"
+
+	// headlessHint is the sign-in path for agents and CI, where nobody can open a browser.
+	headlessHint = "set CREATEOS_API_KEY (every command except login reads it) or run: createos login --token <your-api-key>"
 )
 
 // NewLoginCommand creates the login command.
@@ -53,7 +58,9 @@ func NewLoginCommand() *cli.Command {
 
 			// Non-interactive (CI/script): require an explicit login method
 			if !terminal.IsInteractive() {
-				return fmt.Errorf("non-interactive mode: use --token for automation or --device to sign in using another browser\n\n  Example:\n    createos login --token <your-api-token>")
+				msg := "no terminal for interactive sign in: " + headlessHint + ", or use --device if a person can approve a code in a browser"
+				output.RenderError(c, "interactive_login_unavailable", msg)
+				return errors.New(msg)
 			}
 
 			// Interactive: let user choose auth method
@@ -175,6 +182,10 @@ func loginWithBrowser() error {
 func loginWithDevice(c *cli.Context) error {
 	ctx, stop := signal.NotifyContext(c.Context, os.Interrupt)
 	defer stop()
+	if !terminal.IsInteractive() {
+		// An agent or CI job would otherwise wait out the code's lifetime with nobody to approve it.
+		fmt.Fprintln(os.Stderr, "No terminal detected. Device sign in waits for a person to approve the code in a browser. If nobody will, stop and "+headlessHint+".")
+	}
 	pterm.Info.Println("Starting device login...")
 	meta, err := internaloauth.FetchServerMetadataContext(ctx, config.OAuthIssuerURL)
 	if err != nil {

@@ -152,3 +152,13 @@ func TestSaveLoginSessionReplacesPreviousCredentials(t *testing.T) {
 		})
 	}
 }
+
+// Under `go test` stdout is not a TTY, the same as an agent or CI job.
+func TestLoginWithoutTerminalNamesHeadlessPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := &cli.App{Commands: []*cli.Command{NewLoginCommand()}}
+	err := app.Run([]string{"createos", "login"})
+	if err == nil || !strings.Contains(err.Error(), "CREATEOS_API_KEY") || !strings.Contains(err.Error(), "--token") {
+		t.Fatalf("login error = %v, want the CREATEOS_API_KEY and --token paths", err)
+	}
+}
