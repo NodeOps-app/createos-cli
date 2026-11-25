@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -59,7 +60,7 @@ func NewLoginCommand() *cli.Command {
 			if !terminal.IsInteractive() {
 				msg := "no terminal for interactive sign in: " + headlessHint + ", or use --device if a person can approve a code in a browser"
 				output.RenderError(c, "interactive_login_unavailable", msg)
-				return fmt.Errorf("%s", msg)
+				return errors.New(msg)
 			}
 
 			// Interactive: let user choose auth method
