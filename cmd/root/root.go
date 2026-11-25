@@ -167,6 +167,7 @@ func NewApp() *cli.App {
 
 			fmt.Println("Available Commands:")
 			if config.IsLoggedIn() {
+				fmt.Println("  api-keys       Manage your API keys")
 				fmt.Println("  cronjobs       Manage cron jobs for a project")
 				fmt.Println("  deploy         Deploy your project to CreateOS")
 				fmt.Println("  deployments    Manage project deployments")
@@ -220,6 +221,7 @@ func NewApp() *cli.App {
 			status.NewStatusCommand(),
 			templates.NewTemplatesCommand(),
 			upgrade.NewUpgradeCommand(),
+			users.NewAPIKeysCommand(),
 			users.NewUsersCommand(),
 			vms.NewVMsCommand(),
 			webhooks.NewWebhooksCommand(),

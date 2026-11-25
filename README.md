@@ -122,7 +122,22 @@ createos login --token <your-api-token>
 
 Or run `createos login` interactively and select "Sign in with API token" when prompted.
 
-> For unattended CI, use `--token`.
+After signing in, run `createos api-keys create` to enter the name, expiration, and optional description interactively. Press Enter at the expiration prompt for a 30-day key. For scripts, supply the required values as flags.
+
+```bash
+createos api-keys create --name build-pipeline --expires-at 2030-01-01T00:00:00Z
+```
+
+The command prints the key ID and secret. Store the secret in your CI secret store as `CREATEOS_API_KEY`. Use the global `--output json` flag to read the `id` and `secret` fields in a script.
+
+List your keys to find the ID, then revoke a key by its ID.
+
+```bash
+createos api-keys list
+createos api-keys revoke <key-id>
+```
+
+Run `createos api-keys revoke` without an ID in a terminal to choose an active key by name, preview, and ID. Revocation prompts for confirmation. In scripts, use `createos api-keys revoke --force <key-id>`.
 
 **2. Confirm your account**
 
